@@ -39,13 +39,13 @@ const EXT_NAME = "ST-Novel-Reader";
 // 每套主题的背景色在 style.css 的 .novel-theme-{id} 中通过 CSS 变量定义，
 // 这里只维护 id/显示名/预览色（面板色板用）。
 const READER_THEMES = [
-  { id: "", name: "跟随酒馆", bg: "" },
-  { id: "warmpaper", name: "暖纸", bg: "#f5f0e6" },
-  { id: "midnight", name: "墨夜", bg: "#14161a" },
-  { id: "tealink", name: "青简", bg: "#0f1b1d" },
-  { id: "rose", name: "蔷薇", bg: "#241a1e" },
-  { id: "forest", name: "森语", bg: "#141c15" },
-  { id: "ocean", name: "深蓝", bg: "#101826" },
+  { id: "", name: "跟随酒馆", bg: "", fg: "" },
+  { id: "warmpaper", name: "暖纸", bg: "#f5f0e6", fg: "#4a3f35" },
+  { id: "midnight", name: "墨夜", bg: "#14161a", fg: "#7fd1c0" },
+  { id: "tealink", name: "青简", bg: "#0f1b1d", fg: "#a8e6cf" },
+  { id: "rose", name: "蔷薇", bg: "#241a1e", fg: "#f0a6b8" },
+  { id: "forest", name: "森语", bg: "#141c15", fg: "#a3d9a5" },
+  { id: "ocean", name: "深蓝", bg: "#101826", fg: "#7fb5ff" },
 ];
 
 jQuery(async () => {
@@ -205,6 +205,7 @@ jQuery(async () => {
     bottombarEl = document.createElement("div");
     bottombarEl.className = "novel-bottombar";
     bottombarEl.innerHTML = `
+      <button class="novel-btn" data-action="home" title="${escapeHtml(deps.cfmT("回到书架"))}">${escapeHtml(deps.cfmT("首页"))}</button>
       <button class="novel-btn" data-action="toc">${escapeHtml(deps.cfmT("目录"))}</button>
       <button class="novel-btn" data-action="prev">${escapeHtml(deps.cfmT("上一章"))}</button>
       <button class="novel-btn" data-action="next">${escapeHtml(deps.cfmT("下一章"))}</button>
@@ -386,6 +387,16 @@ jQuery(async () => {
   }
 
   // ============ 书架首页（角色卡片网格） ============
+
+  /** 底部栏「首页」：回到书架页（清空当前角色/聊天选择） */
+  function goHome() {
+    state.currentChar = null;
+    state.currentCharIdx = 0;
+    state.currentChat = null;
+    state.currentChats = null;
+    state.currentChapter = 0;
+    showBookshelf();
+  }
 
   function showBookshelf() {
     setPage("bookshelf");
@@ -1094,6 +1105,9 @@ jQuery(async () => {
 
   function bindBottombarEvents() {
     bottombarEl
+      .querySelector('[data-action="home"]')
+      .addEventListener("click", () => goHome());
+    bottombarEl
       .querySelector('[data-action="toc"]')
       .addEventListener("click", showToc);
     bottombarEl
@@ -1172,10 +1186,11 @@ jQuery(async () => {
       const sw = document.createElement("div");
       sw.className =
         "novel-swatch" + (rs.themeId === theme.id ? " active" : "");
+      // 双色渐变：上半背景色、下半强调色（文字/引号色），∅ 用亮暗对半
       sw.style.background =
         theme.bg === ""
-          ? "linear-gradient(135deg,#eee 50%,#222 50%)"
-          : theme.bg;
+          ? "linear-gradient(135deg,#f5f5f5 50%,#333 50%)"
+          : `linear-gradient(180deg, ${theme.bg} 50%, ${theme.fg || theme.bg} 50%)`;
       sw.title = deps.cfmT(theme.name);
       sw.dataset.themeId = theme.id;
       sw.addEventListener("click", () => {

@@ -389,8 +389,9 @@
 
 .novel-msg-name {
   font-weight: 700;
-  /* 内置主题用 --novel-accent；跟随酒馆时回退 --SmartThemeMainColor */
-  color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+  /* 内置主题用 --novel-accent；跟随酒馆时回退正文前景色（避免美化主题主色偏蓝）
+     用户/系统消息仍用各自的专用强调色 */
+  color: var(--novel-accent, var(--novel-fg, var(--SmartThemeBodyColor, #ddd)));
 }
 
 .novel-msg-user .novel-msg-name {
@@ -912,11 +913,19 @@
 }
 
 .novel-swatch {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   cursor: pointer;
-  border: 2px solid transparent;
+  /* 暗色主题色块也保留可见性：加内圈高光 + 外圈描边 */
+  border: 2px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 40%,
+      transparent
+    );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.3);
   transition:
     transform 0.12s ease,
     border-color 0.12s ease;
@@ -924,10 +933,13 @@
 
 .novel-swatch:hover {
   transform: scale(1.12);
+  filter: brightness(1.15);
 }
 
 .novel-swatch.active {
   border-color: var(--SmartThemeMainColor, #4f8cff);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    0 0 8px color-mix(in srgb, var(--SmartThemeMainColor, #4f8cff) 60%, transparent);
   transform: scale(1.12);
 }
 

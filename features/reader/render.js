@@ -40,7 +40,8 @@ export function renderMessage(deps, mes, options = {}) {
 
   // 简繁转换（针对说话人标签；正文 HTML 已在管线内处理）
   const label = tc(name);
-  const time = mes.send_date ? escapeHtmlFallback(String(mes.send_date)) : "";
+  // 时间戳只显示 HH:MM（去掉日期部分；无效值兜底显示原文）
+  const time = mes.send_date ? escapeHtmlFallback(formatTimeOnly(mes.send_date)) : "";
 
   const cls = [
     "novel-msg",
@@ -123,4 +124,19 @@ function escapeHtmlFallback(str) {
     .replace(/</g, "<")
     .replace(/>/g, ">")
     .replace(/"/g, QUOT);
+}
+
+/**
+ * 消息时间戳只显示时间（HH:MM），去掉日期部分。
+ * ST 消息的 send_date 形如 "2026-09-07T11:37:16.293Z"（ISO 8601 UTC）。
+ * 解析成功 → 本地时区 HH:MM；解析失败 → 返回原文兜底。
+ * @param {string|number|Date} value
+ * @returns {string}
+ */
+function formatTimeOnly(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value ?? "");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
