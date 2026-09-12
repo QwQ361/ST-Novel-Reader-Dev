@@ -191,7 +191,8 @@ jQuery(async () => {
     backBtn.dataset.backTarget = backActions[page] || "";
     backBtn.style.display = backActions[page] ? "" : "none";
     // 返回按钮提示：书架页为「退出」，其余页为「返回」
-    backBtn.title = page === "bookshelf" ? deps.cfmT("退出") : deps.cfmT("返回");
+    backBtn.title =
+      page === "bookshelf" ? deps.cfmT("退出") : deps.cfmT("返回");
     // 正文页：显示底部栏；其余页隐藏
     bottombarEl.style.display = page === "reader" ? "" : "none";
     // 非正文页恢复顶栏显示（正文页可能被点击隐藏）
@@ -279,9 +280,10 @@ jQuery(async () => {
       const card = document.createElement("div");
       card.className = "novel-card";
       card.dataset.charIdx = String(origIdx);
+      const version = c.char_version ? String(c.char_version) : "";
       card.innerHTML = `
         <div class="novel-card-title">${escapeHtml(c.name || deps.cfmT("未命名"))}</div>
-        <div class="novel-card-meta">${escapeHtml(String(c.char_version ?? "")) || "·"}</div>`;
+        ${version ? `<div class="novel-card-meta">${escapeHtml(version)}</div>` : ""}`;
       card.addEventListener("click", () => openChatList(origIdx, c));
       grid.appendChild(card);
     });
@@ -347,10 +349,17 @@ jQuery(async () => {
       const fileName = chat.file_name || "";
       const card = document.createElement("div");
       card.className = "novel-card";
+      // meta 行只拼接非空字段段，段间用「 · 」连接，避免出现悬空点
+      const metaParts = [
+        chat.chat_items ?? chat.message_count ?? "",
+        chat.last_mes_timestamp ?? chat.create_date ?? "",
+      ]
+        .map((v) => String(v).trim())
+        .filter(Boolean);
       card.innerHTML = `
         <div class="novel-card-title">${escapeHtml(String(fileName).replace(/\.jsonl$/i, ""))}</div>
         <div class="novel-card-preview">${escapeHtml(String(chat.last_mes || ""))}</div>
-        <div class="novel-card-meta">${escapeHtml(String(chat.chat_items ?? chat.message_count ?? ""))} · ${escapeHtml(String(chat.last_mes_timestamp ?? chat.create_date ?? ""))}</div>`;
+        ${metaParts.length ? `<div class="novel-card-meta">${metaParts.map((v) => escapeHtml(v)).join(" · ")}</div>` : ""}`;
       card.addEventListener("click", () =>
         openToc(state.currentChar, { file_name: fileName }),
       );
