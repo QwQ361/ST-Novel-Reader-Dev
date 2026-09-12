@@ -18,6 +18,7 @@ import {
   loadStCoreModules,
   renderMarkdownCore,
 } from "./integrations/sillytavern.js";
+import { createThemeTextBridgeCore } from "./integrations/theme-text.js";
 import {
   applyCustomIconCore,
   applyTopbarIconFromConfigCore,
@@ -30,8 +31,12 @@ import {
   toCssUrlCore,
 } from "./integrations/topbar-icon.js";
 import { createOverlayDialog } from "./ui/modal/index.js";
-import { createThemeTextBridgeCore } from "./integrations/theme-text.js";
-import { cfmTCore, convertText, loadS2T } from "./utils/i18n.js";
+import {
+  cfmTCore,
+  convertDomTextCore,
+  convertText,
+  loadS2T,
+} from "./utils/i18n.js";
 
 const EXT_NAME = "ST-Novel-Reader";
 
@@ -92,8 +97,10 @@ jQuery(async () => {
     saveSettings: () => ctx.saveSettingsDebounced?.(),
     // 界面文本：仅 language === 'zh-TW' 时转繁体
     cfmT: (t) => cfmTCore(t, { settings: ctx.extensionSettings }),
-    // 正文转换：默认关（后续设置面板接管），此处提供函数占位
-    tc: (t) => convertText(t, false),
+    // 正文转换：由全局设置 convertNovelText 开关控制（默认关）
+    tc: (t) => convertText(t, Boolean(getGlobalSettings().convertNovelText)),
+    // DOM 级简繁转换（正文渲染后使用，保留 HTML 结构）
+    convertDomText: (root) => convertDomTextCore(root),
   };
 
   const bookshelf = createBookshelfCore({
@@ -124,6 +131,10 @@ jQuery(async () => {
     if (g.readerSettings.bgColor) delete g.readerSettings.bgColor; // 旧字段（被主题取代）
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
+    // 界面语言："zh-CN"(简体中文，默认) | "zh-TW"(繁体中文)
+    if (g.language !== "zh-CN" && g.language !== "zh-TW") g.language = "zh-CN";
+    // 正文简繁转换开关（默认关：正文保持原文，读小说场景更贴合）
+    if (typeof g.convertNovelText !== "boolean") g.convertNovelText = false;
     return g;
   }
 
@@ -993,6 +1004,43 @@ jQuery(async () => {
                 ),
               )
         }</div>
+      </div>
+
+      <div class="novel-settings-row" data-novel-no-convert>
+        <div class="novel-settings-label">${escapeHtml(
+          deps.cfmT("界面语言"),
+        )}</div>
+        <div class="novel-lang-btns">
+          <button class="novel-lang-btn ${
+            g.language !== "zh-TW" ? "novel-lang-active" : ""
+          }" data-lang="zh-CN">简体中文</button>
+          <button class="novel-lang-btn ${
+            g.language === "zh-TW" ? "novel-lang-active" : ""
+          }" data-lang="zh-TW">繁體中文</button>
+        </div>
+        <div class="novel-settings-hint">${escapeHtml(
+          deps.cfmT("切换插件界面显示的语言。切换后重新打开插件生效。"),
+        )}</div>
+      </div>
+
+      <div class="novel-settings-row" data-novel-no-convert>
+        <div class="novel-settings-label">${escapeHtml(
+          deps.cfmT("正文简繁转换"),
+        )}</div>
+        <label class="novel-toggle-row">
+          <input type="checkbox" class="novel-toggle-input" ${
+            g.convertNovelText ? "checked" : ""
+          } />
+          <span class="novel-toggle-switch"></span>
+          <span class="novel-toggle-text">${escapeHtml(
+            g.convertNovelText
+              ? deps.cfmT("正文将转换为繁体")
+              : deps.cfmT("正文保持原文"),
+          )}</span>
+        </label>
+        <div class="novel-settings-hint">${escapeHtml(
+          deps.cfmT("关闭时正文保持原始语言，仅界面文字随语言设置转换。"),
+        )}</div>
       </div>`;
 
     // ---- 目录每页章数 ----
@@ -1112,6 +1160,34 @@ jQuery(async () => {
         dropdownMenu
           ?.querySelectorAll(".novel-icon-dropdown-item")
           .forEach((i) => i.classList.remove("novel-icon-selected"));
+      });
+
+    // ---- 界面语言切换（简体/繁體，extension_settings 持久化） ----
+    content.querySelectorAll(".novel-lang-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const lang = btn.dataset.lang;
+        if (lang === (g.language || "zh-CN")) return; // 未变化不重复保存
+        g.language = lang;
+        deps.saveSettings();
+        // 高亮切换
+        content
+          .querySelectorAll(".novel-lang-btn")
+          .forEach((b) => b.classList.toggle("novel-lang-active", b === btn));
+      });
+    });
+
+    // ---- 正文简繁转换开关 ----
+    content
+      .querySelector(".novel-toggle-input")
+      ?.addEventListener("change", (e) => {
+        g.convertNovelText = e.target.checked;
+        deps.saveSettings();
+        const txt = content.querySelector(".novel-toggle-text");
+        if (txt) {
+          txt.textContent = e.target.checked
+            ? deps.cfmT("正文将转换为繁体")
+            : deps.cfmT("正文保持原文");
+        }
       });
   }
 

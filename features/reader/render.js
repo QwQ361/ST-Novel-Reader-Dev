@@ -79,6 +79,7 @@ export async function renderMessagesBatched(
   options = {},
 ) {
   const { batchSize = 200, onProgress, startIndex = 0 } = options;
+  const { convertDomText = null } = deps;
   const total = messages.length;
 
   // 用 DocumentFragment 累积，避免多次重排
@@ -104,6 +105,11 @@ export async function renderMessagesBatched(
     // 每 batchSize 条挂载一次，让出主线程
     if (pending >= batchSize) {
       container.appendChild(fragment);
+      // 简繁转换：转换本轮挂载的正文文本节点（保留 HTML 结构，仅在启用时生效）
+      if (typeof convertDomText === "function") {
+        const children = container.querySelectorAll(".novel-msg-body");
+        children.forEach((body) => convertDomText(body));
+      }
       fragment = document.createDocumentFragment();
       pending = 0;
       onProgress?.(i + 1, total);
@@ -113,6 +119,10 @@ export async function renderMessagesBatched(
 
   if (pending > 0) {
     container.appendChild(fragment);
+    if (typeof convertDomText === "function") {
+      const children = container.querySelectorAll(".novel-msg-body");
+      children.forEach((body) => convertDomText(body));
+    }
   }
 }
 

@@ -814,6 +814,105 @@
   line-height: 1.5;
 }
 
+/* ---------- 界面语言切换（简体/繁體 按钮组） ---------- */
+.novel-lang-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.novel-lang-btn {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 0.88rem;
+  border-radius: 8px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 6%,
+    transparent
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.novel-lang-btn:hover {
+  border-color: var(--novel-accent, var(--SmartThemeGlowColor, #5b8cff));
+}
+
+.novel-lang-btn.novel-lang-active {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #5b8cff)) 22%,
+    transparent
+  );
+  border-color: var(--novel-accent, var(--SmartThemeGlowColor, #5b8cff));
+  font-weight: 600;
+}
+
+/* ---------- 开关（toggle）行：正文简繁转换 ---------- */
+.novel-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  margin-top: 2px;
+}
+
+.novel-toggle-row .novel-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.novel-toggle-switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 22%,
+    transparent
+  );
+  transition: background 0.2s ease;
+}
+
+.novel-toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.novel-toggle-input:checked + .novel-toggle-switch {
+  background: var(--novel-accent, var(--SmartThemeGlowColor, #5b8cff));
+}
+
+.novel-toggle-input:checked + .novel-toggle-switch::after {
+  transform: translateX(18px);
+}
+
+.novel-toggle-text {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
 /* ---------- 自定义顶栏图标配置（全局设置弹窗） ---------- */
 .novel-icon-config-section {
   margin-top: 6px;
