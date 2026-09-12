@@ -655,17 +655,17 @@
   color: var(--novel-strong-color, inherit);
 }
 
+/* 引号字符已由渲染管线保留在 <q> 元素内（“文字”），
+   故此处只上色，不再用 ::before/::after 生成引号，避免双重引号 */
 .novel-msg-body q {
-  quotes: "“" "”" "‘" "’";
   color: var(--novel-quote-color, inherit);
 }
 
-.novel-msg-body q::before {
-  content: open-quote;
-}
-
+/* 禁用浏览器 UA 默认的 q 自动引号（q::before { content: open-quote }），
+   否则 UA 会再包一层引号，导致双重引号 */
+.novel-msg-body q::before,
 .novel-msg-body q::after {
-  content: close-quote;
+  content: none;
 }
 
 /* 块引用/代码：内置主题用自带背景，跟随酒馆时用前景色低透明 */
