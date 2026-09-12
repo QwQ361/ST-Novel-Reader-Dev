@@ -1,0 +1,378 @@
+/* ============================================================
+   酒馆小说阅读器 —— 样式表
+   命名规范：统一 novel- 前缀
+   移动端铁律（MOBILE-POPUP-FIX.md）：
+     1) overlay 一律不加 overflow（WebView fixed+overflow flex bug）
+     2) 移动端媒体查询放本文件末尾
+     3) 弹窗容器用 margin:auto
+     4) 高度用 100vh
+   ============================================================ */
+
+/* ---------- 遮罩弹窗 ---------- */
+.novel-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100010;
+  background: rgba(0, 0, 0, 0.65);
+  /* 铁律 1：不加 overflow */
+}
+
+.novel-dialog {
+  width: min(1200px, 94vw);
+  max-height: min(90vh, 960px);
+  display: flex;
+  flex-direction: column;
+  margin: auto; /* 铁律 3 */
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--SmartThemeBlurTintColor, #1e1e1e);
+  color: var(--SmartThemeBodyColor, #ddd);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.novel-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid
+    var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
+  font-size: 1.05rem;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+
+.novel-dialog-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.novel-dialog-close {
+  cursor: pointer;
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  user-select: none;
+}
+
+.novel-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.novel-dialog-content {
+  flex: 1 1 auto;
+  min-height: 0; /* 允许子元素滚动 */
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  overflow: auto;
+}
+
+.novel-dialog-message {
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.novel-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.novel-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  user-select: none;
+}
+
+.novel-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.novel-btn-primary {
+  background: var(--SmartThemeMainColor, #4f8cff);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* ---------- 主界面三栏 ---------- */
+.novel-dialog-content.novel-main {
+  flex-direction: row;
+  gap: 12px;
+  padding: 12px;
+}
+
+.novel-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.novel-col-chars {
+  flex: 0 0 200px;
+}
+
+.novel-col-chats {
+  flex: 0 0 300px;
+}
+
+.novel-col-reader {
+  flex: 1 1 auto;
+}
+
+.novel-col-title {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-weight: 600;
+  opacity: 0.85;
+  border-bottom: 1px solid
+    var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+  margin-bottom: 6px;
+}
+
+/* ---------- 通用滚动容器（铁律无关，供 scrollElementIntoViewCentered 使用） ---------- */
+.novel-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---------- 列表 ---------- */
+.novel-list {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.novel-char-item,
+.novel-chat-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  transition: background 0.15s ease;
+}
+
+.novel-char-item:hover,
+.novel-chat-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.novel-char-item.active {
+  background: var(--SmartThemeMainColor, #4f8cff);
+  color: #fff;
+}
+
+.novel-char-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.novel-chat-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.novel-chat-preview {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.novel-chat-meta {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  margin-top: 4px;
+}
+
+/* ---------- 小说正文 ---------- */
+.novel-reader {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.novel-reader-title {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid
+    var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+  font-weight: 600;
+}
+
+.novel-reader-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.novel-reader-title-meta {
+  font-size: 0.8rem;
+  opacity: 0.6;
+  flex: 0 0 auto;
+  margin-left: 8px;
+}
+
+.novel-reader-body {
+  flex: 1 1 auto;
+  padding: 16px 20px;
+}
+
+/* ---------- 小说消息 ---------- */
+.novel-msg {
+  margin-bottom: 14px;
+  animation: novel-fade-in 0.2s ease;
+}
+
+.novel-msg-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.novel-msg-name {
+  font-weight: 700;
+  color: var(--SmartThemeMainColor, #4f8cff);
+}
+
+.novel-msg-user .novel-msg-name {
+  color: var(--SmartThemeUserMesBlurTintColor, #d4a017);
+}
+
+.novel-msg-system .novel-msg-name {
+  color: var(--SmartThemeSysMesBlurTintColor, #999);
+}
+
+.novel-msg-time {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.novel-msg-body {
+  line-height: 1.8;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.novel-msg-body p {
+  margin: 0 0 8px;
+}
+
+.novel-msg-body p:last-child {
+  margin-bottom: 0;
+}
+
+.novel-msg-body img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.novel-msg-body pre {
+  overflow-x: auto;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.novel-msg-body blockquote {
+  margin: 6px 0;
+  padding-left: 12px;
+  border-left: 3px solid rgba(255, 255, 255, 0.25);
+  opacity: 0.85;
+}
+
+.novel-msg-body table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.novel-msg-body th,
+.novel-msg-body td {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 10px;
+}
+
+@keyframes novel-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- 状态提示 ---------- */
+.novel-empty,
+.novel-loading {
+  padding: 24px 16px;
+  text-align: center;
+  opacity: 0.6;
+}
+
+/* ---------- 顶栏按钮 ---------- */
+#novel-topbar-button .drawer-icon {
+  color: var(--SmartThemeMainColor, #4f8cff);
+}
+
+/* ============================================================
+   移动端媒体查询 —— 必须放文件末尾（铁律 2）
+   ============================================================ */
+@media (max-width: 900px) {
+  .novel-dialog {
+    width: 100vw;
+    height: 100vh; /* 铁律 4 */
+    max-height: 100vh;
+    border-radius: 0;
+    margin: auto; /* 铁律 3 */
+  }
+
+  .novel-dialog-content.novel-main {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .novel-col-chars {
+    flex: 0 0 30vh;
+  }
+
+  .novel-col-chats {
+    flex: 0 0 28vh;
+  }
+
+  .novel-col-reader {
+    flex: 1 1 auto;
+  }
+}

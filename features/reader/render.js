@@ -1,0 +1,116 @@
+// features/reader/render.js
+// 小说正文渲染层。
+// 关键安全点：Markdown → HTML 必须走 ST 官方 messageFormatting 管线
+// （showdown + encodeStyleTags + DOMPurify.sanitize），禁止直接 innerHTML 原始消息。
+// 渲染非当前聊天时传 messageId = NaN，使 messageFormatting 内部不触碰全局 chat 数组。
+
+/**
+ * 单条消息渲染为安全的 HTML。
+ * @param {object} deps 依赖注入
+ * @param {object} mes 消息对象（ST 原始消息：name / is_user / is_system / mes / send_date / swipes）
+ * @param {object} [options]
+ * @param {string} [options.userName] 用户显示名（说话人标签兜底）
+ * @param {Function} [options.tc] 简繁转换函数
+ * @returns {string} 安全的 HTML 字符串（已 sanitize）
+ */
+export function renderMessage(deps, mes, options = {}) {
+  const { messageFormatting = () => "" } = deps;
+  const { tc = (t) => t } = options;
+
+  const name = mes.name || options.userName || "?";
+  const isUser = Boolean(mes.is_user);
+  const isSystem = Boolean(mes.is_system);
+
+  let bodyHtml = "";
+  try {
+    // ST 官方管线：参数 (mes, ch_name, isSystem, isUser, messageId, sanitizerOverrides)
+    // messageId 传 NaN：内部 chat[messageId] 访问恒安全，只走 Markdown + sanitize 分支。
+    bodyHtml = messageFormatting(mes, name, isSystem, isUser, NaN, {});
+  } catch (err) {
+    console.warn("[NovelReader] messageFormatting 失败，回退转义输出:", err);
+    bodyHtml = escapeHtmlFallback(mes.mes || "");
+  }
+
+  // 简繁转换（针对说话人标签；正文 HTML 已在管线内处理）
+  const label = tc(name);
+  const time = mes.send_date ? escapeHtmlFallback(String(mes.send_date)) : "";
+
+  const cls = [
+    "novel-msg",
+    isUser ? "novel-msg-user" : "",
+    isSystem ? "novel-msg-system" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return `
+    <div class="${cls}" data-id="${escapeHtmlFallback(String(mes.mesId ?? ""))}">
+      <div class="novel-msg-head">
+        <span class="novel-msg-name">${escapeHtmlFallback(label)}</span>
+        ${time ? `<span class="novel-msg-time">${time}</span>` : ""}
+      </div>
+      <div class="novel-msg-body">${bodyHtml}</div>
+    </div>`;
+}
+
+/**
+ * 将消息数组分批渲染到容器（避免一次性插入上万条 DOM 卡死）。
+ * @param {object} deps 依赖注入
+ * @param {HTMLElement} container 目标容器
+ * @param {Array<object>} messages 消息数组
+ * @param {object} [options] 见 renderMessage
+ * @param {number} [options.batchSize=200] 每批渲染条数
+ * @returns {Promise<void>} 渲染完成
+ */
+export async function renderMessagesBatched(
+  deps,
+  container,
+  messages,
+  options = {},
+) {
+  const { batchSize = 200, onProgress } = options;
+  const total = messages.length;
+
+  // 用 DocumentFragment 累积，避免多次重排
+  let fragment = document.createDocumentFragment();
+  let pending = 0;
+
+  for (let i = 0; i < total; i += 1) {
+    const mes = messages[i];
+    if (!mes) continue;
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = renderMessage(deps, mes, options);
+    // wrapper 只含一个子节点（novel-msg），取其首个元素挂载
+    const node = wrapper.firstElementChild;
+    if (node) {
+      fragment.appendChild(node);
+      pending += 1;
+    }
+
+    // 每 batchSize 条挂载一次，让出主线程
+    if (pending >= batchSize) {
+      container.appendChild(fragment);
+      fragment = document.createDocumentFragment();
+      pending = 0;
+      onProgress?.(i + 1, total);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
+  if (pending > 0) {
+    container.appendChild(fragment);
+  }
+}
+
+/**
+ * 纯文本兜底转义（messageFormatting 不可用时的最后防线）。
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeHtmlFallback(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
+    .replace(/"/g, "\x26quot;");
+}
