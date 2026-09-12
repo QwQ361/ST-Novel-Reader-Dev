@@ -96,7 +96,9 @@ jQuery(async () => {
     getSettings: () => ctx.extensionSettings || {},
     saveSettings: () => ctx.saveSettingsDebounced?.(),
     // 界面文本：仅 language === 'zh-TW' 时转繁体
-    cfmT: (t) => cfmTCore(t, { settings: ctx.extensionSettings }),
+    // 统一走 getGlobalSettings()（与设置写入同源：EXT_NAME 命名空间下），
+    // 避免与语言按钮的写入位置不一致导致界面永不转换。
+    cfmT: (t) => cfmTCore(t, { settings: getGlobalSettings() }),
     // 正文转换：由全局设置 convertNovelText 开关控制（默认关）
     tc: (t) => convertText(t, Boolean(getGlobalSettings().convertNovelText)),
     // DOM 级简繁转换（正文渲染后使用，保留 HTML 结构）
@@ -132,6 +134,11 @@ jQuery(async () => {
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
     // 界面语言："zh-CN"(简体中文，默认) | "zh-TW"(繁体中文)
+    // 旧版本曾把 language 存于 extension_settings 顶层，此处迁移到插件命名空间下
+    if (!g.language && s.language === "zh-TW") {
+      g.language = "zh-TW";
+      delete s.language; // 迁移后清除顶层旧值，避免后续再被读到
+    }
     if (g.language !== "zh-CN" && g.language !== "zh-TW") g.language = "zh-CN";
     // 正文简繁转换开关（默认关：正文保持原文，读小说场景更贴合）
     if (typeof g.convertNovelText !== "boolean") g.convertNovelText = false;
