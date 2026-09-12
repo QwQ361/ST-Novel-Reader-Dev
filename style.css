@@ -121,6 +121,20 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
+/* 右上角关闭按钮（×）：略醒目，悬停变红 */
+.novel-icon-close {
+  font-weight: 700;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 6px 12px;
+}
+
+.novel-icon-close:hover {
+  background: rgba(220, 60, 60, 0.75);
+  border-color: rgba(255, 120, 120, 0.6);
+  color: #fff;
+}
+
 /* ---------- 内容区（状态机切换） ---------- */
 .novel-body {
   flex: 1 1 auto;

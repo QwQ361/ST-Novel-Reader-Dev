@@ -121,6 +121,7 @@ jQuery(async () => {
     const dlg = createOverlayDialog({ title: "", showClose: false });
     dialogRef = dlg;
     dlg.onClose = () => {
+      saveLastView(); // 记住关闭前的页面（角色/聊天/章节）
       reader.abort();
       dialogRef = null;
     };
@@ -141,6 +142,7 @@ jQuery(async () => {
       </div>
       <div class="novel-topbar-settings">
         <button class="novel-icon-btn" data-action="settings" title="全局设置">⚙</button>
+        <button class="novel-icon-btn novel-icon-close" data-action="close" title="关闭">×</button>
       </div>`;
     content.appendChild(topbarEl);
 
@@ -166,13 +168,93 @@ jQuery(async () => {
     bindTopbarEvents();
     bindBottombarEvents();
 
-    // 初始渲染：书架首页
-    showBookshelf();
+    // 初始渲染：恢复上次关闭前的页面（无记录则书架首页）
+    restoreLastView();
   }
 
   /** 关闭主界面弹窗 */
   function closeReaderDialog() {
     dialogRef?.close();
+  }
+
+  // ============ 关闭位置记忆（重新打开恢复原页面） ============
+
+  /** 保存当前浏览位置到 extension_settings */
+  function saveLastView() {
+    const g = getGlobalSettings();
+    g.lastView = {
+      page: state.page,
+      charIdx: state.currentCharIdx ?? null,
+      charAvatar: state.currentChar?.avatar ?? null,
+      charName: state.currentChar?.name ?? null,
+      chatFileName: state.currentChat?.file_name ?? null,
+      chapter: state.currentChapter || null,
+      tocPage: state.tocPage ?? 0,
+    };
+    deps.saveSettings();
+  }
+
+  /** 打开弹窗后按上次记录恢复页面（角色列表变化时按 avatar/name 兜底） */
+  async function restoreLastView() {
+    const g = getGlobalSettings();
+    const last = g.lastView;
+    if (!last || !last.page) {
+      showBookshelf();
+      return;
+    }
+
+    const chars = bookshelf.getCharacters();
+    // 优先按 avatar 匹配（角色顺序可能变化），再按索引、最后按名称
+    let char = null;
+    let charIdx = -1;
+    if (last.charAvatar) {
+      charIdx = chars.findIndex((c) => c.avatar === last.charAvatar);
+      if (charIdx >= 0) char = chars[charIdx];
+    }
+    if (!char && last.charIdx != null && chars[last.charIdx]) {
+      char = chars[last.charIdx];
+      charIdx = last.charIdx;
+    }
+    if (!char && last.charName) {
+      charIdx = chars.findIndex((c) => c.name === last.charName);
+      if (charIdx >= 0) char = chars[charIdx];
+    }
+    if (!char) {
+      showBookshelf();
+      return;
+    }
+
+    // 聊天列表页：直接打开该角色聊天列表
+    if (last.page === "chats") {
+      await openChatList(charIdx, char);
+      return;
+    }
+
+    // 目录 / 正文页：需要聊天对象（file_name 匹配）
+    const chats = await bookshelf.getCharChats(charIdx, char.avatar);
+    if (state.currentChar !== char) return; // 已切换
+    const chat = (chats || []).find((c) => c.file_name === last.chatFileName);
+    if (!chat) {
+      // 聊天已被删除 → 显示该角色的聊天列表
+      state.currentChats = chats || [];
+      setPage("chats");
+      topbarEl.querySelector(".novel-topbar-title").textContent = escapeHtml(
+        char.name || deps.cfmT("未命名"),
+      );
+      renderChatListGrid("");
+      return;
+    }
+
+    await openToc(char, chat);
+    state.tocPage = last.tocPage ?? 0;
+    if (last.page === "reader" && last.chapter) {
+      // 正文页：直接进入上次章节（滚动位置由 progress 自动恢复）
+      await openChapter(last.chapter);
+    } else if ((last.tocPage ?? 0) > 0) {
+      // 目录页：重渲染当前页以应用记忆的页码
+      const container = bodyEl.querySelector(".novel-page");
+      if (container) renderTocPage(container);
+    }
   }
 
   // ============ 页面状态机 ============
@@ -634,6 +716,10 @@ jQuery(async () => {
       .addEventListener("click", () => {
         openGlobalSettings();
       });
+    // 关闭按钮（×）：关闭阅读器，下次打开恢复原页面
+    topbarEl
+      .querySelector('[data-action="close"]')
+      .addEventListener("click", closeReaderDialog);
     // 搜索框：书架/聊天列表 = 实时筛选；目录/正文 = 小说内检索
     searchInputEl.addEventListener("input", () => {
       const q = searchInputEl.value.trim().toLowerCase();
