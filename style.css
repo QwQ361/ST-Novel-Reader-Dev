@@ -32,6 +32,24 @@
   overflow: hidden; /* 仅隐藏，不在 overlay 上 */
 }
 
+/* 紧凑弹窗（设置类小弹窗）：非全屏、居中、内容区可滚动 */
+.novel-dialog-compact {
+  width: min(460px, 92vw);
+  height: auto;
+  max-height: 85vh;
+  border-radius: 14px;
+  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.15));
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+}
+
+.novel-dialog-compact .novel-dialog-content {
+  overflow-y: auto; /* 仅内容区可滚动，overlay 不加 overflow（铁律 1） */
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 /* ---------- 弹窗内容区（index.js 将 modal content 设为 novel-shell） ---------- */
 .novel-shell {
   flex: 1 1 auto;
@@ -453,14 +471,10 @@
   text-align: right;
 }
 
-/* 全局设置面板（顶栏 ⚙ 弹出，位于顶栏下方） */
-.novel-global-settings {
-  position: absolute;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(420px, 92vw);
-  z-index: 10;
+.novel-settings-hint {
+  font-size: 0.78rem;
+  opacity: 0.55;
+  line-height: 1.5;
 }
 
 .novel-swatches {
@@ -538,7 +552,9 @@
   cursor: pointer;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid transparent;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .novel-search-item:hover {
@@ -653,5 +669,12 @@
   .novel-settings-panel {
     width: 94vw;
     max-height: 55vh;
+  }
+
+  /* 移动端：紧凑弹窗占满宽度，高度限 90vh，内容可滚动 */
+  .novel-dialog-compact {
+    width: 94vw;
+    max-height: 90vh;
+    margin: auto; /* 铁律 3 */
   }
 }

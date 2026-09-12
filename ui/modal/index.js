@@ -13,17 +13,18 @@
  * @param {string} [options.title] 标题
  * @param {boolean} [options.backdropClose=true] 点击遮罩是否关闭
  * @param {boolean} [options.showClose=true] 是否显示右上角关闭按钮
+ * @param {boolean} [options.compact=false] 紧凑弹窗（小尺寸、居中、可滚动内容），用于设置类小弹窗
  * @returns {{ overlay: HTMLElement, dialog: HTMLElement, content: HTMLElement, close: Function, onClose: Function }}
  */
 export function createOverlayDialog(options = {}) {
-  const { title = "", backdropClose = true, showClose = true } = options;
+  const { title = "", backdropClose = true, showClose = true, compact = false } = options;
 
   const overlay = document.createElement("div");
   overlay.className = "novel-overlay";
   overlay.dataset.novelOverlay = "";
 
   const dialog = document.createElement("div");
-  dialog.className = "novel-dialog";
+  dialog.className = "novel-dialog" + (compact ? " novel-dialog-compact" : "");
 
   const header = document.createElement("div");
   header.className = "novel-dialog-header";

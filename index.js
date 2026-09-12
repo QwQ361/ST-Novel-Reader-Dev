@@ -620,7 +620,7 @@ jQuery(async () => {
     topbarEl
       .querySelector('[data-action="settings"]')
       .addEventListener("click", () => {
-        toggleGlobalSettings();
+        openGlobalSettings();
       });
     // 搜索框：书架/聊天列表 = 实时筛选；目录/正文 = 小说内检索
     searchInputEl.addEventListener("input", () => {
@@ -701,29 +701,28 @@ jQuery(async () => {
     searchPanelEl = null;
   }
 
-  /** 全局设置面板：每页 N 章（弹出在顶栏下方） */
-  function toggleGlobalSettings() {
-    const existing = bodyEl.querySelector(".novel-global-settings");
-    if (existing) {
-      existing.remove();
-      return;
-    }
+  /** 全局设置弹窗：每页 N 章（紧凑弹窗） */
+  function openGlobalSettings() {
     const g = getGlobalSettings();
-    const panel = document.createElement("div");
-    panel.className = "novel-settings-panel novel-global-settings";
-    panel.style.bottom = "";
-    panel.style.top = "56px";
-    panel.innerHTML = `
+    const dlg = createOverlayDialog({
+      title: deps.cfmT("全局设置"),
+      compact: true,
+    });
+    const content = dlg.content;
+    content.innerHTML = `
       <div class="novel-settings-row">
         <div class="novel-settings-label">${escapeHtml(deps.cfmT("目录每页章数"))}</div>
         <input type="range" min="10" max="500" step="10" value="${Number(g.chaptersPerPage) || 100}" />
         <div class="novel-settings-value"></div>
+      </div>
+      <div class="novel-settings-row">
+        <div class="novel-settings-hint">${escapeHtml(deps.cfmT("用于目录页的分页显示，修改后立即生效。"))}</div>
       </div>`;
-    const range = panel.querySelector("input[type='range']");
-    const valueEl = panel.querySelector(".novel-settings-value");
-    valueEl.textContent = `${range.value} 章/页`;
+    const range = content.querySelector("input[type='range']");
+    const valueEl = content.querySelector(".novel-settings-value");
+    valueEl.textContent = `${range.value} ${deps.cfmT("章/页")}`;
     range.addEventListener("input", () => {
-      valueEl.textContent = `${range.value} 章/页`;
+      valueEl.textContent = `${range.value} ${deps.cfmT("章/页")}`;
       g.chaptersPerPage = Number(range.value);
       deps.saveSettings();
       // 若当前在目录页，实时刷新分页（保持当前页号不越界）
@@ -740,7 +739,6 @@ jQuery(async () => {
         if (container) renderTocPage(container);
       }
     });
-    bodyEl.appendChild(panel);
   }
 
   // ============ 底部栏事件（小说设置） ============
