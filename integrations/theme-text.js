@@ -164,16 +164,7 @@ export function collectBridgeRulesCore(deps) {
         if (!keptParts.length) continue;
         const cleanRewritten = keptParts.join(", ");
         // 保留声明块（cssText 含选择器，需去掉原选择器部分）
-        let decl = rule.style.cssText;
-        if (!decl) continue;
-        // 引号字符已由渲染管线保留在 <q> 元素内（“文字”），
-        // 过滤 content 声明（含 open-quote/close-quote），避免桥接覆盖
-        // .novel-msg-body q::before/::after 的 content: none，导致双重引号
-        decl = String(decl)
-          .split(";")
-          .map((d) => d.trim())
-          .filter((d) => d && !/^content\s*:/i.test(d))
-          .join("; ");
+        const decl = rule.style.cssText;
         if (!decl) continue;
         rules.push(`${cleanRewritten} { ${decl} }`);
       }
