@@ -133,7 +133,37 @@ export function renderMarkdownCore(markdown) {
     const converter = _scriptModule?.converter;
     if (converter) {
       // ST 官方 showdown 部分（与 messageFormatting 一致）
-      let html = converter.makeHtml(String(markdown ?? ""));
+      // 引号 → <q>：ST 在 makeHtml 之前把成对引号（"…" “…” «…» 「…」 『…』 ＂…＂）替换为 <q>…</q>，
+      // 正则会先跳过 <style> 与代码块。桥接的主题样式 .novel-msg-body q { color: var(--SmartThemeQuoteColor) }
+      // 依赖这个 <q> 元素，缺了它引号就吃不到主题色。
+      let html = String(markdown ?? "").replace(
+        /<style>[\s\S]*?<\/style>|```[\s\S]*?```|~~~[\s\S]*?~~~|``[\s\S]*?``|`[\s\S]*?`|(".*?")|(\u201C.*?\u201D)|(\u00AB.*?\u00BB)|(\u300C.*?\u300D)|(\u300E.*?\u300F)|(\uFF02.*?\uFF02)/gim,
+        function (match, p1, p2, p3, p4, p5, p6) {
+          if (p1) {
+            // English double quotes
+            return `<q>"${p1.slice(1, -1)}"</q>`;
+          } else if (p2) {
+            // Curly double quotes “ ”
+            return `<q>“${p2.slice(1, -1)}”</q>`;
+          } else if (p3) {
+            // Guillemets « »
+            return `<q>«${p3.slice(1, -1)}»</q>`;
+          } else if (p4) {
+            // Corner brackets 「 」
+            return `<q>「${p4.slice(1, -1)}」</q>`;
+          } else if (p5) {
+            // White corner brackets 『 』
+            return `<q>『${p5.slice(1, -1)}』</q>`;
+          } else if (p6) {
+            // Fullwidth quotes ＂ ＂
+            return `<q>＂${p6.slice(1, -1)}＂</q>`;
+          } else {
+            // Return the original match if no quotes are found
+            return match;
+          }
+        },
+      );
+      html = converter.makeHtml(html);
       // 处理代码块换行（与 ST 一致：修复 Firefox <br> 问题）
       html = html.replace(/<code(.*)>[\s\S]*?<\/code>/g, (match) =>
         match.replace(/\n/gm, "\u0000"),

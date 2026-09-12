@@ -129,8 +129,14 @@ export function rewriteSelectorCore(selector) {
 }
 
 /**
- * 从内联 <style> 收集可桥接的规则（美化主题聊天文本效果）。
- * 跳过外部 <link>（跨域读取异常）与 ST 默认样式表。
+ * 从所有可读样式表收集可桥接的规则（美化主题聊天文本特效）。
+ * 支持：
+ *   - 内联 <style>（美化插件注入）
+ *   - 同源 <link rel="stylesheet">（ST 官方 style.css 的 .mes_text em/q 变色等）
+ * 跨域 <link> 读取会抛异常 → try/catch 跳过。
+ *
+ * 只桥接「内联文字特效」规则（选择器尾部是 em/strong/q/blockquote/code 等聊天文本元素），
+ * 容器级基础样式（.mes_text { line-height... }）跳过，避免覆盖阅读器自己的排版。
  * @param {object} deps { document }
  * @returns {string[]} 改写后的 cssText 数组（选择器已换为 .novel-msg-body 上下文）
  */
@@ -140,28 +146,27 @@ export function collectBridgeRulesCore(deps) {
 
   for (const sheet of gDoc.styleSheets) {
     try {
-      if (
-        !sheet.ownerNode ||
-        sheet.ownerNode.tagName?.toUpperCase() !== "STYLE"
-      ) {
-        continue;
-      }
+      // 读取 cssRules：内联 style 与同源 link 均可读；跨域 link 在此抛异常被捕获
       for (const rule of sheet.cssRules) {
         if (!rule.selectorText || !rule.style) continue;
         // 只桥接聊天文本选择器
         if (!isChatTextSelectorCore(rule.selectorText)) continue;
+        // 只桥接「内联文字特效」规则；容器级基础样式跳过（阅读器已有排版）
+        if (!isTailChatTextElementCore(rule.selectorText)) continue;
         const rewritten = rewriteSelectorCore(rule.selectorText);
         if (!rewritten || rewritten === rule.selectorText) continue;
+        // 只保留改写后与阅读器正文相关的分段（丢弃 .mes_reasoning 等伴生选择器：
+        // 它们对聊天区有效，但对 .novel-msg-body 无意义，且会污染桥接样式）
+        const keptParts = rewritten
+          .split(",")
+          .map((p) => p.trim())
+          .filter((p) => p.includes(".novel-msg-body"));
+        if (!keptParts.length) continue;
+        const cleanRewritten = keptParts.join(", ");
         // 保留声明块（cssText 含选择器，需去掉原选择器部分）
         const decl = rule.style.cssText;
         if (!decl) continue;
-        // 容器级基础样式（.mes_text { color: ... }）与阅读器「正文跟随酒馆美化」冲突：
-        // 剥掉 color / background 声明，避免覆盖阅读器主题变量；内联特效规则保留全部。
-        const finalDecl = isTailChatTextElementCore(rule.selectorText)
-          ? decl
-          : stripConflictingDeclsCore(decl);
-        if (!finalDecl) continue;
-        rules.push(`${rewritten} { ${finalDecl} }`);
+        rules.push(`${cleanRewritten} { ${decl} }`);
       }
     } catch (err) {
       // 跨域样式表 / 无权限规则，跳过
