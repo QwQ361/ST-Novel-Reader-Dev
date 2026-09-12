@@ -306,7 +306,8 @@
   display: inline-block;
   min-width: 3.5em;
   font-weight: 600;
-  color: var(--SmartThemeMainColor, #4f8cff);
+  /* 内置主题用 --novel-accent；跟随酒馆时回退 --SmartThemeMainColor */
+  color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
 }
 
 .novel-toc-item-title {
@@ -388,7 +389,8 @@
 
 .novel-msg-name {
   font-weight: 700;
-  color: var(--SmartThemeMainColor, #4f8cff);
+  /* 内置主题用 --novel-accent；跟随酒馆时回退 --SmartThemeMainColor */
+  color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
 }
 
 .novel-msg-user .novel-msg-name {
@@ -425,51 +427,8 @@
   border-radius: 6px;
 }
 
-.novel-msg-body pre {
-  overflow-x: auto;
-  padding: 10px;
-  border-radius: 6px;
-  background: color-mix(
-    in srgb,
-    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
-    transparent
-  );
-}
-
-.novel-msg-body blockquote {
-  margin: 6px 0;
-  padding-left: 12px;
-  border-left: 3px solid
-    color-mix(
-      in srgb,
-      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 30%,
-      transparent
-    );
-  opacity: 0.85;
-}
-
-/* 引号/星号等内联强调元素基础样式：
-   美化主题的特殊效果由 theme-text.js 桥接注入（优先级更高会覆盖），
-   此处保证无美化主题时强调语义可读（*文字* → em，**文字** → strong） */
-.novel-msg-body em {
-  font-style: italic;
-}
-
-.novel-msg-body strong {
-  font-weight: 700;
-}
-
-.novel-msg-body q {
-  quotes: "“" "”" "‘" "’";
-}
-
-.novel-msg-body q::before {
-  content: open-quote;
-}
-
-.novel-msg-body q::after {
-  content: close-quote;
-}
+/* 内联强调元素（em/strong/q）与块引用/代码样式定义在下方「内置主题」区块：
+   优先用主题变量，跟随酒馆时回退 --novel-fg / --SmartTheme* */
 
 .novel-msg-body table {
   border-collapse: collapse;
@@ -485,6 +444,152 @@
       transparent
     );
   padding: 4px 10px;
+}
+
+/* ---------- 阅读器内置主题（∅ = 跟随酒馆，不设 class） ----------
+   每套主题定义一组 CSS 变量，作用于 .novel-dialog（背景/文字）
+   及正文内联元素（引号/星号/加粗/块引用/代码）：
+     --novel-bg              正文背景
+     --novel-fg              正文文字
+     --novel-em-color        星号斜体文字色（em）
+     --novel-strong-color    双星号加粗文字色（strong）
+     --novel-quote-color     引号文字色（q）与块引用边框
+     --novel-blockquote-bg   块引用背景
+     --novel-code-bg         行内代码/代码块背景
+     --novel-border          弱边框（供 pre/table 等细节元素）
+     --novel-accent          强调色（说话人名/章标题/目录序号，∅ 时回退 --SmartThemeMainColor）
+   正文内联元素优先用这些变量（见下方 .novel-msg-body em/strong/q 等），
+   未选中内置主题时（∅）这些变量不定义，回退 --novel-fg / --SmartTheme*。
+   内置主题与酒馆美化桥接互斥：选内置主题时 theme-text.js 关闭桥接。 */
+
+.novel-dialog.novel-theme-warmpaper,
+.novel-overlay.novel-theme-warmpaper {
+  --novel-bg: #f5f0e6;
+  --novel-fg: #4a3f35;
+  --novel-em-color: #a0522d;
+  --novel-strong-color: #8b4513;
+  --novel-quote-color: #6b4f3a;
+  --novel-blockquote-bg: rgba(107, 79, 58, 0.08);
+  --novel-code-bg: rgba(74, 63, 53, 0.08);
+  --novel-border: rgba(74, 63, 53, 0.18);
+  --novel-accent: #8b4513;
+}
+
+.novel-dialog.novel-theme-midnight,
+.novel-overlay.novel-theme-midnight {
+  --novel-bg: #14161a;
+  --novel-fg: #d6d8dc;
+  --novel-em-color: #7fd1c0;
+  --novel-strong-color: #ffffff;
+  --novel-quote-color: #9aa7b5;
+  --novel-blockquote-bg: rgba(154, 167, 181, 0.08);
+  --novel-code-bg: rgba(214, 216, 220, 0.08);
+  --novel-border: rgba(214, 216, 220, 0.18);
+  --novel-accent: #7fd1c0;
+}
+
+.novel-dialog.novel-theme-tealink,
+.novel-overlay.novel-theme-tealink {
+  --novel-bg: #0f1b1d;
+  --novel-fg: #cfe3d8;
+  --novel-em-color: #a8e6cf;
+  --novel-strong-color: #eafff2;
+  --novel-quote-color: #7fb3a8;
+  --novel-blockquote-bg: rgba(127, 179, 168, 0.1);
+  --novel-code-bg: rgba(207, 227, 216, 0.08);
+  --novel-border: rgba(207, 227, 216, 0.16);
+  --novel-accent: #7fb3a8;
+}
+
+.novel-dialog.novel-theme-rose,
+.novel-overlay.novel-theme-rose {
+  --novel-bg: #241a1e;
+  --novel-fg: #e6d3d8;
+  --novel-em-color: #f0a6b8;
+  --novel-strong-color: #ffe3ea;
+  --novel-quote-color: #c98a9b;
+  --novel-blockquote-bg: rgba(201, 138, 155, 0.1);
+  --novel-code-bg: rgba(230, 211, 216, 0.08);
+  --novel-border: rgba(230, 211, 216, 0.16);
+  --novel-accent: #f0a6b8;
+}
+
+.novel-dialog.novel-theme-forest,
+.novel-overlay.novel-theme-forest {
+  --novel-bg: #141c15;
+  --novel-fg: #d5e2d2;
+  --novel-em-color: #a3d9a5;
+  --novel-strong-color: #eaf7e8;
+  --novel-quote-color: #8fb892;
+  --novel-blockquote-bg: rgba(143, 184, 146, 0.1);
+  --novel-code-bg: rgba(213, 226, 210, 0.08);
+  --novel-border: rgba(213, 226, 210, 0.16);
+  --novel-accent: #a3d9a5;
+}
+
+.novel-dialog.novel-theme-ocean,
+.novel-overlay.novel-theme-ocean {
+  --novel-bg: #101826;
+  --novel-fg: #ccd9ea;
+  --novel-em-color: #7fb5ff;
+  --novel-strong-color: #e8f0ff;
+  --novel-quote-color: #8fb4d9;
+  --novel-blockquote-bg: rgba(143, 180, 217, 0.1);
+  --novel-code-bg: rgba(204, 217, 234, 0.08);
+  --novel-border: rgba(204, 217, 234, 0.16);
+  --novel-accent: #7fb5ff;
+}
+
+/* 正文内联元素：优先用内置主题变量，回退跟随酒馆（--novel-fg / --SmartTheme*） */
+.novel-msg-body em {
+  font-style: italic;
+  color: var(--novel-em-color, inherit);
+}
+
+.novel-msg-body strong {
+  font-weight: 700;
+  color: var(--novel-strong-color, inherit);
+}
+
+.novel-msg-body q {
+  quotes: "“" "”" "‘" "’";
+  color: var(--novel-quote-color, inherit);
+}
+
+.novel-msg-body q::before {
+  content: open-quote;
+}
+
+.novel-msg-body q::after {
+  content: close-quote;
+}
+
+/* 块引用/代码：内置主题用自带背景，跟随酒馆时用前景色低透明 */
+.novel-msg-body blockquote {
+  margin: 6px 0;
+  padding-left: 12px;
+  border-left: 3px solid
+    var(--novel-quote-color, color-mix(in srgb, var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 30%, transparent));
+  background: var(--novel-blockquote-bg, transparent);
+  opacity: 0.85;
+}
+
+.novel-msg-body pre,
+.novel-msg-body code {
+  background: var(
+    --novel-code-bg,
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+      transparent
+    )
+  );
+}
+
+.novel-msg-body pre {
+  overflow-x: auto;
+  padding: 10px;
+  border-radius: 6px;
 }
 
 @keyframes novel-fade-in {

@@ -35,6 +35,19 @@ import { cfmTCore, convertText, loadS2T } from "./utils/i18n.js";
 
 const EXT_NAME = "ST-Novel-Reader";
 
+// 阅读器内置主题：∅（id:""）= 跟随酒馆美化；其余为独立配色主题。
+// 每套主题的背景色在 style.css 的 .novel-theme-{id} 中通过 CSS 变量定义，
+// 这里只维护 id/显示名/预览色（面板色板用）。
+const READER_THEMES = [
+  { id: "", name: "跟随酒馆", bg: "" },
+  { id: "warmpaper", name: "暖纸", bg: "#f5f0e6" },
+  { id: "midnight", name: "墨夜", bg: "#14161a" },
+  { id: "tealink", name: "青简", bg: "#0f1b1d" },
+  { id: "rose", name: "蔷薇", bg: "#241a1e" },
+  { id: "forest", name: "森语", bg: "#141c15" },
+  { id: "ocean", name: "深蓝", bg: "#101826" },
+];
+
 jQuery(async () => {
   console.log("[NovelReader] 启动中…");
 
@@ -96,10 +109,11 @@ jQuery(async () => {
     if (!s[EXT_NAME]) s[EXT_NAME] = {};
     const g = s[EXT_NAME];
     g.chaptersPerPage = Number(g.chaptersPerPage) || 100; // 目录每页 N 章，默认 100
-    if (!g.readerSettings) g.readerSettings = {}; // 字号/文字色/背景色
+    if (!g.readerSettings) g.readerSettings = {}; // 字号/主题
     if (!g.readerSettings.fontSize) g.readerSettings.fontSize = 18;
-    if (!g.readerSettings.textColor) g.readerSettings.textColor = "";
-    if (!g.readerSettings.bgColor) g.readerSettings.bgColor = "";
+    if (g.readerSettings.textColor) delete g.readerSettings.textColor; // 旧字段（被主题取代）
+    if (g.readerSettings.bgColor) delete g.readerSettings.bgColor; // 旧字段（被主题取代）
+    if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
     return g;
   }
@@ -142,24 +156,24 @@ jQuery(async () => {
       dialogRef = null;
     };
 
-    // 采样 ST 主界面实际渲染色（跟随美化主题），写入 dialog 的 --novel-bg/--novel-fg
+    // 应用阅读器样式（主题：∅跟随酒馆采样 / 内置主题 class + 桥接开关；字号）
+    // applyReaderStyles 内部按 readerSettings.themeId 决定分支：
+    //   ∅ → 采样酒馆主题色写内联变量 + 开启桥接（引号/星号跟随美化）
+    //   内置 → dialog/overlay 加 novel-theme-{id} class + 关闭桥接（引号/星号用主题配色）
     try {
-      applyThemeCore(dlg.dialog, sampleStThemeCore());
-      // 美化主题的样式可能延迟加载：稍后重采样一次，弹窗仍打开才应用
+      applyReaderStyles();
+      // 美化主题样式可能延迟加载：∅ 模式下稍后重采样一次，弹窗仍打开才应用
+      // （内置主题不受影响：class 自带变量，内联采样只会覆盖它，故跳过）
       setTimeout(() => {
-        if (dialogRef === dlg) {
+        if (dialogRef !== dlg) return;
+        const g2 = getGlobalSettings();
+        if (!g2.readerSettings?.themeId) {
           applyThemeCore(dlg.dialog, sampleStThemeCore());
+          themeTextBridge.refresh();
         }
       }, 300);
     } catch (err) {
-      console.warn("[NovelReader] 主题采样失败:", err);
-    }
-
-    // 刷新主题文本桥接样式（引号/星号特效跟随美化主题）
-    try {
-      themeTextBridge.refresh();
-    } catch (err) {
-      console.warn("[NovelReader] 主题文本样式桥接刷新失败:", err);
+      console.warn("[NovelReader] 主题应用失败:", err);
     }
 
     const content = dlg.content;
@@ -1146,72 +1160,46 @@ jQuery(async () => {
     fontRow.appendChild(fontValue);
     panel.appendChild(fontRow);
 
-    // 文字颜色色板
-    const textRow = document.createElement("div");
-    textRow.className = "novel-settings-row";
-    const textLabel = document.createElement("div");
-    textLabel.className = "novel-settings-label";
-    textLabel.textContent = deps.cfmT("文字颜色");
-    const textSwatches = document.createElement("div");
-    textSwatches.className = "novel-swatches";
-    const textColors = ["", "#ddd", "#333", "#1a1a1a", "#d4a017", "#5b8ff5"];
-    textColors.forEach((color) => {
+    // 主题选择：∅ = 跟随酒馆美化；其余 = 内置独立配色主题
+    const themeRow = document.createElement("div");
+    themeRow.className = "novel-settings-row";
+    const themeLabel = document.createElement("div");
+    themeLabel.className = "novel-settings-label";
+    themeLabel.textContent = deps.cfmT("主题");
+    const themeSwatches = document.createElement("div");
+    themeSwatches.className = "novel-swatches";
+    READER_THEMES.forEach((theme) => {
       const sw = document.createElement("div");
-      sw.className = "novel-swatch" + (rs.textColor === color ? " active" : "");
+      sw.className =
+        "novel-swatch" + (rs.themeId === theme.id ? " active" : "");
       sw.style.background =
-        color === "" ? "linear-gradient(135deg,#eee 50%,#222 50%)" : color;
-      sw.title = color || deps.cfmT("跟随主题");
+        theme.bg === ""
+          ? "linear-gradient(135deg,#eee 50%,#222 50%)"
+          : theme.bg;
+      sw.title = deps.cfmT(theme.name);
+      sw.dataset.themeId = theme.id;
       sw.addEventListener("click", () => {
-        rs.textColor = color;
+        rs.themeId = theme.id;
         applyReaderStyles();
         deps.saveSettings();
-        textSwatches
+        themeSwatches
           .querySelectorAll(".novel-swatch")
           .forEach((s) => s.classList.remove("active"));
         sw.classList.add("active");
       });
-      textSwatches.appendChild(sw);
+      themeSwatches.appendChild(sw);
     });
-    textRow.appendChild(textLabel);
-    textRow.appendChild(textSwatches);
-    panel.appendChild(textRow);
+    themeRow.appendChild(themeLabel);
+    themeRow.appendChild(themeSwatches);
+    panel.appendChild(themeRow);
 
-    // 背景色板
-    const bgRow = document.createElement("div");
-    bgRow.className = "novel-settings-row";
-    const bgLabel = document.createElement("div");
-    bgLabel.className = "novel-settings-label";
-    bgLabel.textContent = deps.cfmT("背景");
-    const bgSwatches = document.createElement("div");
-    bgSwatches.className = "novel-swatches";
-    const bgColors = [
-      "",
-      "#14161a",
-      "#f5f0e6",
-      "#e8e8e8",
-      "#2b2b2b",
-      "#1e1e2e",
-    ];
-    bgColors.forEach((color) => {
-      const sw = document.createElement("div");
-      sw.className = "novel-swatch" + (rs.bgColor === color ? " active" : "");
-      sw.style.background =
-        color === "" ? "linear-gradient(135deg,#eee 50%,#222 50%)" : color;
-      sw.title = color || deps.cfmT("跟随主题");
-      sw.addEventListener("click", () => {
-        rs.bgColor = color;
-        applyReaderStyles();
-        deps.saveSettings();
-        bgSwatches
-          .querySelectorAll(".novel-swatch")
-          .forEach((s) => s.classList.remove("active"));
-        sw.classList.add("active");
-      });
-      bgSwatches.appendChild(sw);
-    });
-    bgRow.appendChild(bgLabel);
-    bgRow.appendChild(bgSwatches);
-    panel.appendChild(bgRow);
+    // 提示：内置主题的引号/星号配色独立于酒馆美化
+    const themeHint = document.createElement("div");
+    themeHint.className = "novel-settings-hint";
+    themeHint.textContent = deps.cfmT(
+      "∅ 跟随酒馆美化；内置主题自带正文配色，引号/星号不再跟随酒馆。",
+    );
+    panel.appendChild(themeHint);
   }
 
   /** 关闭设置子面板 */
@@ -1220,7 +1208,7 @@ jQuery(async () => {
     settingsPanelEl = null;
   }
 
-  /** 应用阅读器界面样式：自定义背景/文字色覆盖到整个弹窗；未自定义则跟随主题采样色 */
+  /** 应用阅读器界面样式：主题（∅跟随酒馆 / 内置主题）+ 字号 */
   function applyReaderStyles() {
     if (!dialogRef) return;
     const g = getGlobalSettings();
@@ -1233,25 +1221,35 @@ jQuery(async () => {
       if (inner) inner.style.fontSize = `${rs.fontSize}px`;
     }
 
-    // 背景：自定义色覆盖到整个弹窗；否则重新采样恢复主题色
-    if (rs.bgColor) {
-      dialogEl.style.background = rs.bgColor;
-    } else {
-      dialogEl.style.background = "";
-    }
+    const themeId = rs.themeId || "";
+    const isBuiltin = READER_THEMES.some((t) => t.id && t.id === themeId);
+    const overlayEl = dialogRef.overlay;
 
-    // 文字色：自定义时覆盖 --novel-fg 变量（供各子元素 color-mix/正文使用）；
-    //         未自定义时重新采样恢复主题色（清除内联覆盖）
-    if (rs.textColor) {
-      dialogEl.style.setProperty("--novel-fg", rs.textColor);
-    } else {
+    // 清除旧主题 class，再加当前主题 class（dialog + overlay 同步）
+    READER_THEMES.forEach((t) => {
+      if (!t.id) return;
+      dialogEl.classList.remove(`novel-theme-${t.id}`);
+      overlayEl?.classList.remove(`novel-theme-${t.id}`);
+    });
+    if (isBuiltin) {
+      dialogEl.classList.add(`novel-theme-${themeId}`);
+      overlayEl?.classList.add(`novel-theme-${themeId}`);
+      // 清除采样内联变量（内置主题 class 自带 --novel-bg/--novel-fg 定义）
+      dialogEl.style.removeProperty("--novel-bg");
       dialogEl.style.removeProperty("--novel-fg");
-      // 从主界面重新采样（打开时采样的色可能已被用户改设置覆盖过）
+      // 关闭桥接：引号/星号不再跟随酒馆，改用主题自带特效变量
+      themeTextBridge.setEnabled(false);
+    } else {
+      // ∅ 跟随酒馆：重新采样恢复主题色
+      dialogEl.style.background = "";
+      dialogEl.style.removeProperty("--novel-fg");
       try {
         applyThemeCore(dialogEl, sampleStThemeCore());
       } catch (err) {
         // 采样失败则保持现状
       }
+      // 恢复桥接：引号/星号继续跟随酒馆美化
+      themeTextBridge.setEnabled(true);
     }
     dialogEl.style.color = "";
   }

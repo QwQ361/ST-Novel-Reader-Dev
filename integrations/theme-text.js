@@ -204,15 +204,28 @@ export function createThemeTextBridgeCore(deps) {
   const gDoc = deps.document || document;
   let observer = null;
   let timer = null;
+  let enabled = true; // 桥接开关：选中内置主题时关闭（引号/星号改用主题自带变量）
 
   /** 刷新桥接样式（重新扫描 + 重建注入） */
   function refresh() {
     try {
+      if (!enabled) {
+        // 关闭状态：移除已注入的桥接样式，让内置主题的 --novel-* 特效变量生效
+        const old = gDoc.getElementById("novel-theme-text-bridge");
+        if (old) old.remove();
+        return;
+      }
       const rules = collectBridgeRulesCore({ document: gDoc });
       injectBridgeStyleCore({ document: gDoc }, rules);
     } catch (err) {
       console.warn("[NovelReader] 主题文本样式桥接刷新失败:", err);
     }
+  }
+
+  /** 启用/禁用桥接（禁用时移除注入样式） */
+  function setEnabled(value) {
+    enabled = !!value;
+    refresh();
   }
 
   /** 启动监听（延迟等待美化主题加载） */
@@ -282,5 +295,5 @@ export function createThemeTextBridgeCore(deps) {
     }
   }
 
-  return { start, destroy, refresh };
+  return { start, destroy, refresh, setEnabled };
 }
