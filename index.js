@@ -31,13 +31,6 @@ import {
   toCssUrlCore,
 } from "./integrations/topbar-icon.js";
 import { createOverlayDialog } from "./ui/modal/index.js";
-import {
-  cfmTCore,
-  convertDomTextCore,
-  convertText,
-  loadS2T,
-} from "./utils/i18n.js";
-import { formatTimeString } from "./utils/time.js";
 
 const EXT_NAME = "ST-Novel-Reader";
 
@@ -57,16 +50,11 @@ const READER_THEMES = [
 jQuery(async () => {
   console.log("[NovelReader] 启动中…");
 
-  // ---- 1. 加载 ST 核心模块 + 简繁字典（各自失败不阻断） ----
+  // ---- 1. 加载 ST 核心模块（失败不阻断） ----
   try {
     await loadStCoreModules();
   } catch (err) {
     console.warn("[NovelReader] ST 核心模块加载异常:", err);
-  }
-  try {
-    await loadS2T();
-  } catch (err) {
-    console.warn("[NovelReader] 简繁字典加载异常（简繁转换将不可用）:", err);
   }
 
   const ctx = getStContext();
@@ -96,14 +84,6 @@ jQuery(async () => {
     renderMarkdown: renderMarkdownCore,
     getSettings: () => ctx.extensionSettings || {},
     saveSettings: () => ctx.saveSettingsDebounced?.(),
-    // 界面文本：仅 language === 'zh-TW' 时转繁体
-    // 统一走 getGlobalSettings()（与设置写入同源：EXT_NAME 命名空间下），
-    // 避免与语言按钮的写入位置不一致导致界面永不转换。
-    cfmT: (t) => cfmTCore(t, { settings: getGlobalSettings() }),
-    // 正文转换：由全局设置 convertNovelText 开关控制（默认关）
-    tc: (t) => convertText(t, Boolean(getGlobalSettings().convertNovelText)),
-    // DOM 级简繁转换（正文渲染后使用，保留 HTML 结构）
-    convertDomText: (root) => convertDomTextCore(root),
   };
 
   const bookshelf = createBookshelfCore({
@@ -134,15 +114,6 @@ jQuery(async () => {
     if (g.readerSettings.bgColor) delete g.readerSettings.bgColor; // 旧字段（被主题取代）
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
-    // 界面语言："zh-CN"(简体中文，默认) | "zh-TW"(繁体中文)
-    // 旧版本曾把 language 存于 extension_settings 顶层，此处迁移到插件命名空间下
-    if (!g.language && s.language === "zh-TW") {
-      g.language = "zh-TW";
-      delete s.language; // 迁移后清除顶层旧值，避免后续再被读到
-    }
-    if (g.language !== "zh-CN" && g.language !== "zh-TW") g.language = "zh-CN";
-    // 正文简繁转换开关（默认关：正文保持原文，读小说场景更贴合）
-    if (typeof g.convertNovelText !== "boolean") g.convertNovelText = false;
     return g;
   }
 
@@ -214,9 +185,9 @@ jQuery(async () => {
       <div class="novel-topbar-back">
         <button class="novel-icon-btn" data-action="back" title="返回">←</button>
       </div>
-      <div class="novel-topbar-title">${escapeHtml(deps.cfmT("酒馆小说阅读器"))}</div>
+      <div class="novel-topbar-title">酒馆小说阅读器</div>
       <div class="novel-topbar-search">
-        <input type="text" placeholder="${escapeHtml(deps.cfmT("搜索角色 / 聊天…"))}" />
+        <input type="text" placeholder="搜索角色 / 聊天…" />
       </div>
       <div class="novel-topbar-settings">
         <button class="novel-icon-btn" data-action="settings" title="全局设置">⚙</button>
@@ -233,11 +204,11 @@ jQuery(async () => {
     bottombarEl = document.createElement("div");
     bottombarEl.className = "novel-bottombar";
     bottombarEl.innerHTML = `
-      <button class="novel-btn" data-action="home" title="${escapeHtml(deps.cfmT("回到书架"))}">${escapeHtml(deps.cfmT("首页"))}</button>
-      <button class="novel-btn" data-action="toc">${escapeHtml(deps.cfmT("目录"))}</button>
-      <button class="novel-btn" data-action="prev">${escapeHtml(deps.cfmT("上一章"))}</button>
-      <button class="novel-btn" data-action="next">${escapeHtml(deps.cfmT("下一章"))}</button>
-      <button class="novel-btn" data-action="reader-settings">${escapeHtml(deps.cfmT("界面"))}</button>`;
+      <button class="novel-btn" data-action="home" title="回到书架">首页</button>
+      <button class="novel-btn" data-action="toc">目录</button>
+      <button class="novel-btn" data-action="prev">上一章</button>
+      <button class="novel-btn" data-action="next">下一章</button>
+      <button class="novel-btn" data-action="reader-settings">界面</button>`;
     content.appendChild(bottombarEl);
 
     // 搜索框引用
@@ -336,7 +307,7 @@ jQuery(async () => {
       state.currentChats = chats || [];
       setPage("chats");
       topbarEl.querySelector(".novel-topbar-title").textContent = escapeHtml(
-        char.name || deps.cfmT("未命名"),
+        char.name || "未命名",
       );
       renderChatListGrid("");
       return;
@@ -370,8 +341,7 @@ jQuery(async () => {
     backBtn.dataset.backTarget = backActions[page] || "";
     backBtn.style.display = backActions[page] ? "" : "none";
     // 返回按钮提示：书架页为「退出」，其余页为「返回」
-    backBtn.title =
-      page === "bookshelf" ? deps.cfmT("退出") : deps.cfmT("返回");
+    backBtn.title = page === "bookshelf" ? "退出" : "返回";
     // 正文页：显示底部栏；其余页隐藏
     bottombarEl.style.display = page === "reader" ? "" : "none";
     // 非正文页恢复顶栏显示（正文页可能被点击隐藏）
@@ -380,8 +350,8 @@ jQuery(async () => {
     // 搜索框模式：书架/聊天列表 = 列表筛选；目录/正文 = 小说内检索
     searchInputEl.placeholder =
       page === "toc" || page === "reader"
-        ? deps.cfmT("搜索本章小说内容…")
-        : deps.cfmT("搜索角色 / 聊天…");
+        ? "搜索本章小说内容…"
+        : "搜索角色 / 聊天…";
     searchInputEl.dataset.mode =
       page === "toc" || page === "reader" ? "chat" : "list";
     if (page === "toc" || page === "reader") {
@@ -429,8 +399,7 @@ jQuery(async () => {
   function showBookshelf() {
     setPage("bookshelf");
     searchInputEl.value = "";
-    topbarEl.querySelector(".novel-topbar-title").textContent =
-      deps.cfmT("书架");
+    topbarEl.querySelector(".novel-topbar-title").textContent = "书架";
     renderBookshelfGrid("");
   }
 
@@ -443,7 +412,7 @@ jQuery(async () => {
     page.className = "novel-page";
     const chars = bookshelf.getCharacters();
     if (!chars.length) {
-      page.innerHTML = `<div class="novel-empty">${escapeHtml(deps.cfmT("暂无角色"))}</div>`;
+      page.innerHTML = `<div class="novel-empty">暂无角色</div>`;
       bodyEl.appendChild(page);
       return;
     }
@@ -457,7 +426,7 @@ jQuery(async () => {
       : chars;
 
     if (!filtered.length) {
-      page.innerHTML = `<div class="novel-empty">${escapeHtml(deps.cfmT("无匹配角色"))}</div>`;
+      page.innerHTML = `<div class="novel-empty">无匹配角色</div>`;
       bodyEl.appendChild(page);
       return;
     }
@@ -476,7 +445,7 @@ jQuery(async () => {
         <div class="novel-card-avatar">
           <img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(c.name || "")}" loading="lazy" onerror="this.onerror=null;this.src='/img/ai4.png'">
         </div>
-        <div class="novel-card-title">${escapeHtml(c.name || deps.cfmT("未命名"))}</div>
+        <div class="novel-card-title">${escapeHtml(c.name || "未命名")}</div>
         ${version ? `<div class="novel-card-meta">${escapeHtml(version)}</div>` : ""}`;
       card.addEventListener("click", () => openChatList(origIdx, c));
       grid.appendChild(card);
@@ -494,12 +463,12 @@ jQuery(async () => {
     setPage("chats");
     state.currentChats = null;
     topbarEl.querySelector(".novel-topbar-title").textContent = escapeHtml(
-      char.name || deps.cfmT("未命名"),
+      char.name || "未命名",
     );
 
     const page = document.createElement("div");
     page.className = "novel-page";
-    page.innerHTML = `<div class="novel-loading">${escapeHtml(deps.cfmT("加载聊天列表…"))}</div>`;
+    page.innerHTML = `<div class="novel-loading">加载聊天列表…</div>`;
     bodyEl.appendChild(page);
 
     const chats = await bookshelf.getCharChats(charIdx, char.avatar);
@@ -518,7 +487,7 @@ jQuery(async () => {
     page.className = "novel-page";
     const chats = state.currentChats || [];
     if (!chats.length) {
-      page.innerHTML = `<div class="novel-empty">${escapeHtml(deps.cfmT("暂无聊天记录"))}</div>`;
+      page.innerHTML = `<div class="novel-empty">暂无聊天记录</div>`;
       bodyEl.appendChild(page);
       return;
     }
@@ -532,7 +501,7 @@ jQuery(async () => {
       : chats;
 
     if (!filtered.length) {
-      page.innerHTML = `<div class="novel-empty">${escapeHtml(deps.cfmT("无匹配聊天"))}</div>`;
+      page.innerHTML = `<div class="novel-empty">无匹配聊天</div>`;
       bodyEl.appendChild(page);
       return;
     }
@@ -544,10 +513,7 @@ jQuery(async () => {
       const card = document.createElement("div");
       card.className = "novel-card novel-chat-card";
       // meta 行只拼接非空字段段，段间用「 · 」连接，避免出现悬空点
-      const metaParts = [
-        chat.chat_items ?? chat.message_count ?? "",
-        formatTimeString(chat.last_mes_timestamp ?? chat.create_date ?? ""),
-      ]
+      const metaParts = [chat.chat_items ?? chat.message_count ?? ""]
         .map((v) => String(v).trim())
         .filter(Boolean);
       card.innerHTML = `
@@ -576,7 +542,7 @@ jQuery(async () => {
 
     const page = document.createElement("div");
     page.className = "novel-page";
-    page.innerHTML = `<div class="novel-loading">${escapeHtml(deps.cfmT("加载章节…"))}</div>`;
+    page.innerHTML = `<div class="novel-loading">加载章节…</div>`;
     bodyEl.appendChild(page);
 
     const info = await reader.loadChat({
@@ -586,7 +552,7 @@ jQuery(async () => {
     if (state.page !== "toc" || state.currentChat !== chat) return; // 已切换
 
     if (!info || !info.chapters.length) {
-      page.innerHTML = `<div class="novel-empty">${escapeHtml(deps.cfmT("该聊天暂无内容"))}</div>`;
+      page.innerHTML = `<div class="novel-empty">该聊天暂无内容</div>`;
       return;
     }
 
@@ -610,8 +576,8 @@ jQuery(async () => {
     toc.className = "novel-toc";
     toc.innerHTML = `
       <div class="novel-toc-head">
-        <h2>${escapeHtml(deps.cfmT("目录"))}</h2>
-        <span class="novel-toc-sub">${escapeHtml(String(total))} ${escapeHtml(deps.cfmT("章"))}</span>
+        <h2>目录</h2>
+        <span class="novel-toc-sub">${escapeHtml(String(total))} 章</span>
       </div>
       <div class="novel-toc-list"></div>`;
 
@@ -621,7 +587,7 @@ jQuery(async () => {
       item.className = "novel-toc-item";
       item.innerHTML = `
         <span class="novel-toc-item-num">${escapeHtml(String(ch.index))}</span>
-        <span class="novel-toc-item-title">${escapeHtml(deps.cfmT("第") + String(ch.index) + deps.cfmT("章"))}</span>`;
+        <span class="novel-toc-item-title">${escapeHtml("第" + String(ch.index) + "章")}</span>`;
       item.addEventListener("click", () => openChapter(ch.index));
       list.appendChild(item);
     });
@@ -870,7 +836,7 @@ jQuery(async () => {
     if (!results.length) {
       const empty = document.createElement("div");
       empty.className = "novel-search-empty";
-      empty.textContent = deps.cfmT("无匹配内容");
+      empty.textContent = "无匹配内容";
       listEl.appendChild(empty);
       return;
     }
@@ -881,7 +847,7 @@ jQuery(async () => {
       item.className = "novel-search-item";
       item.innerHTML = `
         <div class="novel-search-item-head">
-          <span class="novel-search-item-ch">${escapeHtml(deps.cfmT("第") + String(r.chapterIndex) + deps.cfmT("章"))}</span>
+          <span class="novel-search-item-ch">${escapeHtml("第" + String(r.chapterIndex) + "章")}</span>
           <span class="novel-search-item-floor">${escapeHtml("#" + String(r.floor))}</span>
           <span class="novel-search-item-name">${escapeHtml(String(r.name))}</span>
         </div>
@@ -915,7 +881,7 @@ jQuery(async () => {
   function openGlobalSettings() {
     const g = getGlobalSettings();
     const dlg = createOverlayDialog({
-      title: deps.cfmT("阅读器选项"),
+      title: "阅读器选项",
       compact: true,
     });
     const content = dlg.content;
@@ -949,7 +915,7 @@ jQuery(async () => {
             pureUrl,
           )}')"></span>
           <span class="novel-icon-name">${escapeHtml(
-            deps.cfmT("主题图标") + " " + (idx + 1),
+            "主题图标" + " " + (idx + 1),
           )}</span>
         </div>`;
       })
@@ -957,35 +923,31 @@ jQuery(async () => {
 
     content.innerHTML = `
       <div class="novel-settings-row">
-        <div class="novel-settings-label">${escapeHtml(deps.cfmT("目录每页章数"))}</div>
+        <div class="novel-settings-label">目录每页章数</div>
         <input type="range" min="10" max="500" step="10" value="${Number(g.chaptersPerPage) || 100}" />
         <div class="novel-settings-value"></div>
       </div>
       <div class="novel-settings-row">
-        <div class="novel-settings-hint">${escapeHtml(deps.cfmT("用于目录页的分页显示，修改后立即生效。"))}</div>
+        <div class="novel-settings-hint">用于目录页的分页显示，修改后立即生效。</div>
       </div>
 
       <div class="novel-settings-row novel-icon-config-section">
-        <div class="novel-settings-label">${escapeHtml(deps.cfmT("自定义顶栏图标"))}</div>
+        <div class="novel-settings-label">自定义顶栏图标</div>
         <div class="novel-icon-input-row">
           <input type="text" class="novel-icon-url-input"
                  placeholder="${
                    hasTheme
-                     ? escapeHtml(deps.cfmT("已自动检测美化主题图标"))
-                     : escapeHtml(deps.cfmT("输入图标URL（留空使用默认图标）"))
+                     ? "已自动检测美化主题图标"
+                     : "输入图标URL（留空使用默认图标）"
                  }"
                  value="${escapeHtml(savedIconUrl)}" />
           ${
             hasTheme
-              ? `<button class="novel-icon-dropdown-btn" title="${escapeHtml(
-                  deps.cfmT("从美化主题中选择图标"),
-                )}"><i class="fa-solid fa-caret-down"></i></button>
+              ? `<button class="novel-icon-dropdown-btn" title="从美化主题中选择图标"><i class="fa-solid fa-caret-down"></i></button>
                  <div class="novel-icon-dropdown-menu">${dropdownItemsHtml}</div>`
               : ""
           }
-          <button class="novel-icon-clear-btn" title="${escapeHtml(
-            deps.cfmT("清除自定义图标"),
-          )}"><i class="fa-solid fa-xmark"></i></button>
+          <button class="novel-icon-clear-btn" title="清除自定义图标"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="novel-icon-status">
           <span class="novel-icon-status-dot ${
@@ -993,70 +955,25 @@ jQuery(async () => {
           }"></span>
           <span class="novel-icon-status-text">${
             savedIconUrl
-              ? escapeHtml(deps.cfmT("使用自定义图标"))
+              ? "使用自定义图标"
               : hasTheme
-                ? escapeHtml(deps.cfmT("自动使用美化主题图标"))
-                : escapeHtml(deps.cfmT("使用默认图标"))
+                ? "自动使用美化主题图标"
+                : "使用默认图标"
           }</span>
         </div>
         <div class="novel-settings-hint">${
           hasTheme
-            ? escapeHtml(
-                deps.cfmT(
-                  `检测到 ${themeIcons.uniqueUrls.length} 个美化主题图标，可从下拉菜单选择或手动输入URL`,
-                ),
-              )
-            : escapeHtml(
-                deps.cfmT(
-                  "未检测到美化主题图标替换。启用美化主题后会自动检测并适配",
-                ),
-              )
+            ? `检测到 ${themeIcons.uniqueUrls.length} 个美化主题图标，可从下拉菜单选择或手动输入URL`
+            : "未检测到美化主题图标替换。启用美化主题后会自动检测并适配"
         }</div>
-      </div>
-
-      <div class="novel-settings-row" data-novel-no-convert>
-        <div class="novel-settings-label">${escapeHtml(
-          deps.cfmT("界面语言"),
-        )}</div>
-        <div class="novel-lang-btns">
-          <button class="novel-lang-btn ${
-            g.language !== "zh-TW" ? "novel-lang-active" : ""
-          }" data-lang="zh-CN">简体中文</button>
-          <button class="novel-lang-btn ${
-            g.language === "zh-TW" ? "novel-lang-active" : ""
-          }" data-lang="zh-TW">繁體中文</button>
-        </div>
-        <div class="novel-settings-hint">${escapeHtml(
-          deps.cfmT("切换插件界面显示的语言。切换后重新打开插件生效。"),
-        )}</div>
-      </div>
-
-      <div class="novel-settings-row" data-novel-no-convert>
-        <div class="novel-settings-label">${escapeHtml(
-          deps.cfmT("正文简繁转换"),
-        )}</div>
-        <label class="novel-toggle-row">
-          <input type="checkbox" class="novel-toggle-input" ${
-            g.convertNovelText ? "checked" : ""
-          } />
-          <span class="novel-toggle-switch"></span>
-          <span class="novel-toggle-text">${escapeHtml(
-            g.convertNovelText
-              ? deps.cfmT("正文将转换为繁体")
-              : deps.cfmT("正文保持原文"),
-          )}</span>
-        </label>
-        <div class="novel-settings-hint">${escapeHtml(
-          deps.cfmT("关闭时正文保持原始语言，仅界面文字随语言设置转换。"),
-        )}</div>
       </div>`;
 
     // ---- 目录每页章数 ----
     const range = content.querySelector("input[type='range']");
     const valueEl = content.querySelector(".novel-settings-value");
-    valueEl.textContent = `${range.value} ${deps.cfmT("章/页")}`;
+    valueEl.textContent = `${range.value} 章/页`;
     range.addEventListener("input", () => {
-      valueEl.textContent = `${range.value} ${deps.cfmT("章/页")}`;
+      valueEl.textContent = `${range.value} 章/页`;
       g.chaptersPerPage = Number(range.value);
       deps.saveSettings();
       // 若当前在目录页，实时刷新分页（保持当前页号不越界）
@@ -1089,10 +1006,10 @@ jQuery(async () => {
       statusDot.classList.toggle("novel-status-active", active);
       statusDot.classList.toggle("novel-status-inactive", !active);
       statusText.textContent = cur
-        ? deps.cfmT("使用自定义图标")
+        ? "使用自定义图标"
         : hasTheme
-          ? deps.cfmT("自动使用美化主题图标")
-          : deps.cfmT("使用默认图标");
+          ? "自动使用美化主题图标"
+          : "使用默认图标";
     }
 
     /** 应用当前配置到顶栏图标 */
@@ -1169,34 +1086,6 @@ jQuery(async () => {
           ?.querySelectorAll(".novel-icon-dropdown-item")
           .forEach((i) => i.classList.remove("novel-icon-selected"));
       });
-
-    // ---- 界面语言切换（简体/繁體，extension_settings 持久化） ----
-    content.querySelectorAll(".novel-lang-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const lang = btn.dataset.lang;
-        if (lang === (g.language || "zh-CN")) return; // 未变化不重复保存
-        g.language = lang;
-        deps.saveSettings();
-        // 高亮切换
-        content
-          .querySelectorAll(".novel-lang-btn")
-          .forEach((b) => b.classList.toggle("novel-lang-active", b === btn));
-      });
-    });
-
-    // ---- 正文简繁转换开关 ----
-    content
-      .querySelector(".novel-toggle-input")
-      ?.addEventListener("change", (e) => {
-        g.convertNovelText = e.target.checked;
-        deps.saveSettings();
-        const txt = content.querySelector(".novel-toggle-text");
-        if (txt) {
-          txt.textContent = e.target.checked
-            ? deps.cfmT("正文将转换为繁体")
-            : deps.cfmT("正文保持原文");
-        }
-      });
   }
 
   // ============ 底部栏事件（小说设置） ============
@@ -1251,7 +1140,7 @@ jQuery(async () => {
     fontRow.className = "novel-settings-row";
     const fontLabel = document.createElement("div");
     fontLabel.className = "novel-settings-label";
-    fontLabel.textContent = deps.cfmT("字号");
+    fontLabel.textContent = "字号";
     const fontRange = document.createElement("input");
     fontRange.type = "range";
     fontRange.min = "14";
@@ -1277,7 +1166,7 @@ jQuery(async () => {
     themeRow.className = "novel-settings-row";
     const themeLabel = document.createElement("div");
     themeLabel.className = "novel-settings-label";
-    themeLabel.textContent = deps.cfmT("主题");
+    themeLabel.textContent = "主题";
     const themeSwatches = document.createElement("div");
     themeSwatches.className = "novel-swatches";
     READER_THEMES.forEach((theme) => {
@@ -1291,7 +1180,7 @@ jQuery(async () => {
         (theme.bg === "" ? " novel-swatch-palette" : "");
       // 纯背景色块；∅ 用调色板样式示意「跟随酒馆」（样式在 style.css 定义）
       if (theme.bg !== "") sw.style.background = theme.bg;
-      sw.title = deps.cfmT(theme.name);
+      sw.title = theme.name;
       sw.dataset.themeId = theme.id;
       sw.addEventListener("click", () => {
         rs.themeId = theme.id;
@@ -1305,7 +1194,7 @@ jQuery(async () => {
       item.appendChild(sw);
       const swName = document.createElement("div");
       swName.className = "novel-swatch-name";
-      swName.textContent = deps.cfmT(theme.name);
+      swName.textContent = theme.name;
       item.appendChild(swName);
       themeSwatches.appendChild(item);
     });
@@ -1316,9 +1205,8 @@ jQuery(async () => {
     // 提示：内置主题的引号/星号配色独立于酒馆美化
     const themeHint = document.createElement("div");
     themeHint.className = "novel-settings-hint";
-    themeHint.textContent = deps.cfmT(
-      "∅ 跟随酒馆美化；内置主题自带正文配色，引号/星号不再跟随酒馆。",
-    );
+    themeHint.textContent =
+      "∅ 跟随酒馆美化；内置主题自带正文配色，引号/星号不再跟随酒馆。";
     panel.appendChild(themeHint);
   }
 

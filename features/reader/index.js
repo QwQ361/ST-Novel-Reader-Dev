@@ -3,7 +3,6 @@
 // 依赖注入 deps：
 //   getChatMessages(avatar, fileName)  读完整消息数组（由 bookshelf 提供）
 //   renderMarkdown(markdown)           Markdown 安全渲染管线（由 integrations 提供）
-//   tc(text) 简繁转换 / cfmT(text) 界面文本
 
 import { getChapterTitle, splitChapters } from "./chapters.js";
 import { renderMessage, renderMessagesBatched } from "./render.js";
@@ -14,7 +13,6 @@ import { renderMessage, renderMessagesBatched } from "./render.js";
  * @returns {object} reader API
  */
 export function createReaderCore(deps) {
-  const { cfmT = (t) => t, tc = (t) => t } = deps;
 
   // 当前正在渲染的聊天标识（用于并发竞态防护）
   let currentRequest = { avatar: "", fileName: "" };
@@ -72,7 +70,7 @@ export function createReaderCore(deps) {
     const chapter = chatCache.chapters[chapterIndex - 1];
     if (!chapter) return 0;
 
-    container.innerHTML = `<div class="novel-loading">${cfmT("加载章节…")}</div>`;
+    container.innerHTML = `<div class="novel-loading">加载章节…</div>`;
 
     // 构建章标题
     const titleEl = document.createElement("h2");
@@ -96,7 +94,6 @@ export function createReaderCore(deps) {
       chapter.messages,
       {
         batchSize: 200,
-        tc,
         userName: deps.userName,
         // 楼层号基准：本章首条消息在完整数组中的序号（0 起偏移）
         startIndex: chapter.startIndex || 0,

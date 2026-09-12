@@ -12,12 +12,11 @@
  * @param {object} mes 消息对象（ST 原始消息：name / is_user / is_system / mes / send_date / swipes）
  * @param {object} [options]
  * @param {string} [options.userName] 用户显示名（说话人标签兜底）
- * @param {Function} [options.tc] 简繁转换函数
  * @returns {string} 安全的 HTML 字符串（已 sanitize）
  */
 export function renderMessage(deps, mes, options = {}) {
   const { renderMarkdown = null } = deps;
-  const { tc = (t) => t, floor = null } = options;
+  const { floor = null } = options;
 
   const name = mes.name || options.userName || "?";
   const isUser = Boolean(mes.is_user);
@@ -38,8 +37,8 @@ export function renderMessage(deps, mes, options = {}) {
     bodyHtml = escapeHtmlFallback(mes.mes || "");
   }
 
-  // 简繁转换（针对说话人标签；正文 HTML 已在管线内处理）
-  const label = tc(name);
+  // 说话人标签（原样显示，不转换）
+  const label = name;
   // 楼层 + 时间戳：#楼层 年/月/日 时:分（本地时区；无效值兜底显示原文）
   const time = mes.send_date
     ? escapeHtmlFallback(formatFloorTime(floor, mes.send_date))
@@ -79,7 +78,6 @@ export async function renderMessagesBatched(
   options = {},
 ) {
   const { batchSize = 200, onProgress, startIndex = 0 } = options;
-  const { convertDomText = null } = deps;
   const total = messages.length;
 
   // 用 DocumentFragment 累积，避免多次重排
@@ -105,11 +103,6 @@ export async function renderMessagesBatched(
     // 每 batchSize 条挂载一次，让出主线程
     if (pending >= batchSize) {
       container.appendChild(fragment);
-      // 简繁转换：转换本轮挂载的正文文本节点（保留 HTML 结构，仅在启用时生效）
-      if (typeof convertDomText === "function") {
-        const children = container.querySelectorAll(".novel-msg-body");
-        children.forEach((body) => convertDomText(body));
-      }
       fragment = document.createDocumentFragment();
       pending = 0;
       onProgress?.(i + 1, total);
@@ -119,10 +112,6 @@ export async function renderMessagesBatched(
 
   if (pending > 0) {
     container.appendChild(fragment);
-    if (typeof convertDomText === "function") {
-      const children = container.querySelectorAll(".novel-msg-body");
-      children.forEach((body) => convertDomText(body));
-    }
   }
 }
 
