@@ -9,13 +9,18 @@
 //   user1, char1, user2, char2, user3     → 第1章[user1,char1] 第2章[user2,char2] 第3章[user3]
 // 系统消息不特殊对待：按 is_user 正常参与分章（部分聊天把剧情正文标记为 is_system，
 // 若把系统消息一律归并进当前章会导致大量轮次挤进一章）。
+// 隐藏 user 回复（showUserReplies=false）：
+//   先过滤掉全部 is_user 消息，剩余消息按「每条 char 单独成章」切分（system 也保留为独立章）。
 
 /**
  * 将消息数组按分章规则切成章节。
  * @param {Array<object>} messages 完整消息数组（ST 原始消息：mes/is_user/is_system/name）
+ * @param {object} [options]
+ * @param {boolean} [options.showUserReplies=true] 是否保留 user 消息（false 时过滤 user，每条 char 单独成章）
  * @returns {Array<{index: number, messages: Array<object>}>} 章节数组（index 从 1 开始）
  */
-export function splitChapters(messages) {
+export function splitChapters(messages, options = {}) {
+  const { showUserReplies = true } = options;
   const chapters = [];
   let current = [];
 
@@ -30,6 +35,9 @@ export function splitChapters(messages) {
   for (const mes of messages) {
     if (!mes) continue;
     const isUser = Boolean(mes.is_user);
+
+    // 隐藏 user 回复：user 消息直接跳过
+    if (!showUserReplies && isUser) continue;
 
     if (current.length === 0) {
       current.push(mes);

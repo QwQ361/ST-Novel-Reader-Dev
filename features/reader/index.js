@@ -41,8 +41,12 @@ export function createReaderCore(deps) {
     }
 
     // 分章（记录每章在完整消息数组中的起始偏移，用于楼层号计算）
+    // 是否显示 user 回复：设置页「显示用户回复」开关（默认开）
+    const showUserReplies = deps.getShowUserReplies
+      ? deps.getShowUserReplies()
+      : true;
     let offset = 0;
-    const chapters = splitChapters(messages).map((ch) => {
+    const chapters = splitChapters(messages, { showUserReplies }).map((ch) => {
       const startIndex = offset;
       offset += ch.messages.length;
       return {

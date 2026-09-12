@@ -85,6 +85,8 @@ jQuery(async () => {
     renderMarkdown: renderMarkdownCore,
     getSettings: () => ctx.extensionSettings || {},
     saveSettings: () => ctx.saveSettingsDebounced?.(),
+    // 是否显示 user 回复（设置页开关，默认 true）
+    getShowUserReplies: () => getGlobalSettings().showUserReplies,
   };
 
   const bookshelf = createBookshelfCore({
@@ -118,6 +120,7 @@ jQuery(async () => {
     if (g.readerSettings.bgColor) delete g.readerSettings.bgColor; // 旧字段（被主题取代）
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
+    if (g.showUserReplies === undefined) g.showUserReplies = true; // 是否显示 user 回复（默认显示）
     return g;
   }
 
@@ -1049,6 +1052,18 @@ jQuery(async () => {
         <div class="novel-settings-hint">用于目录页的分页显示，修改后立即生效。</div>
       </div>
 
+      <div class="novel-settings-row">
+        <div class="novel-settings-label">显示用户回复</div>
+        <label class="novel-switch">
+          <input type="checkbox" class="novel-show-user-input" ${
+            g.showUserReplies ? "checked" : ""
+          } />
+          <span class="novel-switch-track"></span>
+          <span class="novel-switch-thumb"></span>
+        </label>
+        <div class="novel-settings-hint">开启时 user 回复与角色消息合并为一章；关闭后不显示 user 回复，每条角色消息作为单独一章。</div>
+      </div>
+
       <div class="novel-settings-row novel-icon-config-section">
         <div class="novel-settings-label">自定义顶栏图标</div>
         <div class="novel-icon-input-row">
@@ -1106,6 +1121,40 @@ jQuery(async () => {
         }
         const container = bodyEl.querySelector(".novel-page");
         if (container) renderTocPage(container);
+      }
+    });
+
+    // ---- 显示用户回复：切换后保存设置 + 若在目录/正文页则重新加载当前聊天 ----
+    const showUserInput = content.querySelector(".novel-show-user-input");
+    showUserInput?.addEventListener("change", async () => {
+      g.showUserReplies = showUserInput.checked;
+      deps.saveSettings();
+      // 重新分章需要重新读取当前聊天（若正处于目录/正文页）
+      if (
+        state.page === "toc" ||
+        state.page === "reader"
+      ) {
+        const char = state.currentChar;
+        const chat = state.currentChat;
+        if (!char || !chat) return;
+        const info = await reader.loadChat({
+          avatar: char.avatar,
+          fileName: chat.file_name,
+        });
+        if (state.page === "toc") {
+          state.tocPage = 0;
+          const container = bodyEl.querySelector(".novel-page");
+          if (container) {
+            if (info && info.chapters.length) {
+              renderTocPage(container);
+            } else {
+              container.innerHTML = `<div class="novel-empty">该聊天暂无内容</div>`;
+            }
+          }
+        } else if (state.page === "reader") {
+          // 正文页：重新打开第 1 章（章节结构已变）
+          await openChapter(1);
+        }
       }
     });
 
