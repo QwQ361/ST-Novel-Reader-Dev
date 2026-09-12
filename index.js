@@ -516,9 +516,13 @@ jQuery(async () => {
       const metaParts = [chat.chat_items ?? chat.message_count ?? ""]
         .map((v) => String(v).trim())
         .filter(Boolean);
+      // 预览行：若最后一条消息是纯 ISO 时间戳（导入日志常见，如 2026-09-12T07:30:09.524Z），
+      // 无阅读价值，跳过不显示
+      const preview = String(chat.last_mes || "").trim();
+      const isIsoStamp = /^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})?$/.test(preview);
       card.innerHTML = `
         <div class="novel-card-title">${escapeHtml(String(fileName).replace(/\.jsonl$/i, ""))}</div>
-        <div class="novel-card-preview">${escapeHtml(String(chat.last_mes || ""))}</div>
+        ${preview && !isIsoStamp ? `<div class="novel-card-preview">${escapeHtml(preview)}</div>` : ""}
         ${metaParts.length ? `<div class="novel-card-meta">${metaParts.map((v) => escapeHtml(v)).join(" · ")}</div>` : ""}`;
       card.addEventListener("click", () =>
         openToc(state.currentChar, { file_name: fileName }),
