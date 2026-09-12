@@ -1,11 +1,11 @@
 // features/reader/index.js
-// 小说阅读器功能聚合入口：读取完整消息数组 + 安全渲染 + 打开原聊天。
+// 小说阅读器功能聚合入口：读取完整消息数组 + 分章 + 按章安全渲染。
 // 依赖注入 deps：
 //   getChatMessages(avatar, fileName)  读完整消息数组（由 bookshelf 提供）
 //   renderMarkdown(markdown)           Markdown 安全渲染管线（由 integrations 提供）
-//   openCharacterChat / selectCharacterById
 //   tc(text) 简繁转换 / cfmT(text) 界面文本
 
+import { getChapterTitle, splitChapters } from "./chapters.js";
 import { renderMessage, renderMessagesBatched } from "./render.js";
 
 /**
@@ -18,122 +18,172 @@ export function createReaderCore(deps) {
 
   // 当前正在渲染的聊天标识（用于并发竞态防护）
   let currentRequest = { avatar: "", fileName: "" };
+  // 缓存：当前已加载聊天的消息数组 + 章节列表（换聊天时重建）
+  let chatCache = null;
 
   /**
-   * 加载并渲染某聊天的完整正文。
-   * @param {HTMLElement} container 正文容器（.novel-reader-body）
+   * 加载某聊天的完整消息并分章（不渲染正文）。
    * @param {object} options
    * @param {string} options.avatar 角色头像文件名
    * @param {string} options.fileName 聊天文件名（带 .jsonl）
-   * @param {string} [options.title] 标题
-   * @param {boolean} [options.showSystem] 是否显示系统消息（默认 true）
-   * @returns {Promise<number>} 渲染的消息总数
+   * @returns {Promise<{messages: Array, chapters: Array}|null>}
+   *   null 表示加载失败或已切换；chapters 元素为 {index, messages, title}
    */
-  async function openChat(container, options = {}) {
-    const {
-      avatar,
-      fileName,
-      title = "",
-      showSystem = true,
-      onRendered,
-    } = options;
-    const reqId = `${avatar}|${fileName}`;
+  async function loadChat(options = {}) {
+    const { avatar, fileName } = options;
     currentRequest = { avatar, fileName };
 
-    container.innerHTML = `<div class="novel-loading">${cfmT("加载正文…")}</div>`;
-
     const messages = await deps.getChatMessages(avatar, fileName);
-
-    // 竞态防护：如果加载期间用户切换了聊天，丢弃本次结果
+    // 竞态防护：加载期间用户切换了聊天
     if (
       currentRequest.avatar !== avatar ||
       currentRequest.fileName !== fileName
     ) {
-      return 0;
+      return null;
     }
 
-    const filtered = showSystem
-      ? messages
-      : messages.filter((m) => !m.is_system);
+    // 分章（记录每章在完整消息数组中的起始偏移，用于楼层号计算）
+    let offset = 0;
+    const chapters = splitChapters(messages).map((ch) => {
+      const startIndex = offset;
+      offset += ch.messages.length;
+      return {
+        ...ch,
+        startIndex,
+        title: getChapterTitle(ch, { userName: deps.userName }),
+      };
+    });
 
-    // 构建标题栏
-    const header = document.createElement("div");
-    header.className = "novel-reader-title";
-    header.innerHTML = `
-      <span class="novel-reader-title-text">${escapeTitle(title || fileName)}</span>
-      <span class="novel-reader-title-meta">${filtered.length} ${cfmT("条消息")}</span>
-    `;
+    chatCache = { avatar, fileName, messages, chapters };
+    return chatCache;
+  }
+
+  /**
+   * 渲染指定章节到正文容器（只渲染本章消息，性能好）。
+   * @param {HTMLElement} container 正文滚动容器（.novel-reader-scroll）
+   * @param {number} chapterIndex 章节索引（从 1 开始）
+   * @param {object} [options]
+   * @param {Function} [options.onRendered] 渲染完成回调
+   * @returns {Promise<number>} 本章消息条数
+   */
+  async function renderChapter(container, chapterIndex, options = {}) {
+    const { onRendered, highlightOffset = null } = options;
+    if (!chatCache) return 0;
+    const chapter = chatCache.chapters[chapterIndex - 1];
+    if (!chapter) return 0;
+
+    container.innerHTML = `<div class="novel-loading">${cfmT("加载章节…")}</div>`;
+
+    // 构建章标题
+    const titleEl = document.createElement("h2");
+    titleEl.className = "novel-chapter-title";
+    titleEl.textContent = `${chapter.index} / ${chatCache.chapters.length} · ${chapter.title}`;
+
+    const inner = document.createElement("div");
+    inner.className = "novel-reader-inner";
+    inner.appendChild(titleEl);
 
     const body = document.createElement("div");
-    body.className = "novel-reader-body novel-scroll";
+    body.className = "novel-msg-list";
+    inner.appendChild(body);
 
     container.innerHTML = "";
-    container.appendChild(header);
-    container.appendChild(body);
+    container.appendChild(inner);
 
     await renderMessagesBatched(
       { ...deps, renderMarkdown: deps.renderMarkdown },
       body,
-      filtered,
-      {
-        batchSize: 200,
-        tc,
-        onProgress: (done, total) => {
-          const meta = header.querySelector(".novel-reader-title-meta");
-          if (meta) meta.textContent = `${done}/${total} ${cfmT("渲染中…")}`;
-        },
-      },
+      chapter.messages,
+      { batchSize: 200, tc, userName: deps.userName },
     );
 
-    // 渲染完成，更新计数并回到顶部
-    const meta = header.querySelector(".novel-reader-title-meta");
-    if (meta) meta.textContent = `${filtered.length} ${cfmT("条消息")}`;
-    body.scrollTop = 0;
-
-    // 通知调用方正文容器已就绪（用于绑定滚动进度监听等）
-    onRendered?.(body);
-
-    return filtered.length;
+    // 定位到指定消息（从搜索结果跳转时）：按章内偏移滚动定位 + 高亮
+    if (highlightOffset != null) {
+      const target = body.children[highlightOffset];
+      if (target) {
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ block: "center" });
+          target.classList.add("novel-msg-highlight");
+          // 2.5s 后移除高亮
+          setTimeout(
+            () => target.classList.remove("novel-msg-highlight"),
+            2500,
+          );
+        });
+      }
+    } else {
+      container.scrollTop = 0;
+    }
+    onRendered?.(container);
+    return chapter.messages.length;
   }
 
   /**
-   * 打开原聊天（跳转 ST 主界面）。
-   * @param {number} charIdx 角色索引
-   * @param {string} fileName 聊天文件名（带 .jsonl，内部去除扩展名）
+   * 全聊天内搜索（楼层/关键词 → 章节定位）。
+   * @param {string} query 关键词（不区分大小写）
+   * @returns {Array<{chapterIndex:number, msgOffset:number, floor:number, name:string, snippet:string}>}
+   *   楼层号 = 消息在完整消息数组中的序号（1 起，system 也计数）；最多返回 200 条
+   *   msgOffset = 消息在本章内的偏移（用于渲染后定位 body.children[msgOffset]）
    */
-  async function openOriginalChat(charIdx, fileName) {
-    const fileNameNoExt = String(fileName || "").replace(/\.jsonl$/i, "");
-    const selectChar = deps.selectCharacterById;
-    const openChat = deps.openCharacterChat;
-    if (typeof selectChar !== "function" || typeof openChat !== "function") {
-      console.warn("[NovelReader] 缺少 selectCharacterById/openCharacterChat");
-      return;
+  function searchMessages(query) {
+    if (!chatCache) return [];
+    const q = String(query || "")
+      .toLowerCase()
+      .trim();
+    if (!q) return [];
+    const results = [];
+    const chapters = chatCache.chapters;
+    for (let c = 0; c < chapters.length; c += 1) {
+      const ch = chapters[c];
+      for (let i = 0; i < ch.messages.length; i += 1) {
+        const mes = ch.messages[i];
+        const text = String(mes.mes || "").toLowerCase();
+        if (text.includes(q)) {
+          const floor = (ch.startIndex || 0) + i + 1;
+          results.push({
+            chapterIndex: ch.index,
+            msgOffset: i,
+            floor,
+            name: mes.name || (mes.is_user ? deps.userName : "?"),
+            snippet: String(mes.mes || "").slice(0, 120),
+          });
+          if (results.length >= 200) return results;
+        }
+      }
     }
-    try {
-      await selectChar(charIdx);
-      await openChat(fileNameNoExt);
-    } catch (err) {
-      console.warn("[NovelReader] 打开原聊天失败:", err);
-    }
+    return results;
+  }
+
+  /** 获取当前聊天信息（章节数/标题等） */
+  function getChatInfo() {
+    if (!chatCache) return null;
+    return {
+      avatar: chatCache.avatar,
+      fileName: chatCache.fileName,
+      chapters: chatCache.chapters,
+      totalChapters: chatCache.chapters.length,
+    };
+  }
+
+  /** 获取指定章节 */
+  function getChapter(chapterIndex) {
+    if (!chatCache) return null;
+    return chatCache.chapters[chapterIndex - 1] ?? null;
   }
 
   /** 取消当前渲染（供关闭弹窗时调用） */
   function abort() {
     currentRequest = { avatar: "", fileName: "" };
+    chatCache = null;
   }
 
-  return { openChat, openOriginalChat, abort, renderMessage };
-}
-
-/**
- * 标题转义（标题来自文件名，仅做文本安全）。
- * @param {string} str
- * @returns {string}
- */
-function escapeTitle(str) {
-  return String(str ?? "")
-    .replace(/&/g, "&")
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
-    .replace(/"/g, "\x26quot;");
+  return {
+    loadChat,
+    renderChapter,
+    getChatInfo,
+    getChapter,
+    searchMessages,
+    renderMessage,
+    abort,
+  };
 }

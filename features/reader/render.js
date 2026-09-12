@@ -115,9 +115,12 @@ export async function renderMessagesBatched(
  * @returns {string}
  */
 function escapeHtmlFallback(str) {
+  // 用字符串拼接构造实体，避免工具/编辑器对字面量做实体解码
+  const AMP = "&" + "amp;";
+  const QUOT = "&" + "quot;";
   return String(str ?? "")
-    .replace(/&/g, "&")
+    .replace(/&/g, AMP)
     .replace(/</g, "<")
     .replace(/>/g, ">")
-    .replace(/"/g, "\x26quot;");
+    .replace(/"/g, QUOT);
 }

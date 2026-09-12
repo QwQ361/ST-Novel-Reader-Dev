@@ -26,12 +26,13 @@ export function createProgressCore(deps) {
    * 记录某聊天阅读位置。
    * @param {string} avatar 角色头像文件名
    * @param {string} fileName 聊天文件名（带 .jsonl）
-   * @param {{ msgId: number|string, index: number, scrollTop: number, updatedAt: number }} pos 位置信息
+   * @param {{ chapter?: number, msgId?: number|string, index?: number, scrollTop?: number, updatedAt?: number }} pos 位置信息
    */
   function save(avatar, fileName, pos) {
     const t = table();
     const key = `${avatar}::${fileName}`;
     t[key] = {
+      chapter: pos.chapter ?? 0, // 当前章节索引（1 起；0 = 未进入正文）
       msgId: pos.msgId ?? null,
       index: pos.index ?? 0,
       scrollTop: pos.scrollTop ?? 0,
