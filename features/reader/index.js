@@ -92,6 +92,7 @@ export function createReaderCore(deps) {
       {
         batchSize: 200,
         userName: deps.userName,
+        avatar: chatCache.avatar,
       },
     );
 

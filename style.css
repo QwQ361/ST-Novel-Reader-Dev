@@ -1094,6 +1094,87 @@
   border-color: rgba(255, 107, 107, 0.5);
 }
 
+/* ---------- 正则过滤（全局设置弹窗） ---------- */
+.novel-regex-section {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+      transparent
+    );
+}
+
+.novel-regex-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.novel-regex-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    transparent
+  );
+  font-size: 0.82rem;
+  transition: background 0.15s;
+}
+
+.novel-regex-item:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+}
+
+.novel-regex-item input[type="checkbox"] {
+  flex: 0 0 auto;
+  accent-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+  cursor: pointer;
+}
+
+.novel-regex-badge {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+    transparent
+  );
+  opacity: 0.85;
+}
+
+.novel-regex-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+}
+
+.novel-regex-empty {
+  font-size: 0.78rem;
+  opacity: 0.55;
+  line-height: 1.5;
+  padding: 4px 0;
+}
+
 /* 下拉菜单（绝对定位在输入行下方） */
 .novel-icon-dropdown-menu {
   display: none;

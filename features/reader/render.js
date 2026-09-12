@@ -12,28 +12,39 @@
  * @param {object} mes 消息对象（ST 原始消息：name / is_user / is_system / mes / send_date / swipes）
  * @param {object} [options]
  * @param {string} [options.userName] 用户显示名（说话人标签兜底）
+ * @param {string} [options.avatar] 当前角色头像（决定启用哪些角色级正则）
  * @returns {string} 安全的 HTML 字符串（已 sanitize）
  */
 export function renderMessage(deps, mes, options = {}) {
-  const { renderMarkdown = null } = deps;
+  const { renderMarkdown = null, regexFilter = null } = deps;
 
   const name = mes.name || options.userName || "?";
   const isUser = Boolean(mes.is_user);
   const isSystem = Boolean(mes.is_system);
+
+  // 正则过滤：渲染前对消息正文应用用户勾选的酒馆正则（默认不应用任何正则）
+  let text = mes.mes || "";
+  if (typeof regexFilter === "function" && text) {
+    try {
+      text = regexFilter(text, options.avatar || "");
+    } catch (err) {
+      console.warn("[NovelReader] regexFilter 失败，使用原文:", err);
+    }
+  }
 
   let bodyHtml = "";
   try {
     // 独立管线：converter → encodeStyleTags → DOMPurify.sanitize → decodeStyleTags
     // 不触碰全局 chat，可渲染任意聊天的消息。
     if (typeof renderMarkdown === "function") {
-      bodyHtml = renderMarkdown(mes.mes || "");
+      bodyHtml = renderMarkdown(text);
     } else {
       // 兜底：无渲染管线时只转义纯文本
-      bodyHtml = escapeHtmlFallback(mes.mes || "");
+      bodyHtml = escapeHtmlFallback(text);
     }
   } catch (err) {
     console.warn("[NovelReader] renderMarkdown 失败，回退转义输出:", err);
-    bodyHtml = escapeHtmlFallback(mes.mes || "");
+    bodyHtml = escapeHtmlFallback(text);
   }
 
   // 说话人标签（原样显示，不转换）

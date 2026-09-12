@@ -12,6 +12,7 @@ import { createBookmarksCore } from "./features/bookmarks/index.js";
 import { createBookshelfCore } from "./features/bookshelf/index.js";
 import { createProgressCore } from "./features/progress/index.js";
 import { createReaderCore } from "./features/reader/index.js";
+import { createRegexCore } from "./features/regex/index.js";
 import {
   getPastCharacterChatsFunc,
   getRequestHeaders,
@@ -98,12 +99,20 @@ jQuery(async () => {
     ...deps,
     getChatMessages: (avatar, fileName) =>
       bookshelf.getChatMessages(avatar, fileName),
+    // 正则过滤：渲染正文前先应用用户勾选的酒馆正则
+    regexFilter: (text, avatar) => regexCore.runRegexOnText(text, { avatar }),
   });
 
   const progress = createProgressCore({ ...deps });
 
   // 书签：收藏章节 + 收藏列表（数据存 extension_settings，按 角色+聊天 维度）
   const bookmarks = createBookmarksCore({ ...deps });
+
+  // 正则过滤：让用户把酒馆正则应用到小说阅读（勾选状态存 extension_settings）
+  const regexCore = createRegexCore({
+    ...deps,
+    getStContext: () => getStContext(),
+  });
 
   // 主题文本样式桥接：让美化主题的引号/星号特殊效果同样作用于阅读器正文
   const themeTextBridge = createThemeTextBridgeCore({ document });
@@ -1098,6 +1107,12 @@ jQuery(async () => {
             ? `检测到 ${themeIcons.uniqueUrls.length} 个美化主题图标，可从下拉菜单选择或手动输入URL`
             : "未检测到美化主题图标替换。启用美化主题后会自动检测并适配"
         }</div>
+      </div>
+
+      <div class="novel-settings-row novel-regex-section">
+        <div class="novel-settings-label">正则过滤</div>
+        <div class="novel-settings-hint">把酒馆正则应用到小说阅读：勾选后，正文渲染时会先按勾选的正则处理消息内容（隐藏 OOC 指令、去敏感词等）。全局正则始终可用；角色正则仅在该角色的聊天中生效。</div>
+        <div class="novel-regex-list"></div>
       </div>`;
 
     // ---- 目录每页章数 ----
@@ -1252,6 +1267,46 @@ jQuery(async () => {
           ?.querySelectorAll(".novel-icon-dropdown-item")
           .forEach((i) => i.classList.remove("novel-icon-selected"));
       });
+
+    // ---- 正则过滤：列出酒馆正则（全局 + 当前角色级），勾选后应用到小说阅读 ----
+    const regexListEl = content.querySelector(".novel-regex-list");
+    const avatarForRegex = state.currentChar?.avatar || "";
+    const regexScripts = regexCore.getAllScripts({ avatar: avatarForRegex });
+    const regexEnabled = new Set(regexCore.getEnabledIds());
+
+    if (!regexScripts.length) {
+      const empty = document.createElement("div");
+      empty.className = "novel-regex-empty";
+      empty.textContent = "没有可用的酒馆正则。请先在酒馆「正则」扩展中创建（全局或角色类型），再回来勾选。";
+      regexListEl.appendChild(empty);
+    } else {
+      regexScripts.forEach((item) => {
+        const row = document.createElement("label");
+        row.className = "novel-regex-item";
+        const checked = regexEnabled.has(item.key) || regexEnabled.has(item.script.id);
+        const sourceLabel =
+          item.source === "global" ? "全局" : "角色";
+        row.innerHTML = `
+          <input type="checkbox" data-key="${escapeHtml(item.key)}" ${checked ? "checked" : ""} />
+          <span class="novel-regex-badge">${sourceLabel}</span>
+          <span class="novel-regex-name">${escapeHtml(
+            String(item.script.scriptName || item.script.id || "未命名"),
+          )}</span>`;
+        row.addEventListener("change", (e) => {
+          regexCore.setEnabled(item.key, e.target.checked);
+          deps.saveSettings();
+          // 若当前在目录/正文页，重新渲染当前章（让正则立即生效）
+          if (state.page === "reader") {
+            const ch = state.currentChapter;
+            if (ch) openChapter(ch);
+          } else if (state.page === "toc") {
+            const container = bodyEl.querySelector(".novel-page");
+            if (container) renderTocPage(container);
+          }
+        });
+        regexListEl.appendChild(row);
+      });
+    }
   }
 
   // ============ 底部栏事件（小说设置） ============
