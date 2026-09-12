@@ -193,7 +193,7 @@ export function createTopbarIconAdaptorCore(deps) {
 
   /** 样式变化回调（邻居面板打开时跳过，避免读取打开态样式） */
   function onThemeStyleChange() {
-    const neighborDrawerIcon = deps.document.querySelector(
+    const neighborDrawerIcon = document.querySelector(
       "#persona-management-button .drawer-icon",
     );
     if (neighborDrawerIcon && neighborDrawerIcon.classList.contains("openIcon")) {
@@ -204,18 +204,28 @@ export function createTopbarIconAdaptorCore(deps) {
 
   /** 启动自动监听（三大策略） */
   function setupThemeChangeObserver() {
+    // 原生浏览器对象/方法必须用全局引用调用（deps 传入的会在跨模块传递时丢失 this）
+    const gWin = window;
+    const gDoc = document;
+    const MutationObserverCtor = gWin.MutationObserver || gDoc.MutationObserver;
+    const setTimeoutFn = (fn, ms) => gWin.setTimeout(fn, ms);
+    const setIntervalFn = (fn, ms) => gWin.setInterval(fn, ms);
+    const clearIntervalFn = (id) => gWin.clearInterval(id);
+
     // --- 策略1: MutationObserver 监听 <head> 中 STYLE/LINK 增删与内容变化 ---
-    const headObserver = new deps.MutationObserver((mutations) => {
+    const headObserver = new MutationObserverCtor((mutations) => {
       let styleChanged = false;
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
           for (const node of [...mutation.addedNodes, ...mutation.removedNodes]) {
             if (
-              node.nodeType === deps.Node.ELEMENT_NODE &&
-              (node.tagName === "STYLE" || node.tagName === "LINK")
+              node.nodeType === gDoc.defaultView?.Node?.ELEMENT_NODE ||
+              node.nodeType === 1 /* Node.ELEMENT_NODE */
             ) {
-              styleChanged = true;
-              break;
+              if (node.tagName === "STYLE" || node.tagName === "LINK") {
+                styleChanged = true;
+                break;
+              }
             }
           }
         }
@@ -228,20 +238,20 @@ export function createTopbarIconAdaptorCore(deps) {
       }
       if (styleChanged) {
         // 延迟执行，等浏览器完成样式计算
-        deps.setTimeout(() => onThemeStyleChange(), 300);
+        setTimeoutFn(() => onThemeStyleChange(), 300);
       }
     });
-    headObserver.observe(deps.document.head, {
+    headObserver.observe(gDoc.head, {
       childList: true,
       subtree: true,
       characterData: true,
     });
 
     // --- 策略2: 监听 #custom-style 内容变化 ---
-    const customStyle = deps.document.getElementById("custom-style");
+    const customStyle = gDoc.getElementById("custom-style");
     if (customStyle) {
-      const customObserver = new deps.MutationObserver(() => {
-        deps.setTimeout(() => onThemeStyleChange(), 300);
+      const customObserver = new MutationObserverCtor(() => {
+        setTimeoutFn(() => onThemeStyleChange(), 300);
       });
       customObserver.observe(customStyle, {
         childList: true,
@@ -252,8 +262,8 @@ export function createTopbarIconAdaptorCore(deps) {
 
     // --- 策略3: 每 2s 轮询邻居按钮样式（兜底） ---
     detectAndApply();
-    themeCheckTimer = deps.setInterval(() => {
-      const neighborDrawerIcon = deps.document.querySelector(
+    themeCheckTimer = setIntervalFn(() => {
+      const neighborDrawerIcon = gDoc.querySelector(
         "#persona-management-button .drawer-icon",
       );
       if (
@@ -273,14 +283,14 @@ export function createTopbarIconAdaptorCore(deps) {
 
   /** 启动（延迟 500ms 等美化主题样式加载完成） */
   function start() {
-    deps.setTimeout(() => {
+    window.setTimeout(() => {
       setupThemeChangeObserver();
     }, 500);
   }
 
   function destroy() {
     if (themeCheckTimer) {
-      deps.clearInterval(themeCheckTimer);
+      window.clearInterval(themeCheckTimer);
       themeCheckTimer = null;
     }
   }

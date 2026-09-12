@@ -132,6 +132,19 @@ jQuery(async () => {
       dialogRef = null;
     };
 
+    // 采样 ST 主界面实际渲染色（跟随美化主题），写入 dialog 的 --novel-bg/--novel-fg
+    try {
+      applyThemeCore(dlg.dialog, sampleStThemeCore());
+      // 美化主题的样式可能延迟加载：稍后重采样一次，弹窗仍打开才应用
+      setTimeout(() => {
+        if (dialogRef === dlg) {
+          applyThemeCore(dlg.dialog, sampleStThemeCore());
+        }
+      }, 300);
+    } catch (err) {
+      console.warn("[NovelReader] 主题采样失败:", err);
+    }
+
     const content = dlg.content;
     content.className = "novel-shell";
 
@@ -1007,22 +1020,40 @@ jQuery(async () => {
     settingsPanelEl = null;
   }
 
-  /** 应用阅读器界面样式到正文容器 */
+  /** 应用阅读器界面样式：自定义背景/文字色覆盖到整个弹窗；未自定义则跟随主题采样色 */
   function applyReaderStyles() {
-    if (!readerScrollEl) return;
+    if (!dialogRef) return;
     const g = getGlobalSettings();
     const rs = g.readerSettings;
-    const inner = readerScrollEl.querySelector(".novel-reader-inner");
-    if (inner) {
-      inner.style.fontSize = `${rs.fontSize}px`;
-      if (rs.textColor) inner.style.color = rs.textColor;
-      else inner.style.color = "";
+    const dialogEl = dialogRef.dialog;
+
+    // 字号：只作用于正文容器
+    if (readerScrollEl) {
+      const inner = readerScrollEl.querySelector(".novel-reader-inner");
+      if (inner) inner.style.fontSize = `${rs.fontSize}px`;
     }
+
+    // 背景：自定义色覆盖到整个弹窗；否则重新采样恢复主题色
     if (rs.bgColor) {
-      readerScrollEl.style.background = rs.bgColor;
+      dialogEl.style.background = rs.bgColor;
     } else {
-      readerScrollEl.style.background = "";
+      dialogEl.style.background = "";
     }
+
+    // 文字色：自定义时覆盖 --novel-fg 变量（供各子元素 color-mix/正文使用）；
+    //         未自定义时重新采样恢复主题色（清除内联覆盖）
+    if (rs.textColor) {
+      dialogEl.style.setProperty("--novel-fg", rs.textColor);
+    } else {
+      dialogEl.style.removeProperty("--novel-fg");
+      // 从主界面重新采样（打开时采样的色可能已被用户改设置覆盖过）
+      try {
+        applyThemeCore(dialogEl, sampleStThemeCore());
+      } catch (err) {
+        // 采样失败则保持现状
+      }
+    }
+    dialogEl.style.color = "";
   }
 
   // ============ 事件订阅 ============
@@ -1062,12 +1093,6 @@ jQuery(async () => {
     try {
       const adaptor = createTopbarIconAdaptorCore({
         $,
-        document,
-        window,
-        Node,
-        setTimeout,
-        setInterval,
-        clearInterval,
         isImageIconBackground: isImageIconBackgroundCore,
         detectNeighborIcon: () =>
           detectNeighborIconCore({

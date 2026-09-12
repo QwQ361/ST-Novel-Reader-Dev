@@ -16,7 +16,8 @@
   align-items: center;
   justify-content: center;
   z-index: 100010;
-  background: var(--SmartThemeBlurTintColor, #14161a);
+  /* 与 dialog 同源跟随主题（采样色 → ST 变量 → 默认暗色） */
+  background: var(--novel-bg, var(--SmartThemeBlurTintColor, #14161a));
   /* 铁律 1：不加 overflow */
 }
 
@@ -27,8 +28,10 @@
   display: flex;
   flex-direction: column;
   margin: auto; /* 铁律 3 */
-  background: var(--SmartThemeBlurTintColor, #14161a);
-  color: var(--SmartThemeBodyColor, #ddd);
+  /* 主题跟随：优先 JS 采样色（--novel-bg/--novel-fg），
+     未采样到时回退 ST 主题变量，再回退默认暗色 */
+  background: var(--novel-bg, var(--SmartThemeBlurTintColor, #14161a));
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
   overflow: hidden; /* 仅隐藏，不在 overlay 上 */
 }
 
@@ -67,7 +70,12 @@
   padding: 10px 16px;
   border-bottom: 1px solid
     var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
-  background: rgba(0, 0, 0, 0.25);
+  /* 跟随主题：用前景色低透明度做顶栏底色（浅色/深色主题均协调） */
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
+    transparent
+  );
   z-index: 5;
 }
 
@@ -91,9 +99,18 @@
   width: 100%;
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.2));
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--SmartThemeBodyColor, #ddd);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 6%,
+    transparent
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
   outline: none;
 }
 
@@ -110,15 +127,29 @@
   padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--SmartThemeBodyColor, #ddd);
+  /* 跟随主题：前景色低透明度做按钮底色（浅色/深色均协调） */
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 15%,
+      transparent
+    );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
   user-select: none;
   font-size: 0.95rem;
 }
 
 .novel-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+    transparent
+  );
 }
 
 /* 右上角关闭按钮（×）：与 ⚙ 按钮尺寸一致，仅字体加粗悬停变红 */
@@ -166,8 +197,17 @@
   padding: 12px 14px;
   border-radius: 10px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 6%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+      transparent
+    );
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
@@ -175,7 +215,11 @@
 }
 
 .novel-card:hover {
-  background: rgba(255, 255, 255, 0.11);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+    transparent
+  );
   border-color: var(--SmartThemeMainColor, #4f8cff);
 }
 
@@ -236,13 +280,21 @@
   padding: 10px 14px;
   border-radius: 8px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 4%,
+    transparent
+  );
   border: 1px solid transparent;
   transition: background 0.15s ease;
 }
 
 .novel-toc-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
 }
 
 .novel-toc-item-num {
@@ -301,8 +353,14 @@
   text-align: center;
   margin: 8px 0 24px;
   padding-bottom: 12px;
+  /* 章标题颜色跟随主题正文色（避免硬编码主题主色） */
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
   border-bottom: 1px solid
-    var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 15%,
+      transparent
+    );
 }
 
 /* ---------- 小说消息 ---------- */
@@ -345,6 +403,8 @@
   line-height: 1.8;
   word-break: break-word;
   white-space: normal;
+  /* 正文文字色跟随主题（采样色 → ST 变量 → 默认） */
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
 }
 
 .novel-msg-body p {
@@ -364,13 +424,22 @@
   overflow-x: auto;
   padding: 10px;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.35);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
 }
 
 .novel-msg-body blockquote {
   margin: 6px 0;
   padding-left: 12px;
-  border-left: 3px solid rgba(255, 255, 255, 0.25);
+  border-left: 3px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 30%,
+      transparent
+    );
   opacity: 0.85;
 }
 
@@ -381,7 +450,12 @@
 
 .novel-msg-body th,
 .novel-msg-body td {
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 25%,
+      transparent
+    );
   padding: 4px 10px;
 }
 
@@ -406,7 +480,12 @@
   gap: 8px;
   padding: 10px 16px;
   border-top: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
-  background: rgba(0, 0, 0, 0.4);
+  /* 跟随主题：用前景色低透明度做底栏底色 */
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
   z-index: 5;
   flex-wrap: wrap;
 }
@@ -421,15 +500,28 @@
   padding: 8px 14px;
   border-radius: 8px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 18%,
+      transparent
+    );
   user-select: none;
   font-size: 0.92rem;
-  color: var(--SmartThemeBodyColor, #ddd);
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
 }
 
 .novel-bottombar .novel-btn:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 18%,
+    transparent
+  );
 }
 
 .novel-bottombar .novel-btn:disabled {
@@ -454,8 +546,13 @@
   overflow-y: auto;
   padding: 14px 16px;
   border-radius: 12px;
-  background: var(--SmartThemeBlurTintColor, #22252b);
-  border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.15));
+  background: var(--novel-bg, var(--SmartThemeBlurTintColor, #22252b));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
   z-index: 10;
   display: flex;
@@ -548,8 +645,14 @@
   width: min(360px, 88vw);
   max-height: calc(100% - 70px);
   overflow-y: auto;
-  background: rgba(20, 20, 24, 0.97);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  /* 跟随主题：以采样背景为主、略微叠加深色，保证对比 */
+  background: var(--novel-bg, var(--SmartThemeBlurTintColor, #14161a));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   z-index: 20;
@@ -573,7 +676,11 @@
   padding: 8px 10px;
   border-radius: 8px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.04);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    transparent
+  );
   border: 1px solid transparent;
   transition:
     background 0.12s ease,
@@ -581,8 +688,16 @@
 }
 
 .novel-search-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 22%,
+    transparent
+  );
 }
 
 .novel-search-item-head {
