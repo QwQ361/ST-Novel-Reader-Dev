@@ -121,12 +121,12 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
-/* 右上角关闭按钮（×）：略醒目，悬停变红 */
+/* 右上角关闭按钮（×）：与 ⚙ 按钮尺寸一致，仅字体加粗悬停变红 */
 .novel-icon-close {
   font-weight: 700;
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 6px 12px;
+  font-size: inherit; /* 与普通 icon-btn 同字号，避免高度不一致 */
+  line-height: inherit;
+  padding: 6px 12px; /* 与默认按钮相同，保证高度一致 */
 }
 
 .novel-icon-close:hover {
@@ -527,8 +527,17 @@
 }
 
 /* ---------- 顶栏按钮（ST 主界面） ---------- */
-#novel-topbar-button .drawer-icon {
-  color: var(--SmartThemeMainColor, #4f8cff);
+/* 图标颜色跟随 ST 主题（与其它顶栏按钮一致），不再强制主题色 */
+
+/* 顶栏图标美化适配（与 CFM 同款机制）：
+   美化主题把邻居按钮图标替换成图片时，本插件按钮通过 JS 注入同类样式。
+   此处仅兜底：默认 FA 图标保持原样；自定义图标模式下隐藏 FA 字符。 */
+#novel-topbar-button .drawer-icon.novel-custom-icon {
+  font-size: 0; /* 隐藏 FA 字符，避免与背景图片叠加 */
+}
+
+#novel-topbar-button .drawer-icon.novel-custom-toggle-icon ~ .drawer-icon {
+  visibility: hidden; /* toggle 模式：隐藏原 FA 图标 */
 }
 
 /* ---------- 小说内检索结果面板 ---------- */

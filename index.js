@@ -18,6 +18,12 @@ import {
   loadStCoreModules,
   renderMarkdownCore,
 } from "./integrations/sillytavern.js";
+import {
+  clearCustomIconCore,
+  createTopbarIconAdaptorCore,
+  detectNeighborIconCore,
+  isImageIconBackgroundCore,
+} from "./integrations/topbar-icon.js";
 import { createOverlayDialog } from "./ui/modal/index.js";
 import { cfmTCore, convertText, loadS2T } from "./utils/i18n.js";
 
@@ -1033,6 +1039,32 @@ jQuery(async () => {
       if (e.target.closest(".drawer-icon")) openReaderDialog();
     });
     $("#rightNavHolder").before(btn);
+
+    // 顶栏图标美化适配：检测美化主题图标并自动保持一致（延迟等主题样式加载）
+    try {
+      const adaptor = createTopbarIconAdaptorCore({
+        $,
+        document,
+        window,
+        Node,
+        setTimeout,
+        setInterval,
+        clearInterval,
+        isImageIconBackground: isImageIconBackgroundCore,
+        detectNeighborIcon: () =>
+          detectNeighborIconCore({
+            document,
+            window,
+            isImageIconBackground: isImageIconBackgroundCore,
+          }),
+        applyCustomIcon: (cssUrl, targetCls, extraStyles) =>
+          applyCustomIconCore(cssUrl, targetCls, extraStyles, { $ }),
+        clearCustomIcon: () => clearCustomIconCore({ $ }),
+      });
+      adaptor.start();
+    } catch (err) {
+      console.warn("[NovelReader] 顶栏图标适配初始化失败:", err);
+    }
   }
 
   // ============ 启动 ============
