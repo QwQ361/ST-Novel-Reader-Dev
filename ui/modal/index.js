@@ -26,25 +26,30 @@ export function createOverlayDialog(options = {}) {
   const dialog = document.createElement("div");
   dialog.className = "novel-dialog" + (compact ? " novel-dialog-compact" : "");
 
-  const header = document.createElement("div");
-  header.className = "novel-dialog-header";
-  const titleEl = document.createElement("span");
-  titleEl.className = "novel-dialog-title";
-  titleEl.textContent = title;
-  header.appendChild(titleEl);
-
-  if (showClose) {
-    const closeBtn = document.createElement("div");
-    closeBtn.className = "novel-dialog-close interactable";
-    closeBtn.title = "关闭";
-    closeBtn.textContent = "\u00d7";
-    closeBtn.addEventListener("click", () => close());
-    header.appendChild(closeBtn);
-  }
-
+  // 仅在有标题或需要关闭按钮时才渲染 header（避免全屏弹窗出现空标题条）
   const content = document.createElement("div");
   content.className = "novel-dialog-content";
-  dialog.appendChild(header);
+
+  if (title || showClose) {
+    const header = document.createElement("div");
+    header.className = "novel-dialog-header";
+    if (title) {
+      const titleEl = document.createElement("span");
+      titleEl.className = "novel-dialog-title";
+      titleEl.textContent = title;
+      header.appendChild(titleEl);
+    }
+    if (showClose) {
+      const closeBtn = document.createElement("div");
+      closeBtn.className = "novel-dialog-close interactable";
+      closeBtn.title = "关闭";
+      closeBtn.textContent = "\u00d7";
+      closeBtn.addEventListener("click", () => close());
+      header.appendChild(closeBtn);
+    }
+    dialog.appendChild(header);
+  }
+
   dialog.appendChild(content);
   overlay.appendChild(dialog);
 

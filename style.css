@@ -53,6 +53,53 @@
   gap: 14px;
 }
 
+/* ---------- 弹窗头部：标题靠左、关闭按钮靠右（右上角） ---------- */
+.novel-dialog-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid
+    var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 6%,
+    transparent
+  );
+}
+
+.novel-dialog-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  line-height: 1.3;
+}
+
+/* 右上角关闭按钮（×）：圆形图标按钮，悬停变红 */
+.novel-dialog-close {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  border-radius: 50%;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.novel-dialog-close:hover {
+  background: rgba(220, 60, 60, 0.75);
+  color: #fff;
+}
+
 /* ---------- 弹窗内容区（index.js 将 modal content 设为 novel-shell） ---------- */
 .novel-shell {
   flex: 1 1 auto;
@@ -1235,5 +1282,21 @@
     width: 94vw;
     max-height: 90vh;
     margin: auto; /* 铁律 3 */
+  }
+
+  /* 移动端：弹窗头部紧凑化（标题 + 右上角关闭按钮） */
+  .novel-dialog-header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .novel-dialog-title {
+    font-size: 1rem;
+  }
+
+  .novel-dialog-close {
+    width: 26px;
+    height: 26px;
+    font-size: 16px;
   }
 }

@@ -896,7 +896,7 @@ jQuery(async () => {
   function openGlobalSettings() {
     const g = getGlobalSettings();
     const dlg = createOverlayDialog({
-      title: deps.cfmT("全局设置"),
+      title: deps.cfmT("阅读器选项"),
       compact: true,
     });
     const content = dlg.content;
