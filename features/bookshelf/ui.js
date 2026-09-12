@@ -54,6 +54,8 @@ export function createBookshelfUI(deps) {
    * @param {object} char 角色对象
    */
   async function renderChats(container, charIdx, char) {
+    // 记录选中角色（聊天点击事件依赖它判断当前角色）
+    selectedCharIdx = charIdx;
     container.innerHTML = `<div class="novel-loading">${escapeHtml(cfmT("加载聊天列表…"))}</div>`;
     const list = await getCharChats(charIdx, char.avatar);
     if (!list.length) {

@@ -2,7 +2,8 @@
 // 小说阅读器功能聚合入口：读取完整消息数组 + 安全渲染 + 打开原聊天。
 // 依赖注入 deps：
 //   getChatMessages(avatar, fileName)  读完整消息数组（由 bookshelf 提供）
-//   messageFormatting / openCharacterChat / selectCharacterById
+//   renderMarkdown(markdown)           Markdown 安全渲染管线（由 integrations 提供）
+//   openCharacterChat / selectCharacterById
 //   tc(text) 简繁转换 / cfmT(text) 界面文本
 
 import { renderMessage, renderMessagesBatched } from "./render.js";
@@ -70,14 +71,19 @@ export function createReaderCore(deps) {
     container.appendChild(header);
     container.appendChild(body);
 
-    await renderMessagesBatched(deps, body, filtered, {
-      batchSize: 200,
-      tc,
-      onProgress: (done, total) => {
-        const meta = header.querySelector(".novel-reader-title-meta");
-        if (meta) meta.textContent = `${done}/${total} ${cfmT("渲染中…")}`;
+    await renderMessagesBatched(
+      { ...deps, renderMarkdown: deps.renderMarkdown },
+      body,
+      filtered,
+      {
+        batchSize: 200,
+        tc,
+        onProgress: (done, total) => {
+          const meta = header.querySelector(".novel-reader-title-meta");
+          if (meta) meta.textContent = `${done}/${total} ${cfmT("渲染中…")}`;
+        },
       },
-    });
+    );
 
     // 渲染完成，更新计数并回到顶部
     const meta = header.querySelector(".novel-reader-title-meta");

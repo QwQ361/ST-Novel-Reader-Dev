@@ -31,6 +31,7 @@ export async function getCharChatsCore(deps, charIdx, avatar) {
     }
   }
   // 回退：POST /api/characters/chats
+  // 注意：该 API 在缺少 CSRF header 或出错时返回 HTTP 200 + body { error: true }，必须显式识别
   const headers = deps.getRequestHeaders();
   try {
     const res = await fetch("/api/characters/chats", {
@@ -40,7 +41,18 @@ export async function getCharChatsCore(deps, charIdx, avatar) {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    return Array.isArray(json) ? json : [];
+    // 后端错误（HTTP 200 但 body.error === true）
+    if (json && typeof json === "object" && json.error === true) {
+      console.warn("[NovelReader] 聊天列表 API 返回错误:", json);
+      return [];
+    }
+    // 正常：数组直接返回；对象（老版本 ST）取 Object.values 转数组
+    if (Array.isArray(json)) return json;
+    if (json && typeof json === "object") {
+      const values = Object.values(json);
+      if (values.length) return values;
+    }
+    return [];
   } catch (err) {
     console.warn("[NovelReader] 聊天列表 API 失败:", err);
     return [];
@@ -49,23 +61,69 @@ export async function getCharChatsCore(deps, charIdx, avatar) {
 
 /**
  * 获取某聊天完整消息数组（POST /api/chats/get）。
- * 注意：file_name 必须带 .jsonl 扩展名。
+ * 参考 ST 官方 getChatsFromFiles：请求体必须含 ch_name（角色名）+ file_name（不带 .jsonl）+ avatar_url。
+ * 返回数组的首条是元数据消息（ST 会 shift 掉），此处同样移除。
  * @param {object} deps 依赖注入
  * @param {string} avatar 角色头像文件名
- * @param {string} fileName 聊天文件名（带 .jsonl）
+ * @param {string} fileName 聊天文件名（带 .jsonl，内部去除扩展名）
  * @returns {Promise<Array<object>>} 消息数组（mes.name / mes.is_user / mes.mes 等）
  */
 export async function getChatMessagesCore(deps, avatar, fileName) {
   const headers = deps.getRequestHeaders();
   try {
+    // 由 avatar 反查角色名（ch_name 是后端定位聊天文件的关键）
+    // 优先 deps.getCharacters（bookshelf 场景），兜底从 ST context 直接取
+    let chars = deps.getCharacters ? deps.getCharacters() : [];
+    if (!chars.length) {
+      const ctx = deps.getStContext ? deps.getStContext() : null;
+      chars = Array.isArray(ctx?.characters) ? ctx.characters : [];
+    }
+    const char = chars.find((c) => c.avatar === avatar);
+    const ch_name = char?.name || "";
+    // ST 官方请求：file_name 不带 .jsonl 扩展名
+    const baseName = String(fileName || "").replace(/\.jsonl$/i, "");
+
     const res = await fetch("/api/chats/get", {
       method: "POST",
       headers,
-      body: JSON.stringify({ avatar_url: avatar, file_name: fileName }),
+      body: JSON.stringify({
+        ch_name,
+        file_name: baseName,
+        avatar_url: avatar,
+      }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    return Array.isArray(json) ? json : [];
+    // 后端错误（HTTP 200 + body.error）
+    if (
+      json &&
+      typeof json === "object" &&
+      !Array.isArray(json) &&
+      json.error === true
+    ) {
+      console.warn("[NovelReader] 读取聊天内容 API 返回错误:", json);
+      return [];
+    }
+    if (!Array.isArray(json)) return [];
+    // 移除首条元数据消息（与 ST getChatsFromFiles 行为一致）
+    if (
+      json.length &&
+      json[0] &&
+      json[0].is_system === false &&
+      !("mes" in json[0]) &&
+      json[0].name === undefined
+    ) {
+      json.shift();
+    } else if (
+      json.length &&
+      json[0] &&
+      typeof json[0] === "object" &&
+      !("mes" in json[0]) &&
+      !("is_user" in json[0])
+    ) {
+      json.shift();
+    }
+    return json;
   } catch (err) {
     console.warn("[NovelReader] 读取聊天内容失败:", avatar, fileName, err);
     return [];

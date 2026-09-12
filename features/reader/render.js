@@ -1,8 +1,10 @@
 // features/reader/render.js
 // 小说正文渲染层。
-// 关键安全点：Markdown → HTML 必须走 ST 官方 messageFormatting 管线
-// （showdown + encodeStyleTags + DOMPurify.sanitize），禁止直接 innerHTML 原始消息。
-// 渲染非当前聊天时传 messageId = NaN，使 messageFormatting 内部不触碰全局 chat 数组。
+// 关键安全点：Markdown → HTML 必须走独立安全管线 renderMarkdown
+// （ST 的 converter/showdown + encodeStyleTags + DOMPurify.sanitize + decodeStyleTags），
+// 禁止直接 innerHTML 原始消息。
+// ⚠️ 不能复用 ST 的 messageFormatting：它严重依赖全局 chat 数组（chat.map / getRegexedString /
+// chat[messageId]?.extra?.type），只能渲染「当前打开的聊天」，渲染非当前聊天时返回空。
 
 /**
  * 单条消息渲染为安全的 HTML。
@@ -14,7 +16,7 @@
  * @returns {string} 安全的 HTML 字符串（已 sanitize）
  */
 export function renderMessage(deps, mes, options = {}) {
-  const { messageFormatting = () => "" } = deps;
+  const { renderMarkdown = null } = deps;
   const { tc = (t) => t } = options;
 
   const name = mes.name || options.userName || "?";
@@ -23,11 +25,16 @@ export function renderMessage(deps, mes, options = {}) {
 
   let bodyHtml = "";
   try {
-    // ST 官方管线：参数 (mes, ch_name, isSystem, isUser, messageId, sanitizerOverrides)
-    // messageId 传 NaN：内部 chat[messageId] 访问恒安全，只走 Markdown + sanitize 分支。
-    bodyHtml = messageFormatting(mes, name, isSystem, isUser, NaN, {});
+    // 独立管线：converter → encodeStyleTags → DOMPurify.sanitize → decodeStyleTags
+    // 不触碰全局 chat，可渲染任意聊天的消息。
+    if (typeof renderMarkdown === "function") {
+      bodyHtml = renderMarkdown(mes.mes || "");
+    } else {
+      // 兜底：无渲染管线时只转义纯文本
+      bodyHtml = escapeHtmlFallback(mes.mes || "");
+    }
   } catch (err) {
-    console.warn("[NovelReader] messageFormatting 失败，回退转义输出:", err);
+    console.warn("[NovelReader] renderMarkdown 失败，回退转义输出:", err);
     bodyHtml = escapeHtmlFallback(mes.mes || "");
   }
 

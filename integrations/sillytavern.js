@@ -1,8 +1,12 @@
 // integrations/sillytavern.js
 // SillyTavern 集成层：集中管理与 ST 核心的交互。
 // - getStContext()：获取 ST 上下文
-// - loadStCoreModules()：动态导入 ST 核心脚本（幂等，各自 try/catch + null 兜底）
-// - 全局函数访问器：getPastCharacterChatsFunc / openCharacterChatFunc / messageFormattingFunc
+// - loadStCoreModules()：动态导入 ST 核心模块（幂等），缓存模块命名导出
+// - 函数访问器：getPastCharacterChatsFunc / openCharacterChatFunc / messageFormattingFunc / getRequestHeaders
+//
+// ⚠️ 关键：现代 ST 是 ESM，getPastCharacterChats / openCharacterChat / messageFormatting /
+// getRequestHeaders 等函数是 script.js 的**命名导出，不挂在 window 上**。
+// 必须从 import() 返回的模块命名空间对象上取值，否则拿不到（CFM 同款写法）。
 
 /**
  * 获取 SillyTavern 上下文对象。
@@ -17,10 +21,62 @@ export function getStContext() {
   }
 }
 
+// ---- 模块导出缓存（由 loadStCoreModules 填充，访问器直接读取）----
+let _scriptModule = null; // public/script.js 的模块命名空间
+let _chatsModule = null; // public/scripts/chats.js 的模块命名空间
+let _loaded = false;
+
 /**
- * 动态导入单个 ST 核心脚本。
- * 这些脚本都是传统脚本（无 ES export），import 的目的只是确保其已执行、
- * 全局函数已就绪。返回 true 表示成功，失败返回 null（不阻断其他模块）。
+ * 加载 ST 核心模块（幂等，可多次调用）。
+ * script.js 位于 public/ 根目录，需要 5 级 .. 跳出插件目录。
+ * @returns {Promise<boolean>} 是否加载完成
+ */
+export async function loadStCoreModules() {
+  if (_loaded) return true;
+  const results = await Promise.all([
+    importScriptModule(),
+    importChatsModule(),
+    importModule("../../../../personas.js"),
+    importModule("../../../../utils.js"),
+    importModule("../../../../popup.js"),
+  ]);
+  _loaded = results.some(Boolean);
+  return _loaded;
+}
+
+/** 导入 public/script.js 并缓存其模块命名空间（converter / getRequestHeaders / 聊天 API 都在这里） */
+async function importScriptModule() {
+  try {
+    _scriptModule = await import(/* @vite-ignore */ "../../../../../script.js");
+    console.log(
+      "[NovelReader] script.js 模块已加载，导出:",
+      Object.keys(_scriptModule).filter((k) =>
+        /converter|getRequestHeaders|getPastCharacterChats|openCharacterChat|getCharacters|selectCharacterById|messageFormatting/i.test(
+          k,
+        ),
+      ),
+    );
+    return true;
+  } catch (err) {
+    console.warn("[NovelReader] 动态导入 script.js 失败:", err);
+    return null;
+  }
+}
+
+/** 导入 public/scripts/chats.js 并缓存（encodeStyleTags / decodeStyleTags 用于安全渲染管线） */
+async function importChatsModule() {
+  try {
+    _chatsModule = await import(/* @vite-ignore */ "../../../../chats.js");
+    return true;
+  } catch (err) {
+    console.warn("[NovelReader] 动态导入 chats.js 失败:", err);
+    return null;
+  }
+}
+
+/**
+ * 动态导入单个 ST 核心脚本（非 script.js / chats.js 的其他模块）。
+ * 这些脚本是 ESM，import 后取所需导出；这里只保证其副作用执行。
  * @param {string} relativePath 相对当前文件的导入路径
  * @returns {Promise<boolean|null>}
  */
@@ -34,58 +90,97 @@ async function importModule(relativePath) {
   }
 }
 
-// 模块加载状态缓存（幂等）
-let _loaded = false;
-
 /**
- * 加载 ST 核心模块（幂等，可多次调用）。
- * script.js 位于 public/ 根目录，需要 5 级 .. 跳出插件目录。
- * @returns {Promise<boolean>} 是否加载完成
- */
-export async function loadStCoreModules() {
-  if (_loaded) return true;
-  const results = await Promise.all([
-    importModule("../../../../../script.js"), // public/script.js（Markdown 渲染、API 请求头等）
-    importModule("../../../../personas.js"), // public/scripts/personas.js
-    importModule("../../../../utils.js"), // public/scripts/utils.js
-    importModule("../../../../popup.js"), // public/scripts/popup.js
-    importModule("../../../../chats.js"), // public/scripts/chats.js（openCharacterChat / getPastCharacterChats）
-  ]);
-  _loaded = results.some(Boolean);
-  return _loaded;
-}
-
-/**
- * 取「某角色的全部聊天列表」全局函数（带缓存优先的 ST 实现）。
+ * 取「某角色的全部聊天列表」函数（script.js 命名导出）。
  * @returns {Function|null} getPastCharacterChats(charIdx) => Promise<Array>
  */
 export function getPastCharacterChatsFunc() {
-  return window.getPastCharacterChats ?? null;
+  return (
+    _scriptModule?.getPastCharacterChats ?? window.getPastCharacterChats ?? null
+  );
 }
 
 /**
- * 取「打开指定聊天」全局函数。
+ * 取「打开指定聊天」函数（script.js 命名导出）。
  * @returns {Function|null} openCharacterChat(fileNameWithoutExt) => Promise
  */
 export function openCharacterChatFunc() {
-  return window.openCharacterChat ?? null;
+  return _scriptModule?.openCharacterChat ?? window.openCharacterChat ?? null;
 }
 
 /**
- * 取「Markdown 消息渲染」全局函数（官方管线：showdown + sanitize）。
+ * 取「Markdown 消息渲染」函数（官方管线：showdown + sanitize）。
  * @returns {Function|null} messageFormatting(mes, ch_name, isSystem, isUser, messageId, sanitizerOverrides)
  */
 export function messageFormattingFunc() {
-  return window.messageFormatting ?? null;
+  return _scriptModule?.messageFormatting ?? window.messageFormatting ?? null;
+}
+
+// ---- Markdown 安全渲染管线 ----
+// ⚠️ ST 的 messageFormatting 严重依赖全局 chat 数组与正则替换（chat.map / getRegexedString /
+// chat[messageId]?.extra?.type），只能渲染「当前打开的聊天」；渲染非当前聊天时结果为空或错乱。
+// 小说阅读器渲染「任意聊天」必须用 ST 暴露的底层组件组装独立管线：
+//   converter（ST 已配置的 showdown）→ encodeStyleTags → DOMPurify.sanitize → decodeStyleTags
+// 完全不触碰全局 chat，无 XSS 风险。
+
+/**
+ * 将 Markdown 文本安全渲染为 HTML（独立管线，可渲染任意聊天的消息）。
+ * @param {string} markdown 原始 Markdown 文本
+ * @returns {string} 已 sanitize 的 HTML（失败时返回空字符串）
+ */
+export function renderMarkdownCore(markdown) {
+  try {
+    const converter = _scriptModule?.converter;
+    if (converter) {
+      // ST 官方 showdown 部分（与 messageFormatting 一致）
+      let html = converter.makeHtml(String(markdown ?? ""));
+      // 处理代码块换行（与 ST 一致：修复 Firefox <br> 问题）
+      html = html.replace(/<code(.*)>[\s\S]*?<\/code>/g, (match) =>
+        match.replace(/\n/gm, "\u0000"),
+      );
+      html = html.replace(/\u0000/g, "\n");
+      // sanitize 管线（encode → DOMPurify → decode）
+      const encode = _chatsModule?.encodeStyleTags ?? window.encodeStyleTags;
+      const decode = _chatsModule?.decodeStyleTags ?? window.decodeStyleTags;
+      const purify = window.DOMPurify;
+      let cleaned = html;
+      if (typeof encode === "function") cleaned = encode(cleaned);
+      if (purify) {
+        cleaned = purify.sanitize(cleaned, { ADD_TAGS: ["custom-style"] });
+      }
+      if (typeof decode === "function") cleaned = decode(cleaned);
+      return cleaned;
+    }
+    // 兜底：无 converter 时只转义纯文本
+    return String(markdown ?? "")
+      .replace(/&/g, "&")
+      .replace(/</g, "<")
+      .replace(/>/g, ">")
+      .replace(/"/g, "\x26quot;");
+  } catch (err) {
+    console.warn("[NovelReader] renderMarkdownCore 失败:", err);
+    return "";
+  }
 }
 
 /**
- * 取 ST 的 API 请求头（含 CSRF）。
+ * 取「选中指定角色」函数（script.js 命名导出）。
+ * @returns {Function|null} selectCharacterById(charIdx) => void
+ */
+export function selectCharacterByIdFunc() {
+  return (
+    _scriptModule?.selectCharacterById ?? window.selectCharacterById ?? null
+  );
+}
+
+/**
+ * 取 ST 的 API 请求头（含 CSRF，script.js 命名导出）。
  * @returns {object} 请求头对象
  */
 export function getRequestHeaders() {
   try {
-    return window.getRequestHeaders?.() ?? {};
+    const fn = _scriptModule?.getRequestHeaders ?? window.getRequestHeaders;
+    return typeof fn === "function" ? fn() : {};
   } catch (err) {
     console.warn("[NovelReader] getRequestHeaders 失败:", err);
     return {};

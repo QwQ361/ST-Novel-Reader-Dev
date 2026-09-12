@@ -15,7 +15,7 @@ import {
   getRequestHeaders,
   getStContext,
   loadStCoreModules,
-  messageFormattingFunc,
+  renderMarkdownCore,
 } from "./integrations/sillytavern.js";
 import { createOverlayDialog } from "./ui/modal/index.js";
 import { cfmTCore, convertText, loadS2T } from "./utils/i18n.js";
@@ -49,7 +49,9 @@ jQuery(async () => {
     getStContext,
     getRequestHeaders,
     getPastCharacterChatsFunc,
-    messageFormattingFunc,
+    // Markdown 安全渲染管线（converter → encodeStyleTags → DOMPurify → decodeStyleTags）
+    // 可渲染任意聊天的消息，不依赖全局 chat（ST 的 messageFormatting 做不到）
+    renderMarkdown: renderMarkdownCore,
     getSettings: () => window.extension_settings || {},
     saveSettings: () => window.saveSettingsDebounced?.(),
     // 界面文本：仅 language === 'zh-TW' 时转繁体
@@ -69,8 +71,10 @@ jQuery(async () => {
     ...deps,
     getChatMessages: (avatar, fileName) =>
       bookshelf.getChatMessages(avatar, fileName),
-    selectCharacterById: (idx) => ctx.selectCharacterById?.(idx),
-    openCharacterChat: (name) => ctx.openCharacterChat?.(name),
+    selectCharacterById: (idx) =>
+      selectCharacterByIdFunc() ?? ctx.selectCharacterById?.(idx),
+    openCharacterChat: (name) =>
+      openCharacterChatFunc() ?? ctx.openCharacterChat?.(name),
   });
 
   const progress = createProgressCore({ ...deps });
