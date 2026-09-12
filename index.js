@@ -37,6 +37,7 @@ import {
   convertText,
   loadS2T,
 } from "./utils/i18n.js";
+import { formatTimeString } from "./utils/time.js";
 
 const EXT_NAME = "ST-Novel-Reader";
 
@@ -541,11 +542,11 @@ jQuery(async () => {
     filtered.forEach((chat) => {
       const fileName = chat.file_name || "";
       const card = document.createElement("div");
-      card.className = "novel-card";
+      card.className = "novel-card novel-chat-card";
       // meta 行只拼接非空字段段，段间用「 · 」连接，避免出现悬空点
       const metaParts = [
         chat.chat_items ?? chat.message_count ?? "",
-        chat.last_mes_timestamp ?? chat.create_date ?? "",
+        formatTimeString(chat.last_mes_timestamp ?? chat.create_date ?? ""),
       ]
         .map((v) => String(v).trim())
         .filter(Boolean);

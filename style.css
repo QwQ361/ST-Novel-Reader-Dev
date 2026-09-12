@@ -92,7 +92,9 @@
   border-radius: 50%;
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .novel-dialog-close:hover {
@@ -325,6 +327,15 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 聊天卡片：标题允许换行，避免长名字被截成省略号 */
+.novel-chat-card .novel-card-title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-all;
+  line-height: 1.35;
 }
 
 .novel-card-preview {
@@ -662,7 +673,14 @@
   margin: 6px 0;
   padding-left: 12px;
   border-left: 3px solid
-    var(--novel-quote-color, color-mix(in srgb, var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 30%, transparent));
+    var(
+      --novel-quote-color,
+      color-mix(
+        in srgb,
+        var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 30%,
+        transparent
+      )
+    );
   background: var(--novel-blockquote-bg, transparent);
   opacity: 0.85;
 }
@@ -839,7 +857,9 @@
   );
   color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .novel-lang-btn:hover {
@@ -1156,7 +1176,8 @@
 
 .novel-swatch.active {
   border-color: var(--SmartThemeMainColor, #4f8cff);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--SmartThemeMainColor, #4f8cff) 60%, transparent);
+  box-shadow: 0 0 8px
+    color-mix(in srgb, var(--SmartThemeMainColor, #4f8cff) 60%, transparent);
   transform: scale(1.1);
 }
 
