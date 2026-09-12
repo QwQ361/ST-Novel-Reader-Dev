@@ -75,7 +75,7 @@ export function createReaderCore(deps) {
     // 构建章标题
     const titleEl = document.createElement("h2");
     titleEl.className = "novel-chapter-title";
-    titleEl.textContent = `${chapter.index} / ${chatCache.chapters.length} · ${chapter.title}`;
+    titleEl.textContent = `${chapter.index} / ${chatCache.chapters.length}`;
 
     const inner = document.createElement("div");
     inner.className = "novel-reader-inner";

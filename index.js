@@ -865,9 +865,7 @@ jQuery(async () => {
         item.className = "novel-bookmark-item";
         item.innerHTML = `
           <div class="novel-bookmark-info">
-            <div class="novel-bookmark-title">${escapeHtml(
-              "第" + String(bm.chapter) + "章" + (bm.title ? " · " + String(bm.title) : ""),
-            )}</div>
+            <div class="novel-bookmark-title">${escapeHtml("第" + String(bm.chapter) + "章")}</div>
             <div class="novel-bookmark-meta">${escapeHtml(String(bm.size))} 条消息</div>
           </div>
           <button class="novel-bookmark-del" title="删除书签">×</button>`;
