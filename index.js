@@ -415,7 +415,7 @@ jQuery(async () => {
       item.className = "novel-toc-item";
       item.innerHTML = `
         <span class="novel-toc-item-num">${escapeHtml(String(ch.index))}</span>
-        <span class="novel-toc-item-title">${escapeHtml(ch.title)}</span>`;
+        <span class="novel-toc-item-title">${escapeHtml(deps.cfmT("第") + String(ch.index) + deps.cfmT("章"))}</span>`;
       item.addEventListener("click", () => openChapter(ch.index));
       list.appendChild(item);
     });

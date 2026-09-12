@@ -7,7 +7,8 @@
 //   char1, user2, char2, user3, char3     → 第1章[char1] 第2章[user2,char2] 第3章[user3,char3]
 //   user1, char1, user2, char2            → 第1章[user1,char1] 第2章[user2,char2]
 //   user1, char1, user2, char2, user3     → 第1章[user1,char1] 第2章[user2,char2] 第3章[user3]
-// 系统消息归属最近一章（不触发封章）。
+// 系统消息不特殊对待：按 is_user 正常参与分章（部分聊天把剧情正文标记为 is_system，
+// 若把系统消息一律归并进当前章会导致大量轮次挤进一章）。
 
 /**
  * 将消息数组按分章规则切成章节。
@@ -29,17 +30,6 @@ export function splitChapters(messages) {
   for (const mes of messages) {
     if (!mes) continue;
     const isUser = Boolean(mes.is_user);
-    const isSystem = Boolean(mes.is_system);
-
-    // 系统消息：归属最近一章（当前未封章则入 current，已封则追加到最后一章）
-    if (isSystem) {
-      if (current.length === 0 && chapters.length) {
-        chapters[chapters.length - 1].messages.push(mes);
-      } else {
-        current.push(mes);
-      }
-      continue;
-    }
 
     if (current.length === 0) {
       current.push(mes);
@@ -81,6 +71,6 @@ export function getChapterTitle(chapter, options = {}) {
   const firstChar = chapter.messages.find((m) => !m.is_user && !m.is_system);
   const first = chapter.messages[0];
   if (firstChar) return firstChar.name || fallback;
-  if (first) return first.is_user ? userName : first.name || fallback;
+  if (first) return first.name || userName || fallback;
   return fallback;
 }
