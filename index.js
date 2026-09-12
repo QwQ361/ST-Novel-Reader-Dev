@@ -76,6 +76,15 @@ jQuery(async () => {
     getRequestHeaders,
     getPastCharacterChatsFunc,
     userName: ctx.userName || "你",
+    // 头像 URL（ST 提供，自动带缓存参数；type 固定 "avatar"，file 传 char.avatar）
+    getThumbnailUrl: (type, file) => {
+      try {
+        return ctx.getThumbnailUrl?.(type, file) ?? "";
+      } catch (err) {
+        console.warn("[NovelReader] getThumbnailUrl 失败:", err);
+        return "";
+      }
+    },
     // Markdown 安全渲染管线（converter → encodeStyleTags → DOMPurify → decodeStyleTags）
     // 可渲染任意聊天的消息，不依赖全局 chat（ST 的 messageFormatting 做不到）
     renderMarkdown: renderMarkdownCore,
@@ -439,10 +448,15 @@ jQuery(async () => {
     filtered.forEach((c, idx) => {
       const origIdx = chars.indexOf(c);
       const card = document.createElement("div");
-      card.className = "novel-card";
+      card.className = "novel-card novel-char-card";
       card.dataset.charIdx = String(origIdx);
       const version = c.char_version ? String(c.char_version) : "";
+      // 头像 URL：走 ST getThumbnailUrl，失败/缺失时 onerror 兜底默认图
+      const thumbUrl = deps.getThumbnailUrl?.("avatar", c.avatar) || "";
       card.innerHTML = `
+        <div class="novel-card-avatar">
+          <img src="${escapeHtml(thumbUrl)}" alt="${escapeHtml(c.name || "")}" loading="lazy" onerror="this.onerror=null;this.src='/img/ai4.png'">
+        </div>
         <div class="novel-card-title">${escapeHtml(c.name || deps.cfmT("未命名"))}</div>
         ${version ? `<div class="novel-card-meta">${escapeHtml(version)}</div>` : ""}`;
       card.addEventListener("click", () => openChatList(origIdx, c));

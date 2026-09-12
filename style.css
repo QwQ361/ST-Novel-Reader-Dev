@@ -228,6 +228,51 @@
   border-color: var(--SmartThemeMainColor, #4f8cff);
 }
 
+/* 书架角色卡：纵向居中（头像在上，名字/版本在下） */
+.novel-char-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 14px 12px 12px;
+  gap: 6px;
+}
+
+.novel-card-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 15%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
+    transparent
+  );
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+}
+
+.novel-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.novel-char-card .novel-card-title {
+  max-width: 100%;
+}
+
+.novel-char-card .novel-card-meta {
+  margin-top: 0;
+}
+
 .novel-card-title {
   font-weight: 600;
   white-space: nowrap;
@@ -1149,6 +1194,17 @@
   .novel-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 8px;
+  }
+
+  .novel-char-card {
+    padding: 10px 8px 8px;
+    gap: 4px;
+  }
+
+  .novel-card-avatar {
+    width: 52px;
+    height: 52px;
+    border-width: 1.5px;
   }
 
   .novel-reader-scroll {
