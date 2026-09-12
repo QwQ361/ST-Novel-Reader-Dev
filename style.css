@@ -448,6 +448,29 @@
   opacity: 0.85;
 }
 
+/* 引号/星号等内联强调元素基础样式：
+   美化主题的特殊效果由 theme-text.js 桥接注入（优先级更高会覆盖），
+   此处保证无美化主题时强调语义可读（*文字* → em，**文字** → strong） */
+.novel-msg-body em {
+  font-style: italic;
+}
+
+.novel-msg-body strong {
+  font-weight: 700;
+}
+
+.novel-msg-body q {
+  quotes: "“" "”" "‘" "’";
+}
+
+.novel-msg-body q::before {
+  content: open-quote;
+}
+
+.novel-msg-body q::after {
+  content: close-quote;
+}
+
 .novel-msg-body table {
   border-collapse: collapse;
   margin: 8px 0;

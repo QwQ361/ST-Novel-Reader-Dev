@@ -30,6 +30,7 @@ import {
   toCssUrlCore,
 } from "./integrations/topbar-icon.js";
 import { createOverlayDialog } from "./ui/modal/index.js";
+import { createThemeTextBridgeCore } from "./integrations/theme-text.js";
 import { cfmTCore, convertText, loadS2T } from "./utils/i18n.js";
 
 const EXT_NAME = "ST-Novel-Reader";
@@ -85,6 +86,9 @@ jQuery(async () => {
   });
 
   const progress = createProgressCore({ ...deps });
+
+  // 主题文本样式桥接：让美化主题的引号/星号特殊效果同样作用于阅读器正文
+  const themeTextBridge = createThemeTextBridgeCore({ document });
 
   // ---- 3. 全局设置（extension_settings 持久化） ----
   function getGlobalSettings() {
@@ -149,6 +153,13 @@ jQuery(async () => {
       }, 300);
     } catch (err) {
       console.warn("[NovelReader] 主题采样失败:", err);
+    }
+
+    // 刷新主题文本桥接样式（引号/星号特效跟随美化主题）
+    try {
+      themeTextBridge.refresh();
+    } catch (err) {
+      console.warn("[NovelReader] 主题文本样式桥接刷新失败:", err);
     }
 
     const content = dlg.content;
@@ -1319,6 +1330,13 @@ jQuery(async () => {
 
   injectTopbarButton();
   subscribeEvents();
+
+  // 启动主题文本样式桥接（美化主题引号/星号特效 → 阅读器正文）
+  try {
+    themeTextBridge.start();
+  } catch (err) {
+    console.warn("[NovelReader] 主题文本桥接启动失败:", err);
+  }
 
   // ============ 暴露全局 API ============
 
