@@ -943,7 +943,7 @@ jQuery(async () => {
     });
   }
 
-  /** 小说内检索：目录页/正文页输入关键词 → 弹出结果面板（章节 + 楼层 + 片段） */
+  /** 小说内检索：目录页/正文页输入关键词 → 弹出结果面板（章节 + 说话人 + 片段） */
   function runInChatSearch(q) {
     if (!q) {
       closeSearchPanel();
@@ -969,7 +969,6 @@ jQuery(async () => {
       item.innerHTML = `
         <div class="novel-search-item-head">
           <span class="novel-search-item-ch">${escapeHtml("第" + String(r.chapterIndex) + "章")}</span>
-          <span class="novel-search-item-floor">${escapeHtml("#" + String(r.floor))}</span>
           <span class="novel-search-item-name">${escapeHtml(String(r.name))}</span>
         </div>
         <div class="novel-search-item-snippet">${escapeHtml(String(r.snippet))}</div>`;

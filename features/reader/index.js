@@ -40,21 +40,14 @@ export function createReaderCore(deps) {
       return null;
     }
 
-    // 分章（记录每章在完整消息数组中的起始偏移，用于楼层号计算）
-    // 是否显示 user 回复：设置页「显示用户回复」开关（默认开）
+    // 分章；是否显示 user 回复：设置页「显示用户回复」开关（默认开）
     const showUserReplies = deps.getShowUserReplies
       ? deps.getShowUserReplies()
       : true;
-    let offset = 0;
-    const chapters = splitChapters(messages, { showUserReplies }).map((ch) => {
-      const startIndex = offset;
-      offset += ch.messages.length;
-      return {
-        ...ch,
-        startIndex,
-        title: getChapterTitle(ch, { userName: deps.userName }),
-      };
-    });
+    const chapters = splitChapters(messages, { showUserReplies }).map((ch) => ({
+      ...ch,
+      title: getChapterTitle(ch, { userName: deps.userName }),
+    }));
 
     chatCache = { avatar, fileName, messages, chapters };
     return chatCache;
@@ -99,8 +92,6 @@ export function createReaderCore(deps) {
       {
         batchSize: 200,
         userName: deps.userName,
-        // 楼层号基准：本章首条消息在完整数组中的序号（0 起偏移）
-        startIndex: chapter.startIndex || 0,
       },
     );
 
@@ -126,11 +117,10 @@ export function createReaderCore(deps) {
   }
 
   /**
-   * 全聊天内搜索（楼层/关键词 → 章节定位）。
+   * 全聊天内搜索（关键词 → 章节定位）。
    * @param {string} query 关键词（不区分大小写）
-   * @returns {Array<{chapterIndex:number, msgOffset:number, floor:number, name:string, snippet:string}>}
-   *   楼层号 = 消息在完整消息数组中的序号（1 起，system 也计数）；最多返回 200 条
-   *   msgOffset = 消息在本章内的偏移（用于渲染后定位 body.children[msgOffset]）
+   * @returns {Array<{chapterIndex:number, msgOffset:number, name:string, snippet:string}>}
+   *   最多返回 200 条；msgOffset = 消息在本章内的偏移（用于渲染后定位 body.children[msgOffset]）
    */
   function searchMessages(query) {
     if (!chatCache) return [];
@@ -146,11 +136,9 @@ export function createReaderCore(deps) {
         const mes = ch.messages[i];
         const text = String(mes.mes || "").toLowerCase();
         if (text.includes(q)) {
-          const floor = (ch.startIndex || 0) + i + 1;
           results.push({
             chapterIndex: ch.index,
             msgOffset: i,
-            floor,
             name: mes.name || (mes.is_user ? deps.userName : "?"),
             snippet: String(mes.mes || "").slice(0, 120),
           });
