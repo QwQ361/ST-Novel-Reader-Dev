@@ -593,6 +593,190 @@
   line-height: 1.5;
 }
 
+/* ---------- 自定义顶栏图标配置（全局设置弹窗） ---------- */
+.novel-icon-config-section {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+      transparent
+    );
+}
+
+.novel-icon-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.novel-icon-url-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 6%,
+    transparent
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.novel-icon-url-input:focus {
+  border-color: var(--SmartThemeMainColor, #4f8cff);
+}
+
+.novel-icon-dropdown-btn,
+.novel-icon-clear-btn {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 15%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
+    transparent
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.novel-icon-dropdown-btn:hover,
+.novel-icon-clear-btn:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+    transparent
+  );
+}
+
+.novel-icon-clear-btn:hover {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+/* 下拉菜单（绝对定位在输入行下方） */
+.novel-icon-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--novel-bg, var(--SmartThemeBlurTintColor, #232323));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+.novel-icon-dropdown-menu.novel-dropdown-open {
+  display: block;
+}
+
+.novel-icon-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.novel-icon-dropdown-item:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+}
+
+.novel-icon-dropdown-item.novel-icon-selected {
+  background: color-mix(
+    in srgb,
+    var(--SmartThemeMainColor, #4f8cff) 18%,
+    transparent
+  );
+}
+
+.novel-icon-preview {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 15%,
+      transparent
+    );
+}
+
+.novel-icon-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 状态提示 */
+.novel-icon-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.novel-icon-status-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.novel-icon-status-dot.novel-status-active {
+  background: #4caf50;
+  box-shadow: 0 0 6px rgba(76, 175, 80, 0.6);
+}
+
+.novel-icon-status-dot.novel-status-inactive {
+  background: rgba(128, 128, 128, 0.5);
+}
+
 .novel-swatches {
   display: flex;
   flex-wrap: wrap;

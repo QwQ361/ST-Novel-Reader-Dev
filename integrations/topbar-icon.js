@@ -15,6 +15,27 @@ export function isImageIconBackgroundCore(bgImage) {
 }
 
 /**
+ * 从 CSS url(...) 字符串中提取原始 URL。
+ * 兼容 url(https://a.png)、url("https://a.png")、url('https://a.png') 三种写法。
+ * @param {string} cssUrl
+ * @returns {string}
+ */
+export function extractUrlFromCssCore(cssUrl) {
+  return String(cssUrl || "")
+    .replace(/^url\(["']?/, "")
+    .replace(/["']?\)$/, "");
+}
+
+/**
+ * 将原始 URL 转为 CSS url(...) 字符串。
+ * @param {string} url
+ * @returns {string}
+ */
+export function toCssUrlCore(url) {
+  return `url("${url}")`;
+}
+
+/**
  * 检测邻居按钮的实际图标样式（computed style，不解析 CSS 规则）。
  * 兼容三种实现：.drawer-icon 元素本身 / .drawer-toggle / ::before 伪元素。
  * @param {object} deps { document, window, isImageIconBackground }
@@ -56,7 +77,10 @@ export function detectNeighborIconCore(deps) {
     }
 
     // 2) ::before 伪元素的 background-image
-    const beforeComputed = deps.window.getComputedStyle(neighborIcon, "::before");
+    const beforeComputed = deps.window.getComputedStyle(
+      neighborIcon,
+      "::before",
+    );
     const beforeBgImage = beforeComputed.backgroundImage;
     if (deps.isImageIconBackground(beforeBgImage)) {
       const extraStyles = {};
@@ -70,7 +94,11 @@ export function detectNeighborIconCore(deps) {
       if (bgSize) extraStyles.backgroundSize = bgSize;
       if (bgRepeat) extraStyles.backgroundRepeat = bgRepeat;
       if (bgPos) extraStyles.backgroundPosition = bgPos;
-      return { cssUrl: beforeBgImage, target: cls + "::before", styles: extraStyles };
+      return {
+        cssUrl: beforeBgImage,
+        target: cls + "::before",
+        styles: extraStyles,
+      };
     }
   }
   return null;
@@ -170,18 +198,116 @@ export function clearCustomIconCore(deps) {
 }
 
 /**
- * 顶栏图标美化适配编排：初始检测应用 + 三策略自动监听（无用户手动设置）。
+ * 扫描 styleSheets 收集美化主题注入的 URL 图标（供设置面板下拉选择）。
+ * 策略1：遍历内联 <style> 规则（跳过外部 <link> 避免跨域异常）；
+ * 策略2：computed style 检测所有已知顶栏按钮（兜底）。
+ * @param {object} deps { document, window, isImageIconBackground }
+ * @returns {{ icons: Object<string,string>, uniqueUrls: string[] }}
+ *   icons: 按钮 id → url("...") 形式的 CSS 字符串
+ *   uniqueUrls: 去重后的 CSS url 列表（下拉项预览用）
+ */
+export function detectThemeIconsCore(deps) {
+  const iconMap = {};
+  const gDoc = deps.document || document;
+  const gWin = deps.window || window;
+
+  // --- 策略1: 遍历内联 <style> 规则 ---
+  for (const sheet of gDoc.styleSheets) {
+    try {
+      if (
+        !sheet.ownerNode ||
+        sheet.ownerNode.tagName?.toUpperCase() !== "STYLE"
+      )
+        continue;
+      for (const rule of sheet.cssRules) {
+        if (!rule.selectorText || !rule.style) continue;
+        if (!deps.isImageIconBackground(rule.style.backgroundImage)) continue;
+        const matches = rule.selectorText.matchAll(
+          /#([\w-]+)(?:\s+|.*?)(?:\.drawer-icon|\.drawer-toggle)(?:::before)?/g,
+        );
+        for (const match of matches) {
+          iconMap[match[1]] = rule.style.backgroundImage;
+        }
+      }
+    } catch (e) {
+      // 跨域样式表，跳过
+    }
+  }
+
+  // --- 策略2: computed style 兜底检测已知顶栏按钮 ---
+  const knownButtons = [
+    "user-settings-button",
+    "persona-management-button",
+    "ai-config-button",
+    "character-management-button",
+    "world-info-button",
+  ];
+  for (const btnId of knownButtons) {
+    if (iconMap[btnId]) continue;
+    for (const cls of [".drawer-icon", ".drawer-toggle"]) {
+      const iconEl = gDoc.querySelector(`#${btnId} ${cls}`);
+      if (!iconEl) continue;
+      if (cls === ".drawer-icon" && iconEl.classList.contains("openIcon")) {
+        continue;
+      }
+      const computed = gWin.getComputedStyle(iconEl);
+      const bgImage = computed.backgroundImage;
+      if (deps.isImageIconBackground(bgImage)) {
+        iconMap[btnId] = bgImage;
+        break;
+      }
+      const beforeComputed = gWin.getComputedStyle(iconEl, "::before");
+      const beforeBgImage = beforeComputed.backgroundImage;
+      if (deps.isImageIconBackground(beforeBgImage)) {
+        iconMap[btnId] = beforeBgImage;
+        break;
+      }
+    }
+  }
+
+  const uniqueUrls = [...new Set(Object.values(iconMap))];
+  return { icons: iconMap, uniqueUrls };
+}
+
+/**
+ * 顶栏图标应用优先级编排：手动指定 URL > 自动检测邻居 > 默认 FA 图标。
  * @param {object} deps
- *   $, document, window, Node, setTimeout, setInterval, clearInterval,
- *   isImageIconBackground, detectNeighborIcon, applyCustomIcon, clearCustomIcon
- * @returns {{ start: Function, destroy: Function }}
+ *   getSavedIcon: () => string  读取已保存的纯 URL（无则空串）
+ *   detectNeighborIcon, applyCustomIcon, clearCustomIcon, toCssUrl
+ */
+export function applyTopbarIconFromConfigCore(deps) {
+  const saved = deps.getSavedIcon?.() || "";
+  if (saved) {
+    // 用户手动指定了 URL → 包回 url("...") 后应用（直接应用到元素本身）
+    deps.applyCustomIcon(deps.toCssUrl(saved));
+    return true;
+  }
+  const result = deps.detectNeighborIcon();
+  if (result) {
+    deps.applyCustomIcon(result.cssUrl, result.target, result.styles);
+    return true;
+  }
+  deps.clearCustomIcon();
+  return false;
+}
+
+/**
+ * 顶栏图标美化适配编排：初始检测应用 + 三策略自动监听（支持手动 URL 优先）。
+ * @param {object} deps
+ *   $, isImageIconBackground, detectNeighborIcon, applyCustomIcon, clearCustomIcon,
+ *   applyTopbarIconFromConfig（可选，手动优先编排；缺省回退到纯自动检测）
+ * @returns {{ start: Function, destroy: Function, detectAndApply: Function }}
  */
 export function createTopbarIconAdaptorCore(deps) {
   let lastNeighborBg = null;
   let themeCheckTimer = null;
 
-  /** 检测邻居并应用/清除（记录基线） */
+  /** 检测并应用（手动 URL 优先；无编排函数则纯自动） */
   function detectAndApply() {
+    if (deps.applyTopbarIconFromConfig) {
+      deps.applyTopbarIconFromConfig();
+      return;
+    }
     const result = deps.detectNeighborIcon();
     lastNeighborBg = result ? result.cssUrl : null;
     if (result) {
@@ -196,7 +322,10 @@ export function createTopbarIconAdaptorCore(deps) {
     const neighborDrawerIcon = document.querySelector(
       "#persona-management-button .drawer-icon",
     );
-    if (neighborDrawerIcon && neighborDrawerIcon.classList.contains("openIcon")) {
+    if (
+      neighborDrawerIcon &&
+      neighborDrawerIcon.classList.contains("openIcon")
+    ) {
       return;
     }
     detectAndApply();
@@ -217,7 +346,10 @@ export function createTopbarIconAdaptorCore(deps) {
       let styleChanged = false;
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
-          for (const node of [...mutation.addedNodes, ...mutation.removedNodes]) {
+          for (const node of [
+            ...mutation.addedNodes,
+            ...mutation.removedNodes,
+          ]) {
             if (
               node.nodeType === gDoc.defaultView?.Node?.ELEMENT_NODE ||
               node.nodeType === 1 /* Node.ELEMENT_NODE */
@@ -263,6 +395,11 @@ export function createTopbarIconAdaptorCore(deps) {
     // --- 策略3: 每 2s 轮询邻居按钮样式（兜底） ---
     detectAndApply();
     themeCheckTimer = setIntervalFn(() => {
+      if (deps.applyTopbarIconFromConfig) {
+        // 手动优先编排：内部读取已保存 URL，非空则不覆盖用户选择
+        detectAndApply();
+        return;
+      }
       const neighborDrawerIcon = gDoc.querySelector(
         "#persona-management-button .drawer-icon",
       );

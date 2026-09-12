@@ -19,10 +19,15 @@ import {
   renderMarkdownCore,
 } from "./integrations/sillytavern.js";
 import {
+  applyCustomIconCore,
+  applyTopbarIconFromConfigCore,
   clearCustomIconCore,
   createTopbarIconAdaptorCore,
   detectNeighborIconCore,
+  detectThemeIconsCore,
+  extractUrlFromCssCore,
   isImageIconBackgroundCore,
+  toCssUrlCore,
 } from "./integrations/topbar-icon.js";
 import { createOverlayDialog } from "./ui/modal/index.js";
 import { cfmTCore, convertText, loadS2T } from "./utils/i18n.js";
@@ -91,6 +96,7 @@ jQuery(async () => {
     if (!g.readerSettings.fontSize) g.readerSettings.fontSize = 18;
     if (!g.readerSettings.textColor) g.readerSettings.textColor = "";
     if (!g.readerSettings.bgColor) g.readerSettings.bgColor = "";
+    if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
     return g;
   }
 
@@ -844,6 +850,42 @@ jQuery(async () => {
       compact: true,
     });
     const content = dlg.content;
+
+    // ---- 检测美化主题图标（供下拉选择 / 状态提示） ----
+    let themeIcons = { icons: {}, uniqueUrls: [] };
+    try {
+      themeIcons = detectThemeIconsCore({
+        document,
+        window,
+        isImageIconBackground: isImageIconBackgroundCore,
+      });
+    } catch (err) {
+      console.warn("[NovelReader] 检测美化主题图标失败:", err);
+    }
+    const hasTheme = themeIcons.uniqueUrls.length > 0;
+    const savedIconUrl = g.customTopbarIcon || "";
+
+    // 下拉项 HTML（用纯 URL 预览背景图）
+    const dropdownItemsHtml = themeIcons.uniqueUrls
+      .map((cssUrl, idx) => {
+        const pureUrl = extractUrlFromCssCore(cssUrl);
+        const selected =
+          savedIconUrl && cssUrl.includes(savedIconUrl)
+            ? " novel-icon-selected"
+            : "";
+        return `<div class="novel-icon-dropdown-item${selected}" data-url="${escapeHtml(
+          pureUrl,
+        )}" title="${escapeHtml(pureUrl)}">
+          <span class="novel-icon-preview" style="background-image: url('${escapeHtml(
+            pureUrl,
+          )}')"></span>
+          <span class="novel-icon-name">${escapeHtml(
+            deps.cfmT("主题图标") + " " + (idx + 1),
+          )}</span>
+        </div>`;
+      })
+      .join("");
+
     content.innerHTML = `
       <div class="novel-settings-row">
         <div class="novel-settings-label">${escapeHtml(deps.cfmT("目录每页章数"))}</div>
@@ -852,7 +894,58 @@ jQuery(async () => {
       </div>
       <div class="novel-settings-row">
         <div class="novel-settings-hint">${escapeHtml(deps.cfmT("用于目录页的分页显示，修改后立即生效。"))}</div>
+      </div>
+
+      <div class="novel-settings-row novel-icon-config-section">
+        <div class="novel-settings-label">${escapeHtml(deps.cfmT("自定义顶栏图标"))}</div>
+        <div class="novel-icon-input-row">
+          <input type="text" class="novel-icon-url-input"
+                 placeholder="${
+                   hasTheme
+                     ? escapeHtml(deps.cfmT("已自动检测美化主题图标"))
+                     : escapeHtml(deps.cfmT("输入图标URL（留空使用默认图标）"))
+                 }"
+                 value="${escapeHtml(savedIconUrl)}" />
+          ${
+            hasTheme
+              ? `<button class="novel-icon-dropdown-btn" title="${escapeHtml(
+                  deps.cfmT("从美化主题中选择图标"),
+                )}"><i class="fa-solid fa-caret-down"></i></button>
+                 <div class="novel-icon-dropdown-menu">${dropdownItemsHtml}</div>`
+              : ""
+          }
+          <button class="novel-icon-clear-btn" title="${escapeHtml(
+            deps.cfmT("清除自定义图标"),
+          )}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="novel-icon-status">
+          <span class="novel-icon-status-dot ${
+            savedIconUrl ? "novel-status-active" : "novel-status-inactive"
+          }"></span>
+          <span class="novel-icon-status-text">${
+            savedIconUrl
+              ? escapeHtml(deps.cfmT("使用自定义图标"))
+              : hasTheme
+                ? escapeHtml(deps.cfmT("自动使用美化主题图标"))
+                : escapeHtml(deps.cfmT("使用默认图标"))
+          }</span>
+        </div>
+        <div class="novel-settings-hint">${
+          hasTheme
+            ? escapeHtml(
+                deps.cfmT(
+                  `检测到 ${themeIcons.uniqueUrls.length} 个美化主题图标，可从下拉菜单选择或手动输入URL`,
+                ),
+              )
+            : escapeHtml(
+                deps.cfmT(
+                  "未检测到美化主题图标替换。启用美化主题后会自动检测并适配",
+                ),
+              )
+        }</div>
       </div>`;
+
+    // ---- 目录每页章数 ----
     const range = content.querySelector("input[type='range']");
     const valueEl = content.querySelector(".novel-settings-value");
     valueEl.textContent = `${range.value} ${deps.cfmT("章/页")}`;
@@ -874,6 +967,102 @@ jQuery(async () => {
         if (container) renderTocPage(container);
       }
     });
+
+    // ---- 自定义顶栏图标：下拉选择 / 手动输入 / 清除 ----
+    const iconSection = content.querySelector(".novel-icon-config-section");
+    const urlInput = content.querySelector(".novel-icon-url-input");
+    const statusText = content.querySelector(".novel-icon-status-text");
+    const statusDot = content.querySelector(".novel-icon-status-dot");
+    const dropdownMenu = content.querySelector(".novel-icon-dropdown-menu");
+    const dropdownBtn = content.querySelector(".novel-icon-dropdown-btn");
+
+    /** 刷新状态提示 */
+    function updateIconStatus() {
+      const cur = g.customTopbarIcon || "";
+      const active = !!cur;
+      statusDot.classList.toggle("novel-status-active", active);
+      statusDot.classList.toggle("novel-status-inactive", !active);
+      statusText.textContent = cur
+        ? deps.cfmT("使用自定义图标")
+        : hasTheme
+          ? deps.cfmT("自动使用美化主题图标")
+          : deps.cfmT("使用默认图标");
+    }
+
+    /** 应用当前配置到顶栏图标 */
+    function applyIconConfig() {
+      applyTopbarIconFromConfigCore({
+        getSavedIcon: () => g.customTopbarIcon,
+        detectNeighborIcon: () =>
+          detectNeighborIconCore({
+            document,
+            window,
+            isImageIconBackground: isImageIconBackgroundCore,
+          }),
+        applyCustomIcon: (cssUrl, targetCls, extraStyles) =>
+          applyCustomIconCore(cssUrl, targetCls, extraStyles, { $ }),
+        clearCustomIcon: () => clearCustomIconCore({ $ }),
+        toCssUrl: toCssUrlCore,
+      });
+    }
+
+    // 下拉按钮：开合菜单
+    dropdownBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dropdownMenu.classList.toggle("novel-dropdown-open");
+    });
+    // 点击其它区域关闭下拉
+    document.addEventListener("click", (e) => {
+      if (dropdownMenu && !e.target.closest(".novel-icon-input-row")) {
+        dropdownMenu.classList.remove("novel-dropdown-open");
+      }
+    });
+    // 下拉选择主题图标 → 保存 + 立即应用
+    dropdownMenu
+      ?.querySelectorAll(".novel-icon-dropdown-item")
+      .forEach((item) => {
+        item.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const url = item.dataset.url;
+          urlInput.value = url;
+          g.customTopbarIcon = url;
+          deps.saveSettings();
+          applyIconConfig();
+          updateIconStatus();
+          dropdownMenu.classList.remove("novel-dropdown-open");
+          dropdownMenu
+            .querySelectorAll(".novel-icon-dropdown-item")
+            .forEach((i) => i.classList.remove("novel-icon-selected"));
+          item.classList.add("novel-icon-selected");
+        });
+      });
+    // 手动输入 URL（回车/失焦触发 change）→ 保存 + 应用；清空 → 回自动检测
+    urlInput?.addEventListener("change", () => {
+      const url = urlInput.value.trim();
+      g.customTopbarIcon = url;
+      deps.saveSettings();
+      if (url) {
+        applyIconConfig();
+      } else {
+        // 清空 → 回到自动检测模式（手动编排内部会走检测分支）
+        applyIconConfig();
+      }
+      updateIconStatus();
+    });
+    // 清除按钮：清空输入 + 设置 + 回自动检测
+    content
+      .querySelector(".novel-icon-clear-btn")
+      ?.addEventListener("click", () => {
+        urlInput.value = "";
+        g.customTopbarIcon = "";
+        deps.saveSettings();
+        applyIconConfig();
+        updateIconStatus();
+        dropdownMenu
+          ?.querySelectorAll(".novel-icon-dropdown-item")
+          .forEach((i) => i.classList.remove("novel-icon-selected"));
+      });
   }
 
   // ============ 底部栏事件（小说设置） ============
@@ -1090,6 +1279,7 @@ jQuery(async () => {
     $("#rightNavHolder").before(btn);
 
     // 顶栏图标美化适配：检测美化主题图标并自动保持一致（延迟等主题样式加载）
+    // 优先级：手动指定 URL > 自动检测邻居 > 默认 FA 图标
     try {
       const adaptor = createTopbarIconAdaptorCore({
         $,
@@ -1103,6 +1293,20 @@ jQuery(async () => {
         applyCustomIcon: (cssUrl, targetCls, extraStyles) =>
           applyCustomIconCore(cssUrl, targetCls, extraStyles, { $ }),
         clearCustomIcon: () => clearCustomIconCore({ $ }),
+        applyTopbarIconFromConfig: () =>
+          applyTopbarIconFromConfigCore({
+            getSavedIcon: () => getGlobalSettings().customTopbarIcon,
+            detectNeighborIcon: () =>
+              detectNeighborIconCore({
+                document,
+                window,
+                isImageIconBackground: isImageIconBackgroundCore,
+              }),
+            applyCustomIcon: (cssUrl, targetCls, extraStyles) =>
+              applyCustomIconCore(cssUrl, targetCls, extraStyles, { $ }),
+            clearCustomIcon: () => clearCustomIconCore({ $ }),
+            toCssUrl: toCssUrlCore,
+          }),
       });
       adaptor.start();
     } catch (err) {
