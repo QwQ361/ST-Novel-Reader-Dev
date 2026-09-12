@@ -154,6 +154,7 @@ export function applyCustomIconCore(cssUrl, targetCls, extraStyles, deps) {
     // .drawer-toggle 模式：应用到 toggle 元素并复制尺寸/背景属性
     if (toggle.length > 0) {
       toggle.addClass("novel-custom-toggle-icon");
+      if (!toggle.attr("title")) toggle.attr("title", "酒馆小说阅读器");
       toggle.css({
         "background-image": cssUrl,
         "background-repeat": extraStyles.backgroundRepeat || "no-repeat",

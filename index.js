@@ -1270,11 +1270,12 @@ jQuery(async () => {
     btn.id = "novel-topbar-button";
     btn.className = "drawer";
     btn.innerHTML = `
-      <div class="drawer-toggle drawer-header">
+      <div class="drawer-toggle drawer-header" title="酒馆小说阅读器">
         <div class="drawer-icon closedIcon fa-solid fa-book interactable" title="酒馆小说阅读器" tabindex="0" role="button"></div>
       </div>`;
     btn.addEventListener("click", (e) => {
-      if (e.target.closest(".drawer-icon")) openReaderDialog();
+      // 无论点击 icon 还是覆盖其上的 toggle（url 图标模式），都打开阅读器
+      if (e.target.closest("#novel-topbar-button")) openReaderDialog();
     });
     $("#rightNavHolder").before(btn);
 
