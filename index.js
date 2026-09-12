@@ -183,13 +183,15 @@ jQuery(async () => {
     bodyEl.innerHTML = "";
     const backBtn = topbarEl.querySelector('[data-action="back"]');
     const backActions = {
-      bookshelf: null,
+      bookshelf: "close", // 书架页：返回按钮 = 关闭阅读器（退出到 ST 主界面）
       chats: "bookshelf",
       toc: "chats",
       reader: "toc",
     };
     backBtn.dataset.backTarget = backActions[page] || "";
     backBtn.style.display = backActions[page] ? "" : "none";
+    // 返回按钮提示：书架页为「退出」，其余页为「返回」
+    backBtn.title = page === "bookshelf" ? deps.cfmT("退出") : deps.cfmT("返回");
     // 正文页：显示底部栏；其余页隐藏
     bottombarEl.style.display = page === "reader" ? "" : "none";
     // 非正文页恢复顶栏显示（正文页可能被点击隐藏）
@@ -210,9 +212,10 @@ jQuery(async () => {
     closeSearchPanel();
   }
 
-  /** 返回上一页 */
+  /** 返回上一页 / 书架页则退出阅读器 */
   function goBack() {
     const backActions = {
+      bookshelf: closeReaderDialog, // 书架页：关闭弹窗（退出到 ST 主界面）
       chats: showBookshelf,
       toc: showChats,
       reader: showToc,
