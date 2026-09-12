@@ -1188,12 +1188,11 @@ jQuery(async () => {
       item.className = "novel-swatch-item";
       const sw = document.createElement("div");
       sw.className =
-        "novel-swatch" + (rs.themeId === theme.id ? " active" : "");
-      // 纯背景色块（∅ 用亮暗对半示意「跟随酒馆」）
-      sw.style.background =
-        theme.bg === ""
-          ? "linear-gradient(135deg,#f5f5f5 50%,#333 50%)"
-          : theme.bg;
+        "novel-swatch" +
+        (rs.themeId === theme.id ? " active" : "") +
+        (theme.bg === "" ? " novel-swatch-palette" : "");
+      // 纯背景色块；∅ 用调色板样式示意「跟随酒馆」（样式在 style.css 定义）
+      if (theme.bg !== "") sw.style.background = theme.bg;
       sw.title = deps.cfmT(theme.name);
       sw.dataset.themeId = theme.id;
       sw.addEventListener("click", () => {
