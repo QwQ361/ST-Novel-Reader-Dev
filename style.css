@@ -363,7 +363,7 @@
 
 .novel-toc-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -376,6 +376,37 @@
 .novel-toc-sub {
   font-size: 0.85rem;
   opacity: 0.6;
+}
+
+/* 目录头最右侧书签按钮：查看当前聊天的收藏章节 */
+.novel-toc-bookmark-btn {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+      transparent
+    );
+  font-size: 0.85rem;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.novel-toc-bookmark-btn:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+    transparent
+  );
 }
 
 .novel-toc-list {
@@ -771,6 +802,104 @@
 .novel-bottombar .novel-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* 底部栏书签按钮：当前章节已收藏时高亮（实心强调） */
+.novel-bottombar .novel-btn.novel-bookmark-active {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 28%,
+    transparent
+  );
+  border-color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+  color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+}
+
+/* ---------- 收藏章节弹窗 ---------- */
+.novel-bookmark-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.novel-bookmark-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+      transparent
+    );
+  transition: background 0.15s ease;
+}
+
+.novel-bookmark-item:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+    transparent
+  );
+}
+
+.novel-bookmark-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.novel-bookmark-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.novel-bookmark-meta {
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+.novel-bookmark-del {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  opacity: 0.6;
+  transition: all 0.15s ease;
+}
+
+.novel-bookmark-del:hover {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    #e5484d 20%,
+    transparent
+  );
+  color: #e5484d;
 }
 
 .novel-btn-primary {
@@ -1289,6 +1418,15 @@
   .novel-bottombar .novel-btn {
     padding: 8px 10px;
     font-size: 0.85rem;
+  }
+
+  .novel-toc-bookmark-btn {
+    padding: 6px 8px;
+    font-size: 0.8rem;
+  }
+
+  .novel-bookmark-list {
+    max-height: 55vh;
   }
 
   .novel-settings-panel {

@@ -8,6 +8,7 @@
 //   6) 暴露全局 API（window.NovelReader）
 // 业务逻辑一律不放这里，都在 features/ 与 utils/ 中。
 
+import { createBookmarksCore } from "./features/bookmarks/index.js";
 import { createBookshelfCore } from "./features/bookshelf/index.js";
 import { createProgressCore } from "./features/progress/index.js";
 import { createReaderCore } from "./features/reader/index.js";
@@ -98,6 +99,9 @@ jQuery(async () => {
   });
 
   const progress = createProgressCore({ ...deps });
+
+  // 书签：收藏章节 + 收藏列表（数据存 extension_settings，按 角色+聊天 维度）
+  const bookmarks = createBookmarksCore({ ...deps });
 
   // 主题文本样式桥接：让美化主题的引号/星号特殊效果同样作用于阅读器正文
   const themeTextBridge = createThemeTextBridgeCore({ document });
@@ -208,6 +212,7 @@ jQuery(async () => {
       <button class="novel-btn" data-action="toc">目录</button>
       <button class="novel-btn" data-action="prev">上一章</button>
       <button class="novel-btn" data-action="next">下一章</button>
+      <button class="novel-btn" data-action="bookmark" title="收藏当前章节">书签</button>
       <button class="novel-btn" data-action="reader-settings">界面</button>`;
     content.appendChild(bottombarEl);
 
@@ -299,8 +304,12 @@ jQuery(async () => {
     }
 
     // 目录 / 正文页：需要聊天对象（file_name 匹配）
+    // 注意：此处不能检查 state.currentChar !== char——
+    // 首次打开（页面刷新后）state.currentChar 恒为 null，openToc 内部才赋值，
+    // 若检查会导致恢复 reader/toc 页面时静默 return → 空白弹窗。
+    // 改为检查弹窗是否仍打开（等待期间用户可能已关闭），openToc 自带并发保护。
     const chats = await bookshelf.getCharChats(charIdx, char.avatar);
-    if (state.currentChar !== char) return; // 已切换
+    if (!dialogRef) return; // 等待期间弹窗已关闭
     const chat = (chats || []).find((c) => c.file_name === last.chatFileName);
     if (!chat) {
       // 聊天已被删除 → 显示该角色的聊天列表
@@ -582,8 +591,17 @@ jQuery(async () => {
       <div class="novel-toc-head">
         <h2>目录</h2>
         <span class="novel-toc-sub">${escapeHtml(String(total))} 章</span>
+        <button class="novel-toc-bookmark-btn" title="查看收藏章节" data-action="bookmarks">🔖 收藏</button>
       </div>
       <div class="novel-toc-list"></div>`;
+
+    // 目录头最右侧书签按钮：打开当前聊天的收藏列表
+    toc
+      .querySelector('[data-action="bookmarks"]')
+      .addEventListener("click", (e) => {
+        e.stopPropagation();
+        openBookmarksDialog();
+      });
 
     const list = toc.querySelector(".novel-toc-list");
     pageChapters.forEach((ch) => {
@@ -774,6 +792,104 @@ jQuery(async () => {
     const next = bottombarEl.querySelector('[data-action="next"]');
     if (prev) prev.disabled = cur <= 1;
     if (next) next.disabled = cur >= total;
+    // 书签按钮：当前章节已收藏则高亮（标实心），未收藏为描边
+    const bmBtn = bottombarEl.querySelector('[data-action="bookmark"]');
+    if (bmBtn) {
+      const hasBm =
+        state.currentChar &&
+        state.currentChat &&
+        bookmarks.has(state.currentChar.avatar, state.currentChat.file_name, cur);
+      bmBtn.classList.toggle("novel-bookmark-active", !!hasBm);
+      bmBtn.title = hasBm ? "取消收藏当前章节" : "收藏当前章节";
+    }
+  }
+
+  // ============ 书签（收藏章节） ============
+
+  /** 底部栏「书签」：收藏 / 取消收藏当前章节 */
+  function toggleBookmark() {
+    if (!state.currentChar || !state.currentChat || !state.currentChapter) {
+      return;
+    }
+    const avatar = state.currentChar.avatar;
+    const fileName = state.currentChat.file_name;
+    const chapter = state.currentChapter;
+
+    if (bookmarks.has(avatar, fileName, chapter)) {
+      bookmarks.remove(avatar, fileName, chapter);
+    } else {
+      const ch = reader.getChapter(chapter);
+      bookmarks.add(avatar, fileName, {
+        chapter,
+        title: ch?.title || "",
+        size: ch?.messages?.length || 0,
+      });
+    }
+    updateBottomButtons();
+  }
+
+  /**
+   * 打开收藏列表弹窗（当前聊天全部书签，按章节大小降序）。
+   * 点击条目 → 跳转到对应章节；每条右侧删除按钮 → 删除书签。
+   */
+  function openBookmarksDialog() {
+    if (!state.currentChar || !state.currentChat) return;
+    const avatar = state.currentChar.avatar;
+    const fileName = state.currentChat.file_name;
+
+    const dlg = createOverlayDialog({
+      title: "收藏章节",
+      compact: true,
+    });
+    const content = dlg.content;
+
+    /** 渲染收藏列表到弹窗内容（删除后调用以刷新） */
+    function renderItems() {
+      const items = bookmarks.list(avatar, fileName);
+      content.innerHTML = "";
+      const title = content.closest(".novel-dialog")?.querySelector(".novel-dialog-title");
+      if (title) title.textContent = `收藏章节（${items.length}）`;
+
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "novel-empty";
+        empty.textContent = "暂无收藏章节";
+        content.appendChild(empty);
+        return;
+      }
+
+      const list = document.createElement("div");
+      list.className = "novel-bookmark-list";
+      items.forEach((bm) => {
+        const item = document.createElement("div");
+        item.className = "novel-bookmark-item";
+        item.innerHTML = `
+          <div class="novel-bookmark-info">
+            <div class="novel-bookmark-title">${escapeHtml(
+              "第" + String(bm.chapter) + "章" + (bm.title ? " · " + String(bm.title) : ""),
+            )}</div>
+            <div class="novel-bookmark-meta">${escapeHtml(String(bm.size))} 条消息</div>
+          </div>
+          <button class="novel-bookmark-del" title="删除书签">×</button>`;
+        // 点击条目 → 跳转到该章节
+        item.addEventListener("click", () => {
+          dlg.close();
+          openChapter(bm.chapter);
+        });
+        // 删除按钮：阻止冒泡（不触发跳转），删除后刷新列表
+        const delBtn = item.querySelector(".novel-bookmark-del");
+        delBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          bookmarks.remove(avatar, fileName, bm.chapter);
+          updateBottomButtons();
+          renderItems();
+        });
+        list.appendChild(item);
+      });
+      content.appendChild(list);
+    }
+
+    renderItems();
   }
 
   /** 上一章 / 下一章 */
@@ -1108,6 +1224,9 @@ jQuery(async () => {
       .querySelector('[data-action="next"]')
       .addEventListener("click", () => goChapter(1));
     bottombarEl
+      .querySelector('[data-action="bookmark"]')
+      .addEventListener("click", () => toggleBookmark());
+    bottombarEl
       .querySelector('[data-action="reader-settings"]')
       .addEventListener("click", () => toggleReaderSettings());
   }
@@ -1357,6 +1476,7 @@ jQuery(async () => {
     bookshelf,
     reader,
     progress,
+    bookmarks,
   };
 
   console.log("[NovelReader] 已就绪，点击顶栏书图标打开。");
