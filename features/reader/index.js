@@ -94,7 +94,13 @@ export function createReaderCore(deps) {
       { ...deps, renderMarkdown: deps.renderMarkdown },
       body,
       chapter.messages,
-      { batchSize: 200, tc, userName: deps.userName },
+      {
+        batchSize: 200,
+        tc,
+        userName: deps.userName,
+        // 楼层号基准：本章首条消息在完整数组中的序号（0 起偏移）
+        startIndex: chapter.startIndex || 0,
+      },
     );
 
     // 定位到指定消息（从搜索结果跳转时）：按章内偏移滚动定位 + 高亮

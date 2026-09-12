@@ -17,7 +17,7 @@
  */
 export function renderMessage(deps, mes, options = {}) {
   const { renderMarkdown = null } = deps;
-  const { tc = (t) => t } = options;
+  const { tc = (t) => t, floor = null } = options;
 
   const name = mes.name || options.userName || "?";
   const isUser = Boolean(mes.is_user);
@@ -40,8 +40,10 @@ export function renderMessage(deps, mes, options = {}) {
 
   // 简繁转换（针对说话人标签；正文 HTML 已在管线内处理）
   const label = tc(name);
-  // 时间戳只显示 HH:MM（去掉日期部分；无效值兜底显示原文）
-  const time = mes.send_date ? escapeHtmlFallback(formatTimeOnly(mes.send_date)) : "";
+  // 楼层 + 时间戳：#楼层 年/月/日 时:分（本地时区；无效值兜底显示原文）
+  const time = mes.send_date
+    ? escapeHtmlFallback(formatFloorTime(floor, mes.send_date))
+    : "";
 
   const cls = [
     "novel-msg",
@@ -76,7 +78,7 @@ export async function renderMessagesBatched(
   messages,
   options = {},
 ) {
-  const { batchSize = 200, onProgress } = options;
+  const { batchSize = 200, onProgress, startIndex = 0 } = options;
   const total = messages.length;
 
   // 用 DocumentFragment 累积，避免多次重排
@@ -87,7 +89,11 @@ export async function renderMessagesBatched(
     const mes = messages[i];
     if (!mes) continue;
     const wrapper = document.createElement("div");
-    wrapper.innerHTML = renderMessage(deps, mes, options);
+    // 楼层号 = 章起始偏移 + 章内序号 + 1（与搜索楼层号一致）
+    wrapper.innerHTML = renderMessage(deps, mes, {
+      ...options,
+      floor: startIndex + i + 1,
+    });
     // wrapper 只含一个子节点（novel-msg），取其首个元素挂载
     const node = wrapper.firstElementChild;
     if (node) {
@@ -127,16 +133,21 @@ function escapeHtmlFallback(str) {
 }
 
 /**
- * 消息时间戳只显示时间（HH:MM），去掉日期部分。
+ * 楼层 + 消息时间戳：#楼层 年/月/日 时:分（本地时区）。
  * ST 消息的 send_date 形如 "2026-09-07T11:37:16.293Z"（ISO 8601 UTC）。
- * 解析成功 → 本地时区 HH:MM；解析失败 → 返回原文兜底。
+ * 解析失败 → 返回原文兜底。
+ * @param {number|null|undefined} floor 楼层号（消息在完整数组中的序号，1 起）
  * @param {string|number|Date} value
  * @returns {string}
  */
-function formatTimeOnly(value) {
+function formatFloorTime(floor, value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value ?? "");
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
   const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  const timePart = `${yyyy}/${mm}/${dd} ${hh}:${mi}`;
+  return floor != null && floor > 0 ? `#${floor} ${timePart}` : timePart;
 }

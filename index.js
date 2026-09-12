@@ -1183,14 +1183,17 @@ jQuery(async () => {
     const themeSwatches = document.createElement("div");
     themeSwatches.className = "novel-swatches";
     READER_THEMES.forEach((theme) => {
+      // 每个主题 = 色块 + 底部名字标注，等距铺满
+      const item = document.createElement("div");
+      item.className = "novel-swatch-item";
       const sw = document.createElement("div");
       sw.className =
         "novel-swatch" + (rs.themeId === theme.id ? " active" : "");
-      // 双色渐变：上半背景色、下半强调色（文字/引号色），∅ 用亮暗对半
+      // 纯背景色块（∅ 用亮暗对半示意「跟随酒馆」）
       sw.style.background =
         theme.bg === ""
           ? "linear-gradient(135deg,#f5f5f5 50%,#333 50%)"
-          : `linear-gradient(180deg, ${theme.bg} 50%, ${theme.fg || theme.bg} 50%)`;
+          : theme.bg;
       sw.title = deps.cfmT(theme.name);
       sw.dataset.themeId = theme.id;
       sw.addEventListener("click", () => {
@@ -1202,7 +1205,12 @@ jQuery(async () => {
           .forEach((s) => s.classList.remove("active"));
         sw.classList.add("active");
       });
-      themeSwatches.appendChild(sw);
+      item.appendChild(sw);
+      const swName = document.createElement("div");
+      swName.className = "novel-swatch-name";
+      swName.textContent = deps.cfmT(theme.name);
+      item.appendChild(swName);
+      themeSwatches.appendChild(item);
     });
     themeRow.appendChild(themeLabel);
     themeRow.appendChild(themeSwatches);
