@@ -1,10 +1,14 @@
-o// utils/i18n.js
+// utils/i18n.js
 // 简繁转换接入层。
 // s2t.js 由用户直接复制到插件根目录，是自执行 IIFE（挂 window._cfm_s2t，提供 toTraditional / toSimplified）。
 // 本模块负责：
 //  1) 幂等地用 fetch + new Function 注入 s2t.js（它没有 export，无法 ES import）
 //  2) 提供 cfmTCore(text) 风格的界面文本封装（仅 language === 'zh-TW' 时转繁体）
 //  3) 提供 convertText(text, enabled) 供小说正文按用户设置转换
+
+// s2t.js 相对本模块（utils/）向上两级 = 插件根目录；用 import.meta.url 解析成绝对路径，
+// 避免浏览器中 fetch 相对路径相对于页面文档 URL（页面根）解析不到文件。
+const S2T_URL = new URL("../s2t.js", import.meta.url).href;
 
 // 加载状态缓存
 let _s2tPromise = null;
@@ -17,7 +21,7 @@ export function loadS2T() {
   if (window._cfm_s2t) return Promise.resolve(window._cfm_s2t);
   if (_s2tPromise) return _s2tPromise;
 
-  _s2tPromise = fetch("./s2t.js")
+  _s2tPromise = fetch(S2T_URL)
     .then((res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.text();
