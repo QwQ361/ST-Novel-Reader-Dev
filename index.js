@@ -95,6 +95,12 @@ jQuery(async () => {
     getCharacters: () => ctx.characters,
   });
 
+  // 正则过滤：让用户把酒馆正则应用到小说阅读（勾选状态存 extension_settings）
+  const regexCore = createRegexCore({
+    ...deps,
+    getStContext: () => getStContext(),
+  });
+
   const reader = createReaderCore({
     ...deps,
     getChatMessages: (avatar, fileName) =>
@@ -107,12 +113,6 @@ jQuery(async () => {
 
   // 书签：收藏章节 + 收藏列表（数据存 extension_settings，按 角色+聊天 维度）
   const bookmarks = createBookmarksCore({ ...deps });
-
-  // 正则过滤：让用户把酒馆正则应用到小说阅读（勾选状态存 extension_settings）
-  const regexCore = createRegexCore({
-    ...deps,
-    getStContext: () => getStContext(),
-  });
 
   // 主题文本样式桥接：让美化主题的引号/星号特殊效果同样作用于阅读器正文
   const themeTextBridge = createThemeTextBridgeCore({ document });
