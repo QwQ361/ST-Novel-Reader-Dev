@@ -209,6 +209,24 @@ jQuery(async () => {
       return;
     }
 
+    // 上次在书架页关闭 → 直接显示书架（不残留 currentChar 走目录/正文分支）
+    if (last.page === "bookshelf") {
+      showBookshelf();
+      return;
+    }
+
+    // 恢复失败（聊天被删 / 加载异常等）一律降级回书架，避免空白页
+    try {
+      await restoreLastViewInner(last);
+    } catch (err) {
+      console.warn("[NovelReader] 恢复上次视图失败，降级回书架:", err);
+      showBookshelf();
+    }
+  }
+
+  /** restoreLastView 的实际恢复逻辑（异常由外层兜底） */
+  async function restoreLastViewInner(last) {
+    const g = getGlobalSettings();
     const chars = bookshelf.getCharacters();
     // 优先按 avatar 匹配（角色顺序可能变化），再按索引、最后按名称
     let char = null;
