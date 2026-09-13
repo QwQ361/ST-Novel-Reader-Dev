@@ -24,6 +24,7 @@ export function getStContext() {
 // ---- 模块导出缓存（由 loadStCoreModules 填充，访问器直接读取）----
 let _scriptModule = null; // public/script.js 的模块命名空间
 let _chatsModule = null; // public/scripts/chats.js 的模块命名空间
+let _presetManagerModule = null; // public/scripts/preset-manager.js 的模块命名空间
 let _loaded = false;
 
 /**
@@ -36,6 +37,7 @@ export async function loadStCoreModules() {
   const results = await Promise.all([
     importScriptModule(),
     importChatsModule(),
+    importPresetManagerModule(),
     importModule("../../../../personas.js"),
     importModule("../../../../utils.js"),
     importModule("../../../../popup.js"),
@@ -70,6 +72,17 @@ async function importChatsModule() {
     return true;
   } catch (err) {
     console.warn("[NovelReader] 动态导入 chats.js 失败:", err);
+    return null;
+  }
+}
+
+/** 导入 public/scripts/preset-manager.js 并缓存（getPresetManager 用于读取各预设的 regex_scripts） */
+async function importPresetManagerModule() {
+  try {
+    _presetManagerModule = await import(/* @vite-ignore */ "../../../../preset-manager.js");
+    return true;
+  } catch (err) {
+    console.warn("[NovelReader] 动态导入 preset-manager.js 失败:", err);
     return null;
   }
 }
@@ -114,6 +127,23 @@ export function openCharacterChatFunc() {
  */
 export function messageFormattingFunc() {
   return _scriptModule?.messageFormatting ?? window.messageFormatting ?? null;
+}
+
+/**
+ * 取「预设管理器」函数（preset-manager.js 命名导出 getPresetManager）。
+ * 优先用 ST 上下文自带的（SillyTavern.getContext().getPresetManager，st-context.js 已挂载），
+ * 再兜底动态导入的模块命名空间。
+ * @returns {Function|null} getPresetManager(apiId?) => PresetManager | null
+ */
+export function getPresetManagerFunc() {
+  try {
+    const ctx = getStContext();
+    if (typeof ctx?.getPresetManager === "function") return ctx.getPresetManager;
+    return _presetManagerModule?.getPresetManager ?? window.getPresetManager ?? null;
+  } catch (err) {
+    console.warn("[NovelReader] getPresetManagerFunc 失败:", err);
+    return null;
+  }
 }
 
 // ---- Markdown 安全渲染管线 ----

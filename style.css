@@ -1175,6 +1175,47 @@
   padding: 4px 0;
 }
 
+/* 预设正则子区块（位于正则过滤下方） */
+.novel-regex-preset-section {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+      transparent
+    );
+}
+
+.novel-regex-preset-select {
+  width: 100%;
+  margin: 4px 0 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    var(--novel-bg, var(--SmartThemeBlurTintColor, #232323))
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 0.82rem;
+}
+
+.novel-regex-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 /* 下拉菜单（绝对定位在输入行下方） */
 .novel-icon-dropdown-menu {
   display: none;

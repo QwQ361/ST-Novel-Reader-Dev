@@ -15,6 +15,7 @@ import { createReaderCore } from "./features/reader/index.js";
 import { createRegexCore } from "./features/regex/index.js";
 import {
   getPastCharacterChatsFunc,
+  getPresetManagerFunc,
   getRequestHeaders,
   getStContext,
   loadStCoreModules,
@@ -71,6 +72,7 @@ jQuery(async () => {
     getStContext,
     getRequestHeaders,
     getPastCharacterChatsFunc,
+    getPresetManagerFunc,
     userName: ctx.userName || "你",
     // 头像 URL（ST 提供，自动带缓存参数；type 固定 "avatar"，file 传 char.avatar）
     getThumbnailUrl: (type, file) => {
@@ -1113,6 +1115,13 @@ jQuery(async () => {
         <div class="novel-settings-label">正则过滤</div>
         <div class="novel-settings-hint">把酒馆正则应用到小说阅读：勾选后，正文渲染时会先按勾选的正则处理消息内容（隐藏 OOC 指令、去敏感词等）。全局正则始终可用；角色正则仅在该角色的聊天中生效。</div>
         <div class="novel-regex-list"></div>
+      </div>
+
+      <div class="novel-settings-row novel-regex-preset-section">
+        <div class="novel-settings-label">预设正则</div>
+        <div class="novel-settings-hint">从 API 预设中启用正则：先选择预设，再勾选其中的正则。切换查看其他预设时，已勾选的正则依然生效（跨预设累积）。</div>
+        <select class="novel-regex-preset-select"></select>
+        <div class="novel-regex-preset-list"></div>
       </div>`;
 
     // ---- 目录每页章数 ----
@@ -1271,41 +1280,113 @@ jQuery(async () => {
     // ---- 正则过滤：列出酒馆正则（全局 + 当前角色级），勾选后应用到小说阅读 ----
     const regexListEl = content.querySelector(".novel-regex-list");
     const avatarForRegex = state.currentChar?.avatar || "";
-    const regexScripts = regexCore.getAllScripts({ avatar: avatarForRegex });
+    // 全局/角色列表不包含预设正则（预设单独在下方子区块列出）
+    const regexScripts = regexCore.getAllScripts({
+      avatar: avatarForRegex,
+      presetNames: [],
+    });
     const regexEnabled = new Set(regexCore.getEnabledIds());
+
+    // 勾选变化后：持久化 + 若在阅读/目录页则立即重新渲染当前章
+    function applyRegexToggle(key, checked) {
+      regexCore.setEnabled(key, checked);
+      deps.saveSettings();
+      if (state.page === "reader") {
+        const ch = state.currentChapter;
+        if (ch) openChapter(ch);
+      } else if (state.page === "toc") {
+        const container = bodyEl.querySelector(".novel-page");
+        if (container) renderTocPage(container);
+      }
+    }
 
     if (!regexScripts.length) {
       const empty = document.createElement("div");
       empty.className = "novel-regex-empty";
-      empty.textContent = "没有可用的酒馆正则。请先在酒馆「正则」扩展中创建（全局或角色类型），再回来勾选。";
+      empty.textContent =
+        "没有可用的全局/角色正则。可先在下方选择 API 预设并勾选其中的预设正则。";
       regexListEl.appendChild(empty);
     } else {
       regexScripts.forEach((item) => {
         const row = document.createElement("label");
         row.className = "novel-regex-item";
-        const checked = regexEnabled.has(item.key) || regexEnabled.has(item.script.id);
-        const sourceLabel =
-          item.source === "global" ? "全局" : "角色";
+        const checked =
+          regexEnabled.has(item.key) || regexEnabled.has(item.script.id);
+        const sourceLabel = item.source === "global" ? "全局" : "角色";
         row.innerHTML = `
           <input type="checkbox" data-key="${escapeHtml(item.key)}" ${checked ? "checked" : ""} />
           <span class="novel-regex-badge">${sourceLabel}</span>
           <span class="novel-regex-name">${escapeHtml(
             String(item.script.scriptName || item.script.id || "未命名"),
           )}</span>`;
-        row.addEventListener("change", (e) => {
-          regexCore.setEnabled(item.key, e.target.checked);
-          deps.saveSettings();
-          // 若当前在目录/正文页，重新渲染当前章（让正则立即生效）
-          if (state.page === "reader") {
-            const ch = state.currentChapter;
-            if (ch) openChapter(ch);
-          } else if (state.page === "toc") {
-            const container = bodyEl.querySelector(".novel-page");
-            if (container) renderTocPage(container);
-          }
-        });
+        row.addEventListener("change", (e) =>
+          applyRegexToggle(item.key, e.target.checked),
+        );
         regexListEl.appendChild(row);
       });
+    }
+
+    // ---- 预设正则：先选预设，再勾选该预设中的正则（跨预设累积生效） ----
+    const presetSelectEl = content.querySelector(".novel-regex-preset-select");
+    const presetListEl = content.querySelector(".novel-regex-preset-list");
+    const presetOptions = regexCore.getAllPresets();
+
+    function renderPresetRegexList(presetName) {
+      presetListEl.innerHTML = "";
+      if (!presetName) {
+        const empty = document.createElement("div");
+        empty.className = "novel-regex-empty";
+        empty.textContent = "请先在上方选择一个预设。";
+        presetListEl.appendChild(empty);
+        return;
+      }
+      const items = regexCore
+        .getAllScripts({ presetNames: [presetName] })
+        .filter((item) => item.source === "preset");
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "novel-regex-empty";
+        empty.textContent = "该预设中没有正则脚本。";
+        presetListEl.appendChild(empty);
+        return;
+      }
+      items.forEach((item) => {
+        const row = document.createElement("label");
+        row.className = "novel-regex-item";
+        const checked =
+          regexEnabled.has(item.key) || regexEnabled.has(item.script.id);
+        row.innerHTML = `
+          <input type="checkbox" data-key="${escapeHtml(item.key)}" ${checked ? "checked" : ""} />
+          <span class="novel-regex-badge">预设</span>
+          <span class="novel-regex-name">${escapeHtml(
+            String(item.script.scriptName || item.script.id || "未命名"),
+          )}</span>`;
+        row.addEventListener("change", (e) =>
+          applyRegexToggle(item.key, e.target.checked),
+        );
+        presetListEl.appendChild(row);
+      });
+    }
+
+    if (!presetOptions.length) {
+      const empty = document.createElement("div");
+      empty.className = "novel-regex-empty";
+      empty.textContent = "当前 API 没有可用的预设。";
+      presetSelectEl.parentElement?.appendChild(empty);
+      presetSelectEl.style.display = "none";
+    } else {
+      presetOptions.forEach((p) => {
+        const option = document.createElement("option");
+        option.value = p.name;
+        option.textContent = p.count ? `${p.name}（${p.count}）` : p.name;
+        presetSelectEl.appendChild(option);
+      });
+      // 默认选中第一个预设并渲染其正则列表
+      presetSelectEl.value = presetOptions[0].name;
+      renderPresetRegexList(presetSelectEl.value);
+      presetSelectEl.addEventListener("change", () =>
+        renderPresetRegexList(presetSelectEl.value),
+      );
     }
   }
 
