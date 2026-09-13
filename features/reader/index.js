@@ -4,7 +4,12 @@
 //   getChatMessages(avatar, fileName)  读完整消息数组（由 bookshelf 提供）
 //   renderMarkdown(markdown)           Markdown 安全渲染管线（由 integrations 提供）
 
-import { getChapterTitle, splitChapters } from "./chapters.js";
+import {
+  filterTitleText,
+  getChapterTitle,
+  splitChapters,
+  stripChapterNumberPrefix,
+} from "./chapters.js";
 import { renderMessage, renderMessagesBatched } from "./render.js";
 
 /**
@@ -46,6 +51,13 @@ export function createReaderCore(deps) {
       : true;
     // 自动识别标题：设置页「自动识别标题」开关 + 标签名（空 = 关闭）
     const titleTag = deps.getChapterTitleTag ? deps.getChapterTitleTag() : "";
+    // 标题过滤文字（多行，每行一条）+ 是否剥离章号前缀（如「第一章：」）
+    const titleFilters = deps.getChapterTitleFilters
+      ? deps.getChapterTitleFilters()
+      : [];
+    const stripPrefix = deps.getStripChapterPrefix
+      ? deps.getStripChapterPrefix()
+      : true;
     const chapters = splitChapters(messages, { showUserReplies }).map((ch) => {
       // 标签识别开启时，若章节标题来自标签（而非说话人），标记 titleSource="tag"
       let titleSource = "speaker";
@@ -62,6 +74,11 @@ export function createReaderCore(deps) {
         else title = speaker;
       } else {
         title = getChapterTitle(ch, { userName: deps.userName });
+      }
+      // 标签标题二次处理：剥离章号前缀（「第一章：」）+ 移除用户指定的过滤文字
+      if (titleSource === "tag") {
+        if (stripPrefix) title = stripChapterNumberPrefix(title);
+        title = filterTitleText(title, titleFilters);
       }
       return { ...ch, title, titleSource };
     });

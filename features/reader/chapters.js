@@ -96,6 +96,47 @@ export function extractTagTitle(text, tag = "bt") {
 }
 
 /**
+ * 从标题中移除指定文字（过滤文字，可多条）。
+ * 每条按字面文本全文替换（删除所有出现的位置），非正则。
+ * @param {string} title 原始标题
+ * @param {Array<string>} [filters=[]] 要移除的文字列表（如 ["第一章", "："]）
+ * @returns {string} 过滤后的标题（未做首尾 trim，交由调用方）
+ */
+export function filterTitleText(title, filters = []) {
+  let t = String(title || "");
+  if (!t) return t;
+  for (const f of filters) {
+    const s = String(f || "").trim();
+    if (!s) continue;
+    t = t.split(s).join("");
+  }
+  return t;
+}
+
+/**
+ * 剥离标题开头的「章号前缀」（如「第一章：」「第1章 」「第 100 章-」）。
+ * 解决识别标题自带「第一章：章节名」与目录自带「第N章」重复的问题：
+ * 无论章节数字是阿拉伯数字、全角数字还是汉字数字，均自动识别并剥离。
+ * 例：
+ *   「第一章：序章」        → 「序章」
+ *   「第1章 风云起」        → 「风云起」
+ *   「第 100 章-归途」      → 「归途」
+ *   「第一百二十回·重逢」   → 「重逢」（章词含 回/卷/节/部/集）
+ * 剥离后为空（标题只有「第一章」无后文）时返回原标题，避免空标题。
+ * @param {string} title 识别出的标题
+ * @returns {string} 剥离前缀后的标题
+ */
+export function stripChapterNumberPrefix(title) {
+  const t = String(title || "").trim();
+  if (!t) return t;
+  // 第 + 数字（阿拉伯/全角/汉字）+ 章词 + 可选分隔符（冒号/点/空格/横线等）
+  const re =
+    /^第\s*[\d０-９一二三四五六七八九十百千万零〇两]+\s*[章回卷节部集][\s:：.。、\-—–|丨]*/;
+  const stripped = t.replace(re, "").trim();
+  return stripped || t;
+}
+
+/**
  * 生成章节显示标题（取章内第一条角色消息的说话人；无角色则取首条说话人）。
  * 若 options.tag 提供且章内消息正文包含该标签，则优先用标签内文字作为标题。
  * @param {{messages: Array<object>}} chapter 章节对象

@@ -95,6 +95,21 @@ jQuery(async () => {
       const g = getGlobalSettings();
       return g.autoChapterTitle ? g.chapterTitleTag || "" : "";
     },
+    // 标题过滤文字列表（识别标题的二次清理：剥离章号前缀 + 移除指定文字）
+    getChapterTitleFilters: () => {
+      const g = getGlobalSettings();
+      if (!g.autoChapterTitle) return [];
+      return Array.isArray(g.chapterTitleFilters)
+        ? g.chapterTitleFilters
+            .map((s) => String(s || "").trim())
+            .filter(Boolean)
+        : [];
+    },
+    // 是否剥离识别标题开头的章号前缀（如「第一章：」；默认剥离）
+    getStripChapterPrefix: () => {
+      const g = getGlobalSettings();
+      return g.stripChapterPrefix !== false;
+    },
   };
 
   const bookshelf = createBookshelfCore({
@@ -143,6 +158,10 @@ jQuery(async () => {
     if (g.autoChapterTitle === undefined) g.autoChapterTitle = false;
     // 识别标签名（不含尖括号；仅在 autoChapterTitle 开启时生效）
     if (!g.chapterTitleTag) g.chapterTitleTag = "bt";
+    // 标题过滤文字：从识别出的标题中移除指定文字（多行，每行一条）
+    if (!Array.isArray(g.chapterTitleFilters)) g.chapterTitleFilters = [];
+    // 是否剥离识别标题开头的章号前缀（如「第一章：」；默认开启）
+    if (g.stripChapterPrefix === undefined) g.stripChapterPrefix = true;
     return g;
   }
 
@@ -1123,6 +1142,24 @@ jQuery(async () => {
           )}" placeholder="bt" spellcheck="false" />
           <span class="novel-settings-hint">仅当「自动识别标题」开启时生效，修改后需重新打开聊天。</span>
         </div>
+        <div class="novel-chapter-title-strip-row">
+          <span class="novel-settings-label">剥离章号前缀</span>
+          <label class="novel-switch">
+            <input type="checkbox" class="novel-chapter-title-strip" ${
+              g.stripChapterPrefix !== false ? "checked" : ""
+            } />
+            <span class="novel-switch-track"></span>
+            <span class="novel-switch-thumb"></span>
+          </label>
+          <span class="novel-settings-hint">自动去掉标题开头的「第一章：」等前缀，避免与目录自带「第N章」重复（支持汉字/阿拉伯/全角数字）。</span>
+        </div>
+        <div class="novel-chapter-title-filter-row">
+          <span class="novel-settings-label">过滤文字</span>
+          <textarea class="novel-chapter-title-filter" rows="2" spellcheck="false" placeholder="每行一条，将从识别标题中移除。&#10;例如：&#10;第零章&#10;（旧版）">${escapeHtml(
+            (g.chapterTitleFilters || []).join("\n"),
+          )}</textarea>
+          <span class="novel-settings-hint">逐条移除标题中的指定文字（可多条）。配合「剥离章号前缀」使用，若数字无法自动剥离可在此手动补一条。</span>
+        </div>
       </div>
 
       <div class="novel-settings-row novel-icon-config-section">
@@ -1245,15 +1282,22 @@ jQuery(async () => {
       }
     });
 
-    // ---- 自动识别标题：开关 + 标签名（保存后若在目录/正文页则重新加载当前聊天） ----
+    // ---- 自动识别标题：开关 + 标签名 + 剥离章号前缀 + 过滤文字（保存后若在目录/正文页则重新加载当前聊天） ----
     const autoTitleInput = content.querySelector(".novel-auto-chapter-title");
     const tagInput = content.querySelector(".novel-chapter-title-tag");
+    const stripInput = content.querySelector(".novel-chapter-title-strip");
+    const filterInput = content.querySelector(".novel-chapter-title-filter");
     let titleTagTimer = null;
 
     /** 保存当前标题识别配置 + 重新加载当前聊天以应用新标题 */
     async function applyChapterTitleConfig() {
       g.autoChapterTitle = autoTitleInput.checked;
       g.chapterTitleTag = (tagInput.value || "bt").trim() || "bt";
+      g.stripChapterPrefix = stripInput ? stripInput.checked : true;
+      g.chapterTitleFilters = (filterInput?.value || "")
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       deps.saveSettings();
       if (state.page === "toc" || state.page === "reader") {
         const char = state.currentChar;
@@ -1284,6 +1328,16 @@ jQuery(async () => {
     });
     tagInput?.addEventListener("input", () => {
       // 防抖：停止输入 400ms 后保存（避免频繁重载聊天）
+      clearTimeout(titleTagTimer);
+      titleTagTimer = setTimeout(() => {
+        applyChapterTitleConfig();
+      }, 400);
+    });
+    stripInput?.addEventListener("change", () => {
+      applyChapterTitleConfig();
+    });
+    filterInput?.addEventListener("input", () => {
+      // 防抖：停止输入 400ms 后保存
       clearTimeout(titleTagTimer);
       titleTagTimer = setTimeout(() => {
         applyChapterTitleConfig();
