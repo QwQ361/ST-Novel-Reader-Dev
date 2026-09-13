@@ -261,7 +261,7 @@ jQuery(async () => {
       <button class="novel-btn" data-action="toc">目录</button>
       <button class="novel-btn" data-action="prev">上一章</button>
       <button class="novel-btn" data-action="next">下一章</button>
-      <button class="novel-btn" data-action="bookmark" title="收藏当前章节">${BOOKMARK_SVG}<span>书签</span></button>
+      <button class="novel-btn" data-action="bookmark" title="收藏当前章节">书签</button>
       <button class="novel-btn" data-action="reader-settings">界面</button>`;
     content.appendChild(bottombarEl);
 
