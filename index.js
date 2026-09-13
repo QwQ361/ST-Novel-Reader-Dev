@@ -1156,10 +1156,10 @@ jQuery(async () => {
         </div>
         <div class="novel-chapter-title-filter-row">
           <span class="novel-settings-label">过滤文字</span>
-          <textarea class="novel-chapter-title-filter" rows="2" spellcheck="false" placeholder="每行一条，将从识别标题中移除。&#10;例如：&#10;第零章&#10;（旧版）">${escapeHtml(
+          <textarea class="novel-chapter-title-filter" rows="2" spellcheck="false" placeholder="每行一条，将从识别标题中移除。&#10;其中大写 N 代表任意数字。&#10;例如：&#10;第零章&#10;Chapter N">${escapeHtml(
             (g.chapterTitleFilters || []).join("\n"),
           )}</textarea>
-          <span class="novel-settings-hint">逐条移除标题中的指定文字（可多条）。配合「剥离章号前缀」使用，若数字无法自动剥离可在此手动补一条。</span>
+          <span class="novel-settings-hint">逐条移除标题中的指定文字（可多条）。填「Chapter N」可匹配 Chapter 1 / Chapter 100 等任意数字；不含 N 的条目按字面删除。配合「剥离章号前缀」使用。</span>
         </div>
       </div>
 

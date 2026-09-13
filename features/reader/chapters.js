@@ -95,22 +95,75 @@ export function extractTagTitle(text, tag = "zj") {
   return inner.replace(/^[\s\u3000]+|[\s\u3000]+$/g, ""); // 去首尾空白/全角空格
 }
 
+// 数字通配：阿拉伯 / 全角 / 汉字数字（含 百千万亿 等位词）
+const NUM_TOKEN = "[\\d０-９一二三四五六七八九十百千万零〇两]+";
+
 /**
- * 从标题中移除指定文字（过滤文字，可多条）。
- * 每条按字面文本全文替换（删除所有出现的位置），非正则。
+ * 把单条过滤模板转成正则（仅供 filterTitleText 内部使用）。
+ * 模板规则：
+ *   - 独立大写 N（两侧不是字母/数字/下划线）→ 任意数字通配（匹配 1 / 10 / 一百 / １２３）
+ *   - 模板中的空白序列 → \s+（容忍标题里多个/不同类型的空白）
+ *   - 其余字符按字面匹配（正则元字符已转义）
+ * @param {string} template 单条过滤模板
+ * @returns {RegExp|null} 内容为空或编译失败返回 null
+ */
+function templateToRegex(template) {
+  const s = String(template || "").trim();
+  if (!s) return null;
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "N") {
+      const prev = i > 0 ? s[i - 1] : "";
+      const next = i < s.length - 1 ? s[i + 1] : "";
+      if ((!prev || !/\w/.test(prev)) && (!next || !/\w/.test(next))) {
+        out += NUM_TOKEN;
+        continue;
+      }
+    }
+    if (/\s/.test(ch)) {
+      out += "\\s+";
+      continue;
+    }
+    out += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  try {
+    return new RegExp(out, "g");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 从标题中移除指定文字（过滤文字，可多条，支持模板匹配）。
+ * 每条规则：
+ *   - 含「独立大写 N」→ 模板匹配：N 视为任意数字通配符（阿拉伯/全角/汉字数字），
+ *     如 "Chapter N" 可过滤 "Chapter 1"、"Chapter 100"、"Chapter 一百"；
+ *   - 不含 N → 保持纯字面删除（向后兼容）。
+ * 过滤完成后统一清理多余空格，过滤结果为空时返回原标题（避免空副标题）。
  * @param {string} title 原始标题
- * @param {Array<string>} [filters=[]] 要移除的文字列表（如 ["第一章", "："]）
- * @returns {string} 过滤后的标题（未做首尾 trim，交由调用方）
+ * @param {Array<string>} [filters=[]] 过滤规则列表（如 ["第一章：", "Chapter N"]）
+ * @returns {string} 过滤后的标题
  */
 export function filterTitleText(title, filters = []) {
   let t = String(title || "");
   if (!t) return t;
+  const original = t;
   for (const f of filters) {
     const s = String(f || "").trim();
     if (!s) continue;
-    t = t.split(s).join("");
+    if (/\bN\b/.test(s)) {
+      // 模板含独立大写 N：按「任意数字」通配匹配并删除
+      const re = templateToRegex(s);
+      if (re) t = t.replace(re, "");
+    } else {
+      // 纯字面删除
+      t = t.split(s).join("");
+    }
   }
-  return t;
+  // 清理过滤残留的多余空格；全部被删则保留原标题
+  t = t.replace(/ +/g, " ").trim();
+  return t || original;
 }
 
 /**
