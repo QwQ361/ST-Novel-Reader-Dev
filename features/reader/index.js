@@ -103,14 +103,24 @@ export function createReaderCore(deps) {
 
     container.innerHTML = `<div class="novel-loading">加载章节…</div>`;
 
-    // 构建章标题
+    // 构建章标题：第一行「N / 总章数」，第二行「第N章 章节名」
+    // （仅当标题来自标签识别时附带章节名，否则只显示「第N章」，与目录一致）
     const titleEl = document.createElement("h2");
     titleEl.className = "novel-chapter-title";
     titleEl.textContent = `${chapter.index} / ${chatCache.chapters.length}`;
 
+    let subtitleText = `第${chapter.index}章`;
+    if (chapter.titleSource === "tag" && chapter.title) {
+      subtitleText += ` ${chapter.title}`;
+    }
+    const subtitleEl = document.createElement("div");
+    subtitleEl.className = "novel-chapter-subtitle";
+    subtitleEl.textContent = subtitleText;
+
     const inner = document.createElement("div");
     inner.className = "novel-reader-inner";
     inner.appendChild(titleEl);
+    inner.appendChild(subtitleEl);
 
     const body = document.createElement("div");
     body.className = "novel-msg-list";

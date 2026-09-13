@@ -521,9 +521,20 @@
   font-size: 1.5em;
   font-weight: 700;
   text-align: center;
-  margin: 8px 0 24px;
-  padding-bottom: 12px;
+  margin: 8px 0 6px;
+  padding-bottom: 0;
   /* 章标题颜色跟随主题正文色（避免硬编码主题主色） */
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+}
+
+/* 章标题副行：「第N章 章节名」（仅标签识别标题时附带章节名） */
+.novel-chapter-subtitle {
+  font-size: 1.05em;
+  font-weight: 500;
+  text-align: center;
+  margin: 0 0 24px;
+  padding-bottom: 12px;
+  opacity: 0.75;
   color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
   border-bottom: 1px solid
     color-mix(
