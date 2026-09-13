@@ -211,10 +211,14 @@ export function createReaderCore(deps) {
     return chatCache.chapters[chapterIndex - 1] ?? null;
   }
 
-  /** 取消当前渲染（供关闭弹窗时调用） */
+  /**
+   * 取消当前渲染（供关闭弹窗时调用）。
+   * 注意：不清空 chatCache —— 完整消息数组已由内容缓存兜底，保留内存中的
+   * 章节缓存可让「关闭后重开」秒进目录/正文，无需重新分章。
+   * 换聊天时 loadChat 会自然重建 chatCache。
+   */
   function abort() {
     currentRequest = { avatar: "", fileName: "" };
-    chatCache = null;
   }
 
   return {
