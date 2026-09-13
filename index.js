@@ -90,6 +90,8 @@ jQuery(async () => {
     saveSettings: () => ctx.saveSettingsDebounced?.(),
     // 是否显示 user 回复（设置页开关，默认 true）
     getShowUserReplies: () => getGlobalSettings().showUserReplies,
+    // 是否渲染前端界面（设置页开关：代码块含 <body> 等完整 HTML 时用 iframe 渲染）
+    getShowFrontend: () => getGlobalSettings().showFrontend,
   };
 
   const bookshelf = createBookshelfCore({
@@ -132,6 +134,7 @@ jQuery(async () => {
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
     if (g.showUserReplies === undefined) g.showUserReplies = true; // 是否显示 user 回复（默认显示）
+    if (g.showFrontend === undefined) g.showFrontend = true; // 是否渲染前端界面（默认开）
     return g;
   }
 
@@ -1074,6 +1077,18 @@ jQuery(async () => {
         <div class="novel-settings-hint">开启时 user 回复与角色消息合并为一章；关闭后不显示 user 回复，每条角色消息作为单独一章。</div>
       </div>
 
+      <div class="novel-settings-row">
+        <div class="novel-settings-label">渲染前端界面</div>
+        <label class="novel-switch">
+          <input type="checkbox" class="novel-show-frontend" ${
+            g.showFrontend ? "checked" : ""
+          } />
+          <span class="novel-switch-track"></span>
+          <span class="novel-switch-thumb"></span>
+        </label>
+        <div class="novel-settings-hint">消息中的代码块若包含 <body> 等完整 HTML 结构（酒馆助手前端界面格式），将用 iframe 渲染成独立网页，支持脚本交互；关闭后按普通代码块显示。</div>
+      </div>
+
       <div class="novel-settings-row novel-icon-config-section">
         <div class="novel-settings-label">自定义顶栏图标</div>
         <div class="novel-icon-input-row">
@@ -1184,6 +1199,17 @@ jQuery(async () => {
           // 正文页：重新打开第 1 章（章节结构已变）
           await openChapter(1);
         }
+      }
+    });
+
+    // ---- 渲染前端界面：切换后保存设置 + 若在正文页则重新渲染当前章 ----
+    const showFrontendInput = content.querySelector(".novel-show-frontend");
+    showFrontendInput?.addEventListener("change", async () => {
+      g.showFrontend = showFrontendInput.checked;
+      deps.saveSettings();
+      // 若正处于正文页，重新渲染当前章（iframe 占位符在渲染时生成）
+      if (state.page === "reader" && state.currentChapter != null) {
+        await openChapter(state.currentChapter);
       }
     });
 

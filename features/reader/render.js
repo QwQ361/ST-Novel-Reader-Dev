@@ -6,6 +6,8 @@
 // ⚠️ 不能复用 ST 的 messageFormatting：它严重依赖全局 chat 数组（chat.map / getRegexedString /
 // chat[messageId]?.extra?.type），只能渲染「当前打开的聊天」，渲染非当前聊天时返回空。
 
+import { replaceFrontendCodeBlocks, hydrateFrontendSlots } from "./frontend.js";
+
 /**
  * 单条消息渲染为安全的 HTML。
  * @param {object} deps 依赖注入
@@ -32,12 +34,32 @@ export function renderMessage(deps, mes, options = {}) {
     }
   }
 
+  // 前端界面渲染：设置页「渲染前端界面」开关（默认开）。
+  // 命中「含 <body> 等完整 HTML 的代码块」时，在 Markdown 层替换为占位符，
+  // 由 sanitize 之后的 hydrateFrontendSlots 还原为 <iframe srcdoc>（酒馆助手风格）。
+  const showFrontend = deps.getShowFrontend ? deps.getShowFrontend() : true;
+  if (showFrontend && text.includes("```")) {
+    try {
+      text = replaceFrontendCodeBlocks(text);
+    } catch (err) {
+      console.warn("[NovelReader] replaceFrontendCodeBlocks 失败，使用原文:", err);
+    }
+  }
+
   let bodyHtml = "";
   try {
     // 独立管线：converter → encodeStyleTags → DOMPurify.sanitize → decodeStyleTags
     // 不触碰全局 chat，可渲染任意聊天的消息。
     if (typeof renderMarkdown === "function") {
       bodyHtml = renderMarkdown(text);
+      // sanitize 之后：占位符 → 真实 <iframe srcdoc>（内容已安全隔离在 iframe 内）
+      if (showFrontend && bodyHtml.includes("novel-frontend-slot")) {
+        try {
+          bodyHtml = hydrateFrontendSlots(bodyHtml);
+        } catch (err) {
+          console.warn("[NovelReader] hydrateFrontendSlots 失败，保留占位符:", err);
+        }
+      }
     } else {
       // 兜底：无渲染管线时只转义纯文本
       bodyHtml = escapeHtmlFallback(text);
