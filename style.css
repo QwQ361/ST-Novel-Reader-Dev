@@ -734,14 +734,6 @@
   border-radius: 6px;
 }
 
-/* 酒馆助手风格的前端界面 iframe（代码块含 <body> 等完整 HTML 时渲染） */
-.novel-frontend-iframe {
-  width: 100%;
-  border: none;
-  display: block;
-  background: transparent;
-}
-
 @keyframes novel-fade-in {
   from {
     opacity: 0;
