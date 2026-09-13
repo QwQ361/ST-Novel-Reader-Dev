@@ -166,7 +166,14 @@ export function renderMarkdownCore(markdown) {
       // 引号 → <q>：ST 在 makeHtml 之前把成对引号（"…" “…” «…» 「…」 『…』 ＂…＂）替换为 <q>…</q>，
       // 正则会先跳过 <style> 与代码块。桥接的主题样式 .novel-msg-body q { color: var(--SmartThemeQuoteColor) }
       // 依赖这个 <q> 元素，缺了它引号就吃不到主题色。
-      let html = String(markdown ?? "").replace(
+      let html = String(markdown ?? "");
+      // 保护 HTML 标签属性内的双引号（与 ST 官方 encode_tags=false 分支一致）：
+      // 引号转 q 正则会把 <span style="color:red"> 里成对的 " 误判为引用文本并包成 <q>，
+      // 导致标签属性被破坏。先把标签内 " 换成 \ufffe 占位，转 q 完成后还原。
+      html = html.replace(/<([^>]+)>/g, function (_, contents) {
+        return "<" + contents.replace(/"/g, "\ufffe") + ">";
+      });
+      html = html.replace(
         /<style>[\s\S]*?<\/style>|```[\s\S]*?```|~~~[\s\S]*?~~~|``[\s\S]*?``|`[\s\S]*?`|(".*?")|(\u201C.*?\u201D)|(\u00AB.*?\u00BB)|(\u300C.*?\u300D)|(\u300E.*?\u300F)|(\uFF02.*?\uFF02)/gim,
         function (match, p1, p2, p3, p4, p5, p6) {
           if (p1) {
@@ -193,6 +200,8 @@ export function renderMarkdownCore(markdown) {
           }
         },
       );
+      // 还原 HTML 标签属性内的双引号（与 ST 官方一致）
+      html = html.replace(/\ufffe/g, '"');
       html = converter.makeHtml(html);
       // 处理代码块换行（与 ST 一致：修复 Firefox <br> 问题）
       html = html.replace(/<code(.*)>[\s\S]*?<\/code>/g, (match) =>
