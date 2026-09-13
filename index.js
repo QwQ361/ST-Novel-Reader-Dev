@@ -191,6 +191,11 @@ jQuery(async () => {
   let readerScrollEl = null; // 正文滚动容器（.novel-reader-scroll）
   let settingsPanelEl = null; // 界面设置子面板
 
+  // 会话内是否已打开过一次阅读器（纯内存标记，刷新页面后自动归零）。
+  // 用于「打开时显示=首页」：该设置只在刷新酒馆后的第一次打开生效，
+  // 同一次会话内正常关闭再打开（不刷新）仍恢复上次位置。
+  let sessionOpenedOnce = false;
+
   // 当前导航状态
   const state = {
     page: "bookshelf", // bookshelf | chats | toc | reader
@@ -313,11 +318,16 @@ jQuery(async () => {
   /** 打开弹窗后按上次记录恢复页面（角色列表变化时按 avatar/name 兜底） */
   async function restoreLastView() {
     const g = getGlobalSettings();
-    // 设置项「打开时显示」= 首页 → 不恢复上次位置，直接回书架
-    if (g.startPage === "home") {
+    // 设置项「打开时显示」= 首页：仅在会话内第一次打开时生效
+    // （刷新酒馆后首次打开 → 回书架；之后关闭再打开 → 恢复上次位置）
+    if (g.startPage === "home" && !sessionOpenedOnce) {
+      sessionOpenedOnce = true;
       showBookshelf();
       return;
     }
+    // 会话内已打开过 → 之后一律恢复上次位置（该标记同时防止
+    // startPage="last" 时重复触发；置 true 仅用于记录，无副作用）
+    sessionOpenedOnce = true;
     const last = g.lastView;
     if (!last || !last.page) {
       showBookshelf();
@@ -1139,7 +1149,7 @@ jQuery(async () => {
           <option value="last" ${g.startPage !== "home" ? "selected" : ""}>上次关闭的页面</option>
           <option value="home" ${g.startPage === "home" ? "selected" : ""}>首页（书架）</option>
         </select>
-        <div class="novel-settings-hint">打开阅读器时显示哪个页面：记住上次关闭位置，或每次都从首页开始。</div>
+        <div class="novel-settings-hint">刷新酒馆后第一次打开阅读器时显示的页面；之后正常关闭再打开（不刷新）会回到上次位置。</div>
       </div>
 
       <div class="novel-settings-row novel-chapter-title-section">
