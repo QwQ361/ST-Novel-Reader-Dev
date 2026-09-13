@@ -33,13 +33,28 @@ function readCfm(deps) {
 }
 
 /**
- * 检测 CFM 是否已安装并初始化过。
- * CFM 首次运行 ensureSettingsDefaults 会创建该命名空间，存在即可判定已安装。
+ * 检测 CFM 是否正在运行。
+ * 双条件判定：
+ *   1) CFM 设置命名空间存在（首次运行 ensureSettingsDefaults 会创建）
+ *   2) CFM 的运行按钮出现在 DOM 中——因为「设置存在」可能只是禁用/卸载后的残留，
+ *      按钮才代表 CFM 此刻真正激活。三个按钮 id 对应 buttonMode 的三种模式：
+ *      topbar → #cfm-topbar-button；floating → #cfm-folder-button；wand → #cfm-wand-button
  * @param {object} deps 依赖注入
  * @returns {boolean}
  */
 function isCfmInstalled(deps = {}) {
-  return !!readExtSettings(deps)?.[CFM_NS];
+  const hasSettings = !!readExtSettings(deps)?.[CFM_NS];
+  if (!hasSettings) return false;
+  try {
+    const doc = deps.document || document;
+    return !!(
+      doc.querySelector("#cfm-topbar-button") ||
+      doc.querySelector("#cfm-folder-button") ||
+      doc.querySelector("#cfm-wand-button")
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -173,9 +188,36 @@ function getCfmItemsInFolder(type, folderId, deps = {}) {
   return items;
 }
 
-/** 文件夹显示名：优先 displayName，回退 id 本身 */
-function getFolderDisplayName(tree, id) {
-  return tree[id]?.displayName || id;
+/**
+ * 角色 tag 名列表（ST 全局 ctx.tags；CFM getTagNameCore 中间回退层）。
+ * @param {object} deps 依赖注入
+ * @returns {Array<{id: string, name: string}>}
+ */
+function getTagList(deps = {}) {
+  try {
+    const ctx = deps.getStContext?.();
+    return Array.isArray(ctx?.tags) ? ctx.tags : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 文件夹显示名：对齐 CFM getTagNameCore 的三级回退：
+ *   1) tree[id].displayName（用户自定义显示名）
+ *   2) ctx.tags 中 id 匹配的 tag 名（角色文件夹 = tag 本身的名字）
+ *   3) id 本身（最后兜底，避免显示 UUID）
+ * @param {object} tree 文件夹树
+ * @param {string} id 文件夹 id
+ * @param {object} [deps] 依赖注入（提供 getStContext 以读 ctx.tags）
+ * @returns {string}
+ */
+function getFolderDisplayName(tree, id, deps = {}) {
+  const node = tree?.[id];
+  if (node?.displayName) return node.displayName;
+  const tag = getTagList(deps).find((t) => t.id === id);
+  if (tag?.name) return tag.name;
+  return id;
 }
 
 /**
@@ -230,7 +272,7 @@ function buildFolderTreeHtml(type, expandedSet, currentFilter, deps = {}) {
         isExpanded ? "fa-folder-open" : "fa-folder"
       }"></i></span>`;
       html += `<span class="novel-cfm-tnode-label">${esc(
-        getFolderDisplayName(tree, id),
+        getFolderDisplayName(tree, id, deps),
       )}</span>`;
       html += `</div>`;
       if (hasChildren && isExpanded) walk(id, depth + 1);

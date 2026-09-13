@@ -1431,9 +1431,18 @@
   );
 }
 
-/* 预设正则文件夹过滤行（CFM 桥接，仅同时安装 CFM 时显示） */
-.novel-regex-preset-folder-row {
-  margin-top: 6px;
+/* 预设正则搜索行：搜索框 + 文件夹过滤按钮同一行（flex 布局，对齐 CFM cfm-wi-preset-edit-search） */
+.novel-regex-preset-search-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* flex 布局下搜索 input 自适应剩余宽度（覆盖上面的 width:100%） */
+.novel-regex-preset-search-row .novel-regex-preset-search {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
 }
 
 /* CFM 文件夹过滤按钮（顶栏角色搜索 + 设置弹窗预设搜索共用） */
@@ -1474,13 +1483,6 @@
     var(--novel-accent, var(--SmartThemeGlowColor, #4caf92)) 60%,
     transparent
   );
-}
-
-/* 设置弹窗内的预设文件夹过滤按钮：整行独占左侧（与输入行宽度一致） */
-.novel-regex-preset-folder-row .novel-cfm-folder-btn {
-  width: 100%;
-  height: 28px;
-  margin-left: 0;
 }
 
 /* 顶栏搜索区：搜索框 + 按钮并排（flex 布局） */

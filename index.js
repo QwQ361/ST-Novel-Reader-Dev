@@ -1304,18 +1304,18 @@ jQuery(async () => {
       <div class="novel-settings-row novel-regex-preset-section">
         <div class="novel-settings-label">预设正则</div>
         <div class="novel-settings-hint">从 API 预设中启用正则：先选择预设，再勾选其中的正则。切换查看其他预设时，已勾选的正则依然生效（跨预设累积）。</div>
-        <input
-          type="text"
-          class="novel-regex-preset-search"
-          placeholder="搜索预设名称…"
-          autocomplete="off"
-        />
-        <select class="novel-regex-preset-select"></select>
-        <div class="novel-regex-preset-folder-row" style="display:none">
-          <button type="button" class="novel-cfm-folder-btn novel-cfm-preset-filter" title="文件夹过滤">
+        <div class="novel-regex-preset-search-row">
+          <input
+            type="text"
+            class="novel-regex-preset-search"
+            placeholder="搜索预设名称…"
+            autocomplete="off"
+          />
+          <button type="button" class="novel-cfm-folder-btn novel-cfm-preset-filter" title="文件夹过滤" style="display:none">
             <i class="fa-solid fa-folder-tree"></i>
           </button>
         </div>
+        <select class="novel-regex-preset-select"></select>
         <div class="novel-regex-preset-list"></div>
       </div>`;
 
@@ -1594,9 +1594,6 @@ jQuery(async () => {
     const presetSelectEl = content.querySelector(".novel-regex-preset-select");
     const presetListEl = content.querySelector(".novel-regex-preset-list");
     const presetSearchEl = content.querySelector(".novel-regex-preset-search");
-    const presetFolderRow = content.querySelector(
-      ".novel-regex-preset-folder-row",
-    );
     const presetFolderBtn = content.querySelector(".novel-cfm-preset-filter");
     const presetOptions = regexCore.getAllPresets();
 
@@ -1604,8 +1601,8 @@ jQuery(async () => {
     // 面板控制器在下方 else 块内创建（需拿到 renderPresetOptions 供 onSelect 调用）。
     let presetFolderFilter = "__all__";
     let presetFolderPanel = null;
-    if (presetFolderRow && presetFolderBtn && cfmBridge.isCfmInstalled()) {
-      presetFolderRow.style.display = "";
+    if (presetFolderBtn && cfmBridge.isCfmInstalled()) {
+      presetFolderBtn.style.display = "";
     }
 
     function renderPresetRegexList(presetName) {
@@ -1650,7 +1647,7 @@ jQuery(async () => {
 
     if (!presetOptions.length) {
       presetSearchEl.style.display = "none";
-      if (presetFolderRow) presetFolderRow.style.display = "none";
+      if (presetFolderBtn) presetFolderBtn.style.display = "none";
       const empty = document.createElement("div");
       empty.className = "novel-regex-empty";
       empty.textContent = "当前 API 没有可用的预设。";
@@ -1687,7 +1684,7 @@ jQuery(async () => {
       }
 
       // CFM 预设文件夹过滤：创建浮动面板 + 按钮点击开合（需在 renderPresetOptions 定义后）
-      if (presetFolderRow && presetFolderBtn && cfmBridge.isCfmInstalled()) {
+      if (presetFolderBtn && cfmBridge.isCfmInstalled()) {
         presetFolderPanel = createCfmFolderPanel({
           anchorEl: presetFolderBtn,
           type: "presets",
