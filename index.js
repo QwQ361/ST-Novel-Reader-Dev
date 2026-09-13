@@ -132,6 +132,8 @@ jQuery(async () => {
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
     if (g.showUserReplies === undefined) g.showUserReplies = true; // 是否显示 user 回复（默认显示）
+    // 打开阅读器时显示哪个页面："last" = 上次关闭的页面（默认），"home" = 首页（书架）
+    if (!g.startPage) g.startPage = "last";
     return g;
   }
 
@@ -266,6 +268,11 @@ jQuery(async () => {
   /** 打开弹窗后按上次记录恢复页面（角色列表变化时按 avatar/name 兜底） */
   async function restoreLastView() {
     const g = getGlobalSettings();
+    // 设置项「打开时显示」= 首页 → 不恢复上次位置，直接回书架
+    if (g.startPage === "home") {
+      showBookshelf();
+      return;
+    }
     const last = g.lastView;
     if (!last || !last.page) {
       showBookshelf();
@@ -1074,6 +1081,15 @@ jQuery(async () => {
         <div class="novel-settings-hint">开启时 user 回复与角色消息合并为一章；关闭后不显示 user 回复，每条角色消息作为单独一章。</div>
       </div>
 
+      <div class="novel-settings-row">
+        <div class="novel-settings-label">打开时显示</div>
+        <select class="novel-start-page-select">
+          <option value="last" ${g.startPage !== "home" ? "selected" : ""}>上次关闭的页面</option>
+          <option value="home" ${g.startPage === "home" ? "selected" : ""}>首页（书架）</option>
+        </select>
+        <div class="novel-settings-hint">打开阅读器时显示哪个页面：记住上次关闭位置，或每次都从首页开始。</div>
+      </div>
+
       <div class="novel-settings-row novel-icon-config-section">
         <div class="novel-settings-label">自定义顶栏图标</div>
         <div class="novel-icon-input-row">
@@ -1151,6 +1167,13 @@ jQuery(async () => {
         const container = bodyEl.querySelector(".novel-page");
         if (container) renderTocPage(container);
       }
+    });
+
+    // ---- 打开时显示：切换后保存设置（立即生效，下次打开阅读器时应用） ----
+    const startPageInput = content.querySelector(".novel-start-page-select");
+    startPageInput?.addEventListener("change", () => {
+      g.startPage = startPageInput.value;
+      deps.saveSettings();
     });
 
     // ---- 显示用户回复：切换后保存设置 + 若在目录/正文页则重新加载当前聊天 ----

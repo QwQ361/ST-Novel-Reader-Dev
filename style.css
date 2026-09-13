@@ -1207,6 +1207,26 @@
   font-size: 0.82rem;
 }
 
+/* 设置弹窗「打开时显示」下拉框（与预设正则选择器同风格） */
+.novel-start-page-select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    var(--novel-bg, var(--SmartThemeBlurTintColor, #232323))
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 0.85rem;
+}
+
 .novel-regex-preset-search {
   width: 100%;
   margin: 4px 0 0;
