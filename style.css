@@ -416,6 +416,8 @@
 }
 
 .novel-toc-item {
+  display: flex;
+  align-items: center;
   padding: 10px 14px;
   border-radius: 8px;
   cursor: pointer;
@@ -448,7 +450,7 @@
   opacity: 0.9;
 }
 
-/* 自动识别标题：附加在「第N章」后的章节副标题（字号/字重/透明度与「第N章」一致） */
+/* 自动识别标题：附加在「第N章」后的章节副标题（flex 垂直居中与「第N章」同一水平线） */
 .novel-toc-item-sub {
   margin-left: 8px;
   font-size: inherit;
@@ -458,7 +460,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 60%;
-  vertical-align: middle;
+  min-width: 0;
 }
 
 /* 目录分页控件 */
