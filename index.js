@@ -90,6 +90,11 @@ jQuery(async () => {
     saveSettings: () => ctx.saveSettingsDebounced?.(),
     // 是否显示 user 回复（设置页开关，默认 true）
     getShowUserReplies: () => getGlobalSettings().showUserReplies,
+    // 自动识别标题：返回识别标签（空 = 关闭；非空 = 启用，如 "bt"）
+    getChapterTitleTag: () => {
+      const g = getGlobalSettings();
+      return g.autoChapterTitle ? g.chapterTitleTag || "" : "";
+    },
   };
 
   const bookshelf = createBookshelfCore({
@@ -134,6 +139,10 @@ jQuery(async () => {
     if (g.showUserReplies === undefined) g.showUserReplies = true; // 是否显示 user 回复（默认显示）
     // 打开阅读器时显示哪个页面："last" = 上次关闭的页面（默认），"home" = 首页（书架）
     if (!g.startPage) g.startPage = "last";
+    // 自动识别标题：从章节正文提取自定义标签内的文字作为目录标题（默认关闭）
+    if (g.autoChapterTitle === undefined) g.autoChapterTitle = false;
+    // 识别标签名（不含尖括号；仅在 autoChapterTitle 开启时生效）
+    if (!g.chapterTitleTag) g.chapterTitleTag = "bt";
     return g;
   }
 
@@ -628,9 +637,16 @@ jQuery(async () => {
     pageChapters.forEach((ch) => {
       const item = document.createElement("div");
       item.className = "novel-toc-item";
+      // 自动识别标题开启且本章标题来自标签时，在「第N章」后附加副标题
+      const tagTitle = ch.titleSource === "tag" ? ch.title : "";
       item.innerHTML = `
         <span class="novel-toc-item-num">${escapeHtml(String(ch.index))}</span>
-        <span class="novel-toc-item-title">${escapeHtml("第" + String(ch.index) + "章")}</span>`;
+        <span class="novel-toc-item-title">${escapeHtml("第" + String(ch.index) + "章")}</span>
+        ${
+          tagTitle
+            ? `<span class="novel-toc-item-sub">${escapeHtml(String(tagTitle))}</span>`
+            : ""
+        }`;
       item.addEventListener("click", () => openChapter(ch.index));
       list.appendChild(item);
     });
@@ -1090,6 +1106,25 @@ jQuery(async () => {
         <div class="novel-settings-hint">打开阅读器时显示哪个页面：记住上次关闭位置，或每次都从首页开始。</div>
       </div>
 
+      <div class="novel-settings-row novel-chapter-title-section">
+        <div class="novel-settings-label">自动识别标题</div>
+        <label class="novel-switch">
+          <input type="checkbox" class="novel-auto-chapter-title" ${
+            g.autoChapterTitle ? "checked" : ""
+          } />
+          <span class="novel-switch-track"></span>
+          <span class="novel-switch-thumb"></span>
+        </label>
+        <div class="novel-settings-hint">从每章正文中提取自定义标签内的文字，作为该章的标题附加在目录中。不勾选则保持现状（第N章）。</div>
+        <div class="novel-chapter-title-tag-row">
+          <span class="novel-settings-label">识别标签</span>
+          <input type="text" class="novel-chapter-title-tag" value="${escapeHtml(
+            g.chapterTitleTag || "bt",
+          )}" placeholder="bt" spellcheck="false" />
+          <span class="novel-settings-hint">仅当「自动识别标题」开启时生效，修改后需重新打开聊天。</span>
+        </div>
+      </div>
+
       <div class="novel-settings-row novel-icon-config-section">
         <div class="novel-settings-label">自定义顶栏图标</div>
         <div class="novel-icon-input-row">
@@ -1208,6 +1243,51 @@ jQuery(async () => {
           await openChapter(1);
         }
       }
+    });
+
+    // ---- 自动识别标题：开关 + 标签名（保存后若在目录/正文页则重新加载当前聊天） ----
+    const autoTitleInput = content.querySelector(".novel-auto-chapter-title");
+    const tagInput = content.querySelector(".novel-chapter-title-tag");
+    let titleTagTimer = null;
+
+    /** 保存当前标题识别配置 + 重新加载当前聊天以应用新标题 */
+    async function applyChapterTitleConfig() {
+      g.autoChapterTitle = autoTitleInput.checked;
+      g.chapterTitleTag = (tagInput.value || "bt").trim() || "bt";
+      deps.saveSettings();
+      if (state.page === "toc" || state.page === "reader") {
+        const char = state.currentChar;
+        const chat = state.currentChat;
+        if (!char || !chat) return;
+        const info = await reader.loadChat({
+          avatar: char.avatar,
+          fileName: chat.file_name,
+        });
+        if (state.page === "toc") {
+          state.tocPage = 0;
+          const container = bodyEl.querySelector(".novel-page");
+          if (container) {
+            if (info && info.chapters.length) {
+              renderTocPage(container);
+            } else {
+              container.innerHTML = `<div class="novel-empty">该聊天暂无内容</div>`;
+            }
+          }
+        } else if (state.page === "reader") {
+          await openChapter(state.currentChapter || 1);
+        }
+      }
+    }
+
+    autoTitleInput?.addEventListener("change", () => {
+      applyChapterTitleConfig();
+    });
+    tagInput?.addEventListener("input", () => {
+      // 防抖：停止输入 400ms 后保存（避免频繁重载聊天）
+      clearTimeout(titleTagTimer);
+      titleTagTimer = setTimeout(() => {
+        applyChapterTitleConfig();
+      }, 400);
     });
 
     // ---- 自定义顶栏图标：下拉选择 / 手动输入 / 清除 ----

@@ -44,10 +44,27 @@ export function createReaderCore(deps) {
     const showUserReplies = deps.getShowUserReplies
       ? deps.getShowUserReplies()
       : true;
-    const chapters = splitChapters(messages, { showUserReplies }).map((ch) => ({
-      ...ch,
-      title: getChapterTitle(ch, { userName: deps.userName }),
-    }));
+    // 自动识别标题：设置页「自动识别标题」开关 + 标签名（空 = 关闭）
+    const titleTag = deps.getChapterTitleTag ? deps.getChapterTitleTag() : "";
+    const chapters = splitChapters(messages, { showUserReplies }).map((ch) => {
+      // 标签识别开启时，若章节标题来自标签（而非说话人），标记 titleSource="tag"
+      let titleSource = "speaker";
+      let title = "";
+      if (titleTag) {
+        const extracted = getChapterTitle(ch, {
+          userName: deps.userName,
+          tag: titleTag,
+        });
+        // 仅当提取结果非空且与说话人兜底不同，才视为标签标题
+        const speaker = getChapterTitle(ch, { userName: deps.userName });
+        title = extracted;
+        if (extracted && extracted !== speaker) titleSource = "tag";
+        else title = speaker;
+      } else {
+        title = getChapterTitle(ch, { userName: deps.userName });
+      }
+      return { ...ch, title, titleSource };
+    });
 
     chatCache = { avatar, fileName, messages, chapters };
     return chatCache;
