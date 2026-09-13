@@ -1,5 +1,6 @@
 // features/cfm-bridge/index.js
 // CFM（AAAA-ST-Folder-Manager-V2）数据桥接（方案A：单向读取，CFM 零修改）。
+export { createCfmFolderPanel } from "./panel.js";
 // 仅当用户同时安装了 CFM 时启用：在小说插件的「角色搜索框」「预设搜索框」旁
 // 注入文件夹下拉，按 CFM 的文件夹树过滤小说插件**自己的**搜索结果列表。
 //
@@ -178,26 +179,68 @@ function getFolderDisplayName(tree, id) {
 }
 
 /**
- * 生成文件夹下拉选项 HTML（含层级缩进 + 「全部」+「未归类」）。
+ * 返回全部文件夹 ID（含顶层与子层，用于「展开全部」）。
  * @param {"chars"|"presets"} type 类型
  * @param {object} deps 依赖注入
- * @returns {string} <option> 列表 HTML
+ * @returns {Array<string>}
  */
-function buildCfmFolderOptions(type, deps = {}) {
+function getAllFolderIds(type, deps = {}) {
   const tree =
     type === "chars" ? getCfmCharFolders(deps) : getCfmPresetFolders(deps);
-  let html = `<option value="__all__">全部</option>`;
+  return Object.keys(tree);
+}
+
+/**
+ * 生成文件夹树 HTML（浮动面板用）。
+ * 结构与 CFM ui/tree/tree-view.js 一致：箭头 + 图标 + 名称，层级缩进；
+ * 顶部固定「全部」节点，底部固定「未归类」节点。
+ * @param {"chars"|"presets"} type 类型
+ * @param {Set<string>} expandedSet 展开节点 id 集合
+ * @param {string} currentFilter 当前选中过滤值（用于高亮）
+ * @param {object} deps 依赖注入
+ * @returns {string} 树形 HTML
+ */
+function buildFolderTreeHtml(type, expandedSet, currentFilter, deps = {}) {
+  const tree =
+    type === "chars" ? getCfmCharFolders(deps) : getCfmPresetFolders(deps);
+  const esc = escapeHtml;
+  let html = `<div class="novel-cfm-tnode${
+    currentFilter === "__all__" ? " novel-cfm-tnode-selected" : ""
+  }" data-id="__all__"><span class="novel-cfm-tnode-arrow novel-cfm-arrow-hidden"><i class="fa-solid fa-caret-right"></i></span><span class="novel-cfm-tnode-icon"><i class="fa-solid fa-folder-tree"></i></span><span class="novel-cfm-tnode-label">全部</span></div>`;
+
   const walk = (parentId, depth) => {
     for (const id of getChildIds(tree, parentId)) {
-      const name = getFolderDisplayName(tree, id);
-      html += `<option value="${escapeHtml(id)}">${"　".repeat(
-        depth,
-      )}${escapeHtml(name)}</option>`;
-      walk(id, depth + 1);
+      const children = getChildIds(tree, id);
+      const hasChildren = children.length > 0;
+      const isExpanded = expandedSet.has(id);
+      const selected =
+        currentFilter === id ? " novel-cfm-tnode-selected" : "";
+      const arrowCls = hasChildren
+        ? isExpanded
+          ? " novel-cfm-arrow-expanded"
+          : ""
+        : " novel-cfm-arrow-hidden";
+      html += `<div class="novel-cfm-tnode${selected}" data-id="${esc(
+        id,
+      )}" data-has-children="${hasChildren ? "1" : "0"}" style="padding-left:${
+        8 + depth * 16
+      }px">`;
+      html += `<span class="novel-cfm-tnode-arrow${arrowCls}"><i class="fa-solid fa-caret-right"></i></span>`;
+      html += `<span class="novel-cfm-tnode-icon"><i class="fa-solid ${
+        isExpanded ? "fa-folder-open" : "fa-folder"
+      }"></i></span>`;
+      html += `<span class="novel-cfm-tnode-label">${esc(
+        getFolderDisplayName(tree, id),
+      )}</span>`;
+      html += `</div>`;
+      if (hasChildren && isExpanded) walk(id, depth + 1);
     }
   };
   walk(null, 0);
-  html += `<option value="__ungrouped__">未归类</option>`;
+
+  html += `<div class="novel-cfm-tnode${
+    currentFilter === "__ungrouped__" ? " novel-cfm-tnode-selected" : ""
+  }" data-id="__ungrouped__"><span class="novel-cfm-tnode-arrow novel-cfm-arrow-hidden"><i class="fa-solid fa-caret-right"></i></span><span class="novel-cfm-tnode-icon"><i class="fa-solid fa-circle-question"></i></span><span class="novel-cfm-tnode-label">未归类</span></div>`;
   return html;
 }
 
@@ -228,5 +271,8 @@ export function createCfmBridgeCore(deps = {}) {
     getItemsInFolder: (type, folderId) =>
       getCfmItemsInFolder(type, folderId, deps),
     buildFolderOptions: (type) => buildCfmFolderOptions(type, deps),
+    getAllFolderIds: (type) => getAllFolderIds(type, deps),
+    buildFolderTreeHtml: (type, expandedSet, currentFilter) =>
+      buildFolderTreeHtml(type, expandedSet, currentFilter, deps),
   };
 }
