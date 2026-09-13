@@ -1120,6 +1120,12 @@ jQuery(async () => {
       <div class="novel-settings-row novel-regex-preset-section">
         <div class="novel-settings-label">预设正则</div>
         <div class="novel-settings-hint">从 API 预设中启用正则：先选择预设，再勾选其中的正则。切换查看其他预设时，已勾选的正则依然生效（跨预设累积）。</div>
+        <input
+          type="text"
+          class="novel-regex-preset-search"
+          placeholder="搜索预设名称…"
+          autocomplete="off"
+        />
         <select class="novel-regex-preset-select"></select>
         <div class="novel-regex-preset-list"></div>
       </div>`;
@@ -1329,6 +1335,7 @@ jQuery(async () => {
     // ---- 预设正则：先选预设，再勾选该预设中的正则（跨预设累积生效） ----
     const presetSelectEl = content.querySelector(".novel-regex-preset-select");
     const presetListEl = content.querySelector(".novel-regex-preset-list");
+    const presetSearchEl = content.querySelector(".novel-regex-preset-search");
     const presetOptions = regexCore.getAllPresets();
 
     function renderPresetRegexList(presetName) {
@@ -1336,7 +1343,10 @@ jQuery(async () => {
       if (!presetName) {
         const empty = document.createElement("div");
         empty.className = "novel-regex-empty";
-        empty.textContent = "请先在上方选择一个预设。";
+        const kw = (presetSearchEl?.value || "").trim();
+        empty.textContent = kw
+          ? `没有匹配「${escapeHtml(kw)}」的预设。`
+          : "请先在上方选择一个预设。";
         presetListEl.appendChild(empty);
         return;
       }
@@ -1369,24 +1379,49 @@ jQuery(async () => {
     }
 
     if (!presetOptions.length) {
+      presetSearchEl.style.display = "none";
       const empty = document.createElement("div");
       empty.className = "novel-regex-empty";
       empty.textContent = "当前 API 没有可用的预设。";
       presetSelectEl.parentElement?.appendChild(empty);
       presetSelectEl.style.display = "none";
     } else {
-      presetOptions.forEach((p) => {
-        const option = document.createElement("option");
-        option.value = p.name;
-        option.textContent = p.count ? `${p.name}（${p.count}）` : p.name;
-        presetSelectEl.appendChild(option);
-      });
-      // 默认选中第一个预设并渲染其正则列表
-      presetSelectEl.value = presetOptions[0].name;
-      renderPresetRegexList(presetSelectEl.value);
+      // 按关键词过滤预设选项（匹配预设名，忽略大小写）
+      function renderPresetOptions(filter) {
+        const kw = (filter || "").trim().toLowerCase();
+        presetSelectEl.innerHTML = "";
+        const matched = presetOptions.filter(
+          (p) => !kw || p.name.toLowerCase().includes(kw),
+        );
+        matched.forEach((p) => {
+          const option = document.createElement("option");
+          option.value = p.name;
+          option.textContent = p.count ? `${p.name}（${p.count}）` : p.name;
+          presetSelectEl.appendChild(option);
+        });
+        return matched;
+      }
+
+      const matched = renderPresetOptions(presetSearchEl.value);
+      if (matched.length) {
+        // 默认选中第一个匹配预设并渲染其正则列表
+        presetSelectEl.value = matched[0].name;
+        renderPresetRegexList(presetSelectEl.value);
+      } else {
+        renderPresetRegexList(null);
+      }
       presetSelectEl.addEventListener("change", () =>
         renderPresetRegexList(presetSelectEl.value),
       );
+      presetSearchEl.addEventListener("input", () => {
+        const m = renderPresetOptions(presetSearchEl.value);
+        if (m.length) {
+          presetSelectEl.value = m[0].name;
+          renderPresetRegexList(presetSelectEl.value);
+        } else {
+          renderPresetRegexList(null);
+        }
+      });
     }
   }
 

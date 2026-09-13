@@ -1207,6 +1207,43 @@
   font-size: 0.82rem;
 }
 
+.novel-regex-preset-search {
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    var(--novel-bg, var(--SmartThemeBlurTintColor, #232323))
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.novel-regex-preset-search:focus {
+  border-color: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4caf92)) 60%,
+    transparent
+  );
+}
+
+.novel-regex-preset-search::placeholder {
+  color: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 40%,
+    transparent
+  );
+}
+
 .novel-regex-preset-list {
   display: flex;
   flex-direction: column;
