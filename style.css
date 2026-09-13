@@ -23,8 +23,10 @@
 
 .novel-dialog {
   width: 100vw;
-  height: 100vh; /* 铁律 4 */
+  height: 100vh; /* 铁律 4：vh 回退（旧浏览器） */
+  height: 100dvh; /* 动态视口：移动端地址栏显隐时自适应，避免底部被遮挡 */
   max-height: 100vh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   margin: auto; /* 铁律 3 */
@@ -1744,14 +1746,16 @@
 @media (max-width: 900px) {
   .novel-dialog {
     width: 100vw;
-    height: 100vh; /* 铁律 4 */
+    height: 100vh; /* 铁律 4：vh 回退（旧浏览器） */
+    height: 100dvh; /* 动态视口：地址栏显隐时自适应，避免底部被遮挡 */
     max-height: 100vh;
+    max-height: 100dvh;
     border-radius: 0;
     margin: auto; /* 铁律 3 */
   }
 
   .novel-topbar {
-    padding: 8px 10px;
+    padding: 8px 12px;
     gap: 6px;
     flex-wrap: wrap;
   }
@@ -1761,12 +1765,12 @@
   }
 
   .novel-page {
-    padding: 10px;
+    padding: 12px; /* 两侧留空隙：桌面 16px，移动端 12px */
   }
 
   .novel-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 8px;
+    gap: 10px;
   }
 
   .novel-char-card {
@@ -1781,7 +1785,7 @@
   }
 
   .novel-reader-scroll {
-    padding: 20px 10px 70px;
+    padding: 20px 14px 76px; /* 两侧留空隙 + 底部多留（底部栏高度） */
   }
 
   .novel-reader-inner {
@@ -1790,7 +1794,7 @@
 
   .novel-bottombar {
     gap: 6px;
-    padding: 8px;
+    padding: 8px 10px;
   }
 
   .novel-bottombar .novel-btn {
