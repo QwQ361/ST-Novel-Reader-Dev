@@ -90,7 +90,7 @@ jQuery(async () => {
     saveSettings: () => ctx.saveSettingsDebounced?.(),
     // 是否显示 user 回复（设置页开关，默认 true）
     getShowUserReplies: () => getGlobalSettings().showUserReplies,
-    // 自动识别标题：返回识别标签（空 = 关闭；非空 = 启用，如 "bt"）
+    // 自动识别标题：返回识别标签（空 = 关闭；非空 = 启用，如 "zj"）
     getChapterTitleTag: () => {
       const g = getGlobalSettings();
       return g.autoChapterTitle ? g.chapterTitleTag || "" : "";
@@ -156,8 +156,9 @@ jQuery(async () => {
     if (!g.startPage) g.startPage = "last";
     // 自动识别标题：从章节正文提取自定义标签内的文字作为目录标题（默认关闭）
     if (g.autoChapterTitle === undefined) g.autoChapterTitle = false;
-    // 识别标签名（不含尖括号；仅在 autoChapterTitle 开启时生效）
-    if (!g.chapterTitleTag) g.chapterTitleTag = "bt";
+    // 识别标签名（不含尖括号；仅在 autoChapterTitle 开启时生效；旧默认值为 "bt"，统一迁移为 "zj"）
+    if (!g.chapterTitleTag) g.chapterTitleTag = "zj";
+    else if (g.chapterTitleTag === "bt") g.chapterTitleTag = "zj";
     // 标题过滤文字：从识别出的标题中移除指定文字（多行，每行一条）
     if (!Array.isArray(g.chapterTitleFilters)) g.chapterTitleFilters = [];
     // 是否剥离识别标题开头的章号前缀（如「第一章：」；默认开启）
@@ -1138,8 +1139,8 @@ jQuery(async () => {
         <div class="novel-chapter-title-tag-row">
           <span class="novel-settings-label">识别标签</span>
           <input type="text" class="novel-chapter-title-tag" value="${escapeHtml(
-            g.chapterTitleTag || "bt",
-          )}" placeholder="bt" spellcheck="false" />
+            g.chapterTitleTag || "zj",
+          )}" placeholder="zj" spellcheck="false" />
           <span class="novel-settings-hint">仅当「自动识别标题」开启时生效，修改后需重新打开聊天。</span>
         </div>
         <div class="novel-chapter-title-strip-row">
@@ -1292,7 +1293,7 @@ jQuery(async () => {
     /** 保存当前标题识别配置 + 重新加载当前聊天以应用新标题 */
     async function applyChapterTitleConfig() {
       g.autoChapterTitle = autoTitleInput.checked;
-      g.chapterTitleTag = (tagInput.value || "bt").trim() || "bt";
+      g.chapterTitleTag = (tagInput.value || "zj").trim() || "zj";
       g.stripChapterPrefix = stripInput ? stripInput.checked : true;
       g.chapterTitleFilters = (filterInput?.value || "")
         .split("\n")

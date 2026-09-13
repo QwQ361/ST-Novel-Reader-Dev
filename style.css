@@ -448,12 +448,12 @@
   opacity: 0.9;
 }
 
-/* 自动识别标题：附加在「第N章」后的章节副标题 */
+/* 自动识别标题：附加在「第N章」后的章节副标题（字号/字重/透明度与「第N章」一致） */
 .novel-toc-item-sub {
   margin-left: 8px;
-  font-size: 0.85em;
-  opacity: 0.6;
-  font-weight: 400;
+  font-size: inherit;
+  opacity: 0.9;
+  font-weight: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

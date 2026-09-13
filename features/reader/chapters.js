@@ -68,17 +68,17 @@ export function splitChapters(messages, options = {}) {
 
 /**
  * 从消息正文中提取自定义标签内的文字（用于「自动识别标题」）。
- * 例如 tag="bt" 时，`xxx<bt>第1章 序章</bt>yyy` → `第1章 序章`。
+ * 例如 tag="zj" 时，`xxx<zj>第1章 序章</zj>yyy` → `第1章 序章`。
  * 规则：
  *   - 只取第一次出现的标签内容；标签名大小写不敏感
- *   - 支持标签带属性（如 <bt class="x">）
+ *   - 支持标签带属性（如 <zj class="x">）
  *   - 找不到标签 → 返回空字符串（调用方回退到默认标题）
  *   - 标签内容两侧空白会被 trim，内容按原样保留（后续 escapeHtml 输出）
  * @param {string} text 消息正文（原始 Markdown/HTML 字符串）
- * @param {string} [tag="bt"] 标签名（不含尖括号）
+ * @param {string} [tag="zj"] 标签名（不含尖括号）
  * @returns {string} 标签内文字；未匹配返回空字符串
  */
-export function extractTagTitle(text, tag = "bt") {
+export function extractTagTitle(text, tag = "zj") {
   const t = String(text || "");
   if (!t) return "";
   const tagName = String(tag || "")
