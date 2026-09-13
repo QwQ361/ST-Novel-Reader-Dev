@@ -1,12 +1,29 @@
 // features/reader/frontend.js
-// 酒馆助手风格的「前端界面」渲染：当消息正文里的代码块含 <body> 等完整 HTML 结构时，
-// 用 <iframe srcdoc> 把它渲染成独立网页（支持 <script> / Vue / React 等，与酒馆助手一致）。
+// 「前端界面」渲染：当消息正文里的代码块含 <body> 等完整 HTML 结构时，
+// 用 <iframe srcdoc> 把它渲染成独立网页（支持 <script> / Vue / React 等）。
 //
-// 判定规则（与酒馆助手 isFrontend 一致）：
+// ⚠️ 功能参考声明（合规透明）：
+//   本功能的「行为规格」参考自 SillyTavern 插件 JS-Slash-Runner（酒馆助手）：
+//     - 判定规则（代码含 "html>" / "<head>" / "<body>" 视为前端界面）取自其
+//       src/util/is_frontend.ts 的 isFrontend（该规则同时是用户明确指定的需求）；
+//     - iframe srcdoc 渲染 + min-height vh 换算 + 高度自适应的思路与酒馆助手
+//       src/panel/render/iframe.ts、src/iframe/adjust_iframe_height.js 一致。
+//   但本文件的代码为独立编写，未复制/引用酒馆助手任何源码文件，也不依赖酒馆助手
+//   运行时（不加载其外部脚本、不调用其 API）。差异点：
+//     - vh 换算目标不同：酒馆助手转 var(--TH-viewport-height)，本插件转 calc(100vh * N)，
+//       因此额外需要「占位标记统一还原」机制防止 calc(100vh*N) 被二次处理；
+//     - 不支持 JS 赋值（.style.minHeight / setProperty）场景；
+//     - 高度自适应用本插件内联的简化脚本，非酒馆助手的 adjust_iframe_height.js；
+//     - 不注入酒馆助手的头像变量 / third_party_message / log.js 等任何外部资源。
+//   酒馆助手许可证为 Aladdin Free Public License（AFPL，非 OSI 开源许可，
+//   允许修改与衍生但附带条件：商业禁止、衍生作品整体同许可、需注明修改者）。
+//   若需要将本功能整体移植/分发，请自行评估并与酒馆助手作者确认授权。
+//
+// 判定规则：
 //   代码块文本同时满足：包含 "html>" 或 "<head>" 或 "<body>"（大小写不敏感）。
 //
 // 高度自适应：iframe 内注入一段脚本，把 body.scrollHeight 写回父页面 iframe 高度，
-// 避免内容被裁剪（与酒馆助手 adjust_iframe_height.js 思路一致）。
+// 避免内容被裁剪。
 
 /**
  * 判断文本是否为「前端界面」代码（酒馆助手规则：含 html>/<head>/<body 任一）。
