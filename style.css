@@ -1431,6 +1431,63 @@
   );
 }
 
+/* 预设正则文件夹过滤行（CFM 桥接，仅同时安装 CFM 时显示） */
+.novel-regex-preset-folder-row {
+  margin-top: 6px;
+}
+
+/* CFM 文件夹过滤下拉（顶栏角色搜索 + 设置弹窗预设搜索共用） */
+.novel-cfm-folder-filter {
+  flex: 0 0 auto;
+  max-width: 150px;
+  margin-left: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    var(--novel-bg, var(--SmartThemeBlurTintColor, #232323))
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 0.78rem;
+  outline: none;
+}
+
+/* 设置弹窗内的预设文件夹下拉：整行独占，与搜索框同宽 */
+.novel-regex-preset-folder-row .novel-cfm-folder-filter {
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+}
+
+.novel-cfm-folder-filter:focus {
+  border-color: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4caf92)) 60%,
+    transparent
+  );
+}
+
+/* 顶栏搜索区：搜索框 + 下拉并排（flex 布局） */
+.novel-topbar-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* flex 布局下搜索 input 自适应剩余宽度（覆盖上面的 width:100%） */
+.novel-topbar-search input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
 .novel-regex-preset-list {
   display: flex;
   flex-direction: column;
@@ -1853,5 +1910,16 @@
     width: 26px;
     height: 26px;
     font-size: 16px;
+  }
+
+  /* 移动端：顶栏空间紧张，文件夹过滤下拉宽度收缩 */
+  .novel-topbar-search {
+    min-width: 0;
+  }
+  .novel-cfm-folder-filter {
+    max-width: 96px;
+    margin-left: 4px;
+    padding: 4px 6px;
+    font-size: 0.72rem;
   }
 }

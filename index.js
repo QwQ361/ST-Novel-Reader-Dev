@@ -10,6 +10,7 @@
 
 import { createBookmarksCore } from "./features/bookmarks/index.js";
 import { createBookshelfCore } from "./features/bookshelf/index.js";
+import { createCfmBridgeCore } from "./features/cfm-bridge/index.js";
 import { createProgressCore } from "./features/progress/index.js";
 import { createReaderCore } from "./features/reader/index.js";
 import { createRegexCore } from "./features/regex/index.js";
@@ -127,6 +128,13 @@ jQuery(async () => {
     getCharacters: () => ctx.characters,
   });
 
+  // CFM 数据桥接：检测 CFM 是否安装 + 读取其文件夹树/归属映射（仅同时安装 CFM 的用户可用）
+  const cfmBridge = createCfmBridgeCore({
+    ...deps,
+    getExtensionSettings: () => ctx.extensionSettings || {},
+    getAllChars: () => (Array.isArray(ctx.characters) ? ctx.characters : []),
+  });
+
   // 正则过滤：让用户把酒馆正则应用到小说阅读（勾选状态存 extension_settings）
   const regexCore = createRegexCore({
     ...deps,
@@ -196,6 +204,9 @@ jQuery(async () => {
   // 同一次会话内正常关闭再打开（不刷新）仍恢复上次位置。
   let sessionOpenedOnce = false;
 
+  // CFM 文件夹过滤当前选中值（"__all__" = 全部；仅同时安装 CFM 时生效）
+  let charFolderFilter = "__all__";
+
   // 当前导航状态
   const state = {
     page: "bookshelf", // bookshelf | chats | toc | reader
@@ -258,6 +269,7 @@ jQuery(async () => {
       <div class="novel-topbar-title">酒馆小说阅读器</div>
       <div class="novel-topbar-search">
         <input type="text" placeholder="搜索角色 / 聊天…" />
+        <select class="novel-cfm-folder-filter novel-cfm-char-filter" title="文件夹过滤" style="display:none"></select>
       </div>
       <div class="novel-topbar-settings">
         <button class="novel-icon-btn" data-action="settings" title="全局设置">⚙</button>
@@ -289,8 +301,36 @@ jQuery(async () => {
     bindTopbarEvents();
     bindBottombarEvents();
 
+    // ---- CFM 文件夹过滤（仅同时安装 CFM 时启用）----
+    initCfmCharFilter();
+
     // 初始渲染：恢复上次关闭前的页面（无记录则书架首页）
     restoreLastView();
+  }
+
+  /**
+   * 初始化顶栏「角色文件夹过滤」下拉。
+   * 仅当 CFM 已安装时填充选项并显示；每次打开阅读器时重读 CFM 数据（实时反映）。
+   */
+  function initCfmCharFilter() {
+    const select = topbarEl.querySelector(".novel-cfm-char-filter");
+    if (!select) return;
+    if (!cfmBridge.isCfmInstalled()) {
+      charFolderFilter = "__all__";
+      select.style.display = "none";
+      return;
+    }
+    // 重建选项（CFM 文件夹可能在会话中被修改）
+    select.innerHTML = cfmBridge.buildFolderOptions("chars");
+    select.value = charFolderFilter;
+    select.style.display = "";
+    // 绑定 change（防重复：重建后移除旧监听再添加）
+    select.onchange = () => {
+      charFolderFilter = select.value;
+      if (state.page === "bookshelf") {
+        renderBookshelfGrid(searchInputEl.value);
+      }
+    };
   }
 
   /** 关闭主界面弹窗 */
@@ -442,6 +482,12 @@ jQuery(async () => {
     if (page === "toc" || page === "reader") {
       searchInputEl.value = "";
     }
+    // CFM 角色文件夹下拉：仅书架页显示（其余页隐藏）
+    const cfmCharSelect = topbarEl.querySelector(".novel-cfm-char-filter");
+    if (cfmCharSelect) {
+      cfmCharSelect.style.display =
+        page === "bookshelf" && cfmBridge.isCfmInstalled() ? "" : "none";
+    }
     // 关闭可能打开的设置子面板 + 检索结果面板
     closeSettingsPanel();
     closeSearchPanel();
@@ -502,13 +548,19 @@ jQuery(async () => {
       return;
     }
 
-    const filtered = q
+    let filtered = q
       ? chars.filter((c) =>
           String(c.name || "")
             .toLowerCase()
             .includes(q),
         )
       : chars;
+
+    // CFM 文件夹过滤：选中非「全部」时，仅保留属于该文件夹（含子文件夹）的角色
+    if (charFolderFilter !== "__all__" && cfmBridge.isCfmInstalled()) {
+      const allowed = cfmBridge.getItemsInFolder("chars", charFolderFilter);
+      if (allowed) filtered = filtered.filter((c) => allowed.has(c.avatar));
+    }
 
     if (!filtered.length) {
       page.innerHTML = `<div class="novel-empty">无匹配角色</div>`;
@@ -1242,6 +1294,9 @@ jQuery(async () => {
           autocomplete="off"
         />
         <select class="novel-regex-preset-select"></select>
+        <div class="novel-regex-preset-folder-row" style="display:none">
+          <select class="novel-cfm-folder-filter novel-cfm-preset-filter" title="文件夹过滤"></select>
+        </div>
         <div class="novel-regex-preset-list"></div>
       </div>`;
 
@@ -1520,7 +1575,23 @@ jQuery(async () => {
     const presetSelectEl = content.querySelector(".novel-regex-preset-select");
     const presetListEl = content.querySelector(".novel-regex-preset-list");
     const presetSearchEl = content.querySelector(".novel-regex-preset-search");
+    const presetFolderRow = content.querySelector(
+      ".novel-regex-preset-folder-row",
+    );
+    const presetFolderSelect = content.querySelector(
+      ".novel-cfm-preset-filter",
+    );
     const presetOptions = regexCore.getAllPresets();
+
+    // CFM 预设文件夹过滤：仅同时安装 CFM 时显示；选中后仅展示该文件夹下的预设
+    // 注意：onchange 绑定放在下方 else 块内（renderPresetOptions 定义之后），
+    // 因为 renderPresetOptions 是 else 块内的块级函数声明，外层不可见。
+    let presetFolderFilter = "__all__";
+    if (presetFolderRow && presetFolderSelect && cfmBridge.isCfmInstalled()) {
+      presetFolderSelect.innerHTML = cfmBridge.buildFolderOptions("presets");
+      presetFolderSelect.value = presetFolderFilter;
+      presetFolderRow.style.display = "";
+    }
 
     function renderPresetRegexList(presetName) {
       presetListEl.innerHTML = "";
@@ -1564,6 +1635,7 @@ jQuery(async () => {
 
     if (!presetOptions.length) {
       presetSearchEl.style.display = "none";
+      if (presetFolderRow) presetFolderRow.style.display = "none";
       const empty = document.createElement("div");
       empty.className = "novel-regex-empty";
       empty.textContent = "当前 API 没有可用的预设。";
@@ -1574,9 +1646,22 @@ jQuery(async () => {
       function renderPresetOptions(filter) {
         const kw = (filter || "").trim().toLowerCase();
         presetSelectEl.innerHTML = "";
-        const matched = presetOptions.filter(
+        let matched = presetOptions.filter(
           (p) => !kw || p.name.toLowerCase().includes(kw),
         );
+        // CFM 文件夹过滤：选中非「全部」时，仅保留属于该文件夹（含子文件夹）的预设
+        if (
+          presetFolderFilter !== "__all__" &&
+          cfmBridge.isCfmInstalled()
+        ) {
+          const allowed = cfmBridge.getItemsInFolder(
+            "presets",
+            presetFolderFilter,
+          );
+          if (allowed) {
+            matched = matched.filter((p) => allowed.has(p.name));
+          }
+        }
         matched.forEach((p) => {
           const option = document.createElement("option");
           option.value = p.name;
@@ -1584,6 +1669,20 @@ jQuery(async () => {
           presetSelectEl.appendChild(option);
         });
         return matched;
+      }
+
+      // CFM 预设文件夹过滤 onchange（需在 renderPresetOptions 定义后绑定）
+      if (presetFolderRow && presetFolderSelect && cfmBridge.isCfmInstalled()) {
+        presetFolderSelect.onchange = () => {
+          presetFolderFilter = presetFolderSelect.value;
+          const m = renderPresetOptions(presetSearchEl.value);
+          if (m.length) {
+            presetSelectEl.value = m[0].name;
+            renderPresetRegexList(presetSelectEl.value);
+          } else {
+            renderPresetRegexList(null);
+          }
+        };
       }
 
       const matched = renderPresetOptions(presetSearchEl.value);
