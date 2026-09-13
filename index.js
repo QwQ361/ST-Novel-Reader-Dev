@@ -37,6 +37,12 @@ import { createOverlayDialog } from "./ui/modal/index.js";
 
 const EXT_NAME = "ST-Novel-Reader";
 
+// 默认字号分设备：移动端（≤900px）14px、PC 端 16px
+// 与 style.css 移动端媒体查询 max-width: 900px 保持一致
+function getDefaultFontSize() {
+  return window.innerWidth <= 900 ? 14 : 16;
+}
+
 // 阅读器内置主题：∅（id:""）= 跟随酒馆美化；其余为独立配色主题。
 // 每套主题的背景色在 style.css 的 .novel-theme-{id} 中通过 CSS 变量定义，
 // 这里只维护 id/显示名/预览色（面板色板用）。
@@ -150,7 +156,13 @@ jQuery(async () => {
     const g = s[EXT_NAME];
     g.chaptersPerPage = Number(g.chaptersPerPage) || 100; // 目录每页 N 章，默认 100
     if (!g.readerSettings) g.readerSettings = {}; // 字号/主题
-    if (!g.readerSettings.fontSize) g.readerSettings.fontSize = 18;
+    const defaultFontSize = getDefaultFontSize();
+    if (!g.readerSettings.fontSize) {
+      g.readerSettings.fontSize = defaultFontSize;
+    } else if (g.readerSettings.fontSize === 18) {
+      // 旧版默认 18（未分设备）→ 迁移为新设备默认
+      g.readerSettings.fontSize = defaultFontSize;
+    }
     if (g.readerSettings.textColor) delete g.readerSettings.textColor; // 旧字段（被主题取代）
     if (g.readerSettings.bgColor) delete g.readerSettings.bgColor; // 旧字段（被主题取代）
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
@@ -1648,7 +1660,7 @@ jQuery(async () => {
     fontRange.min = "14";
     fontRange.max = "26";
     fontRange.step = "1";
-    fontRange.value = String(rs.fontSize || 18);
+    fontRange.value = String(rs.fontSize || getDefaultFontSize());
     const fontValue = document.createElement("div");
     fontValue.className = "novel-settings-value";
     fontValue.textContent = `${fontRange.value}px`;
@@ -1728,7 +1740,7 @@ jQuery(async () => {
     // 字号：只作用于正文容器
     if (readerScrollEl) {
       const inner = readerScrollEl.querySelector(".novel-reader-inner");
-      if (inner) inner.style.fontSize = `${rs.fontSize}px`;
+      if (inner) inner.style.fontSize = `${rs.fontSize || getDefaultFontSize()}px`;
     }
 
     const themeId = rs.themeId || "";
