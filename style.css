@@ -384,6 +384,9 @@
   padding: 6px 12px;
   border-radius: 8px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: color-mix(
     in srgb,
     var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
@@ -407,6 +410,14 @@
     var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
     transparent
   );
+}
+
+/* 收藏按钮内 SVG 图标：描边风格，尺寸与文字协调 */
+.novel-toc-bookmark-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke-width: 2;
 }
 
 .novel-toc-list {
@@ -790,6 +801,9 @@
   padding: 8px 14px;
   border-radius: 8px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: color-mix(
     in srgb,
     var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
@@ -828,6 +842,17 @@
   );
   border-color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
   color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+}
+
+/* 底部栏书签按钮内 SVG 图标：描边，激活态填充实心 */
+.novel-bottombar .novel-btn svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.novel-bottombar .novel-btn.novel-bookmark-active svg {
+  fill: currentColor;
 }
 
 /* ---------- 收藏章节弹窗 ---------- */
@@ -1785,6 +1810,16 @@
   .novel-toc-bookmark-btn {
     padding: 6px 8px;
     font-size: 0.8rem;
+  }
+
+  .novel-toc-bookmark-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .novel-bottombar .novel-btn svg {
+    width: 14px;
+    height: 14px;
   }
 
   .novel-bookmark-list {

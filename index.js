@@ -50,6 +50,10 @@ const READER_THEMES = [
   { id: "ocean", name: "深蓝", bg: "#101826", fg: "#7fb5ff" },
 ];
 
+// 收藏图标（SVG，描边风格；激活态由 CSS 填充实心）
+const BOOKMARK_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>';
+
 jQuery(async () => {
   console.log("[NovelReader] 启动中…");
 
@@ -257,7 +261,7 @@ jQuery(async () => {
       <button class="novel-btn" data-action="toc">目录</button>
       <button class="novel-btn" data-action="prev">上一章</button>
       <button class="novel-btn" data-action="next">下一章</button>
-      <button class="novel-btn" data-action="bookmark" title="收藏当前章节">书签</button>
+      <button class="novel-btn" data-action="bookmark" title="收藏当前章节">${BOOKMARK_SVG}<span>书签</span></button>
       <button class="novel-btn" data-action="reader-settings">界面</button>`;
     content.appendChild(bottombarEl);
 
@@ -641,7 +645,7 @@ jQuery(async () => {
       <div class="novel-toc-head">
         <h2>目录</h2>
         <span class="novel-toc-sub">${escapeHtml(String(total))} 章</span>
-        <button class="novel-toc-bookmark-btn" title="查看收藏章节" data-action="bookmarks">🔖 收藏</button>
+        <button class="novel-toc-bookmark-btn" title="查看收藏章节" data-action="bookmarks">${BOOKMARK_SVG}<span>收藏</span></button>
       </div>
       <div class="novel-toc-list"></div>`;
 
