@@ -2214,6 +2214,16 @@
   justify-content: flex-start;
 }
 
+/* 置顶状态：遮罩透明 + 点击穿透（pointer-events:none），
+   可正常点击/使用悬浮窗之外的页面；悬浮窗本体重新启用交互 */
+.novel-overlay-floating.novel-overlay-pinned {
+  background: transparent;
+  pointer-events: none;
+}
+.novel-overlay-floating.novel-overlay-pinned .novel-dialog-floating {
+  pointer-events: auto;
+}
+
 /* 悬浮窗本体：固定定位（JS 用 left/top 定位），标题栏可拖动 */
 .novel-dialog-floating {
   position: fixed;

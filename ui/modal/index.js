@@ -129,9 +129,11 @@ export function createOverlayDialog(options = {}) {
   // 用 overlay 的 dataset 标记，遮罩点击处理器运行时读取，免闭包同步。
   overlay.dataset.novelPinned = "";
 
-  /** 切换遮罩点击是否关闭（置顶时置 false）。@param {boolean} pinned */
+  /** 切换置顶状态：置顶时点遮罩不关闭，且遮罩透明 + 点击穿透（可正常使用悬浮窗外页面）。
+   *  @param {boolean} pinned */
   function setPinned(pinned) {
     overlay.dataset.novelPinned = pinned ? "1" : "";
+    overlay.classList.toggle("novel-overlay-pinned", !!pinned);
   }
 
   if (backdropClose) {
