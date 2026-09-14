@@ -2363,6 +2363,19 @@
   .novel-dialog-floating .novel-dialog-header {
     cursor: default;
   }
+  /* 移动端：标题优先占空间（flex:1 1 auto 与搜索框竞争），
+     并允许换行完整显示（white-space:normal 覆盖基线的 nowrap），
+     去掉省略号——标题永远完整，不出现多余的「…」 */
+  .novel-dialog-floating .novel-topbar-title {
+    flex: 1 1 auto;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .novel-dialog-floating .novel-topbar-search {
+    flex: 0 1 auto; /* 搜索框让位，仅占必要宽度 */
+    min-width: 64px;
+  }
   .novel-dialog-floating .novel-topbar-settings .novel-cfm-folder-btn {
     width: 28px;
     height: 28px;
