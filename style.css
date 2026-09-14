@@ -337,12 +337,13 @@
   text-overflow: ellipsis;
 }
 
-/* 聊天卡片：标题允许换行，避免长名字被截成省略号 */
+/* 聊天卡片：标题单行省略（与角色卡一致），长名字截断为省略号 */
 .novel-chat-card .novel-card-title {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  word-break: break-all;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: keep-all;
   line-height: 1.35;
 }
 
