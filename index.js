@@ -1296,7 +1296,8 @@ jQuery(async () => {
 
       <div class="novel-settings-row novel-regex-section">
         <div class="novel-settings-label">正则过滤</div>
-        <div class="novel-settings-hint">把酒馆正则应用到小说阅读：勾选后，正文渲染时会先按勾选的正则处理消息内容（隐藏 OOC 指令、去敏感词等）。全局正则始终可用；角色正则仅在该角色的聊天中生效。</div>
+        <div class="novel-settings-hint">把酒馆正则应用到小说阅读：勾选后，正文渲染时会先按勾选的正则处理消息内容（隐藏 OOC 指令、去敏感词等）。全局正则自动跟随酒馆中你当前勾选的正则；角色正则仅在该角色的聊天中生效。</div>
+        <div class="novel-regex-active-summary"></div>
         <div class="novel-regex-list"></div>
       </div>
 
@@ -1542,17 +1543,17 @@ jQuery(async () => {
 
     // ---- 正则过滤：列出酒馆正则（全局 + 当前角色级），勾选后应用到小说阅读 ----
     const regexListEl = content.querySelector(".novel-regex-list");
+    const regexActiveEl = content.querySelector(".novel-regex-active-summary");
     const avatarForRegex = state.currentChar?.avatar || "";
     // 全局/角色列表不包含预设正则（预设单独在下方子区块列出）
     const regexScripts = regexCore.getAllScripts({
       avatar: avatarForRegex,
       presetNames: [],
     });
-    const regexEnabled = new Set(regexCore.getEnabledIds());
 
     // 勾选变化后：持久化 + 若在阅读/目录页则立即重新渲染当前章
-    function applyRegexToggle(key, checked) {
-      regexCore.setEnabled(key, checked);
+    function applyRegexToggle(item, checked) {
+      regexCore.setEnabledState(item, checked);
       deps.saveSettings();
       if (state.page === "reader") {
         const ch = state.currentChapter;
@@ -1561,33 +1562,104 @@ jQuery(async () => {
         const container = bodyEl.querySelector(".novel-page");
         if (container) renderTocPage(container);
       }
+      // 同步下方列表 + 概览 + 当前预设列表的勾选状态
+      renderRegexBaseList();
+      renderRegexActiveSummary();
+      if (presetSelectEl) renderPresetRegexList(presetSelectEl.value);
     }
 
-    if (!regexScripts.length) {
-      const empty = document.createElement("div");
-      empty.className = "novel-regex-empty";
-      empty.textContent =
-        "没有可用的全局/角色正则。可先在下方选择 API 预设并勾选其中的预设正则。";
-      regexListEl.appendChild(empty);
-    } else {
+    /** 渲染一条正则勾选行（checkbox + 徽标 + 名称），change 时同步状态 */
+    function renderRegexItem(row, item, badgeText) {
+      const checked = regexCore.isEnabled(item);
+      row.innerHTML = `
+        <input type="checkbox" data-key="${escapeHtml(item.key)}" ${checked ? "checked" : ""} />
+        <span class="novel-regex-badge">${badgeText}</span>
+        <span class="novel-regex-name">${escapeHtml(
+          String(item.script.scriptName || item.script.id || "未命名"),
+        )}</span>`;
+      row.addEventListener("change", (e) =>
+        applyRegexToggle(item, e.target.checked),
+      );
+    }
+
+    /** 下方全局/角色正则列表 */
+    function renderRegexBaseList() {
+      regexListEl.innerHTML = "";
+      if (!regexScripts.length) {
+        const empty = document.createElement("div");
+        empty.className = "novel-regex-empty";
+        empty.textContent =
+          "没有可用的全局/角色正则。可先在下方选择 API 预设并勾选其中的预设正则。";
+        regexListEl.appendChild(empty);
+        return;
+      }
       regexScripts.forEach((item) => {
         const row = document.createElement("label");
         row.className = "novel-regex-item";
-        const checked =
-          regexEnabled.has(item.key) || regexEnabled.has(item.script.id);
-        const sourceLabel = item.source === "global" ? "全局" : "角色";
-        row.innerHTML = `
-          <input type="checkbox" data-key="${escapeHtml(item.key)}" ${checked ? "checked" : ""} />
-          <span class="novel-regex-badge">${sourceLabel}</span>
-          <span class="novel-regex-name">${escapeHtml(
-            String(item.script.scriptName || item.script.id || "未命名"),
-          )}</span>`;
-        row.addEventListener("change", (e) =>
-          applyRegexToggle(item.key, e.target.checked),
-        );
+        renderRegexItem(row, item, item.source === "global" ? "全局" : "角色");
         regexListEl.appendChild(row);
       });
     }
+
+    // 已启用正则概览（位于全局正则上方）：显示全局 + 用户已勾选的各预设，
+    // 默认收起，点击分组标题可展开查看并取消勾选
+    function renderRegexActiveSummary() {
+      regexActiveEl.innerHTML = "";
+      const allItems = regexCore.getAllScripts({ avatar: avatarForRegex });
+      const active = allItems.filter(
+        (item) => regexCore.isEnabled(item) && item.source !== "character",
+      );
+      if (!active.length) {
+        const empty = document.createElement("div");
+        empty.className = "novel-regex-empty";
+        empty.textContent =
+          "当前没有启用的正则。勾选下方或预设中的正则后，会显示在这里。";
+        regexActiveEl.appendChild(empty);
+        return;
+      }
+      const groups = [];
+      const globalItems = active.filter((item) => item.source === "global");
+      if (globalItems.length) groups.push({ name: "全局", items: globalItems });
+      const presetNames = [
+        ...new Set(
+          active.filter((i) => i.source === "preset").map((i) => i.presetName),
+        ),
+      ];
+      for (const pn of presetNames) {
+        const items = active.filter((i) => i.presetName === pn);
+        if (items.length) groups.push({ name: `预设 · ${pn}`, items });
+      }
+      groups.forEach((group) => {
+        const groupEl = document.createElement("div");
+        groupEl.className = "novel-regex-group";
+        const head = document.createElement("div");
+        head.className = "novel-regex-group-head";
+        head.innerHTML = `
+          <span class="novel-regex-group-arrow">▸</span>
+          <span class="novel-regex-group-name">${escapeHtml(group.name)}</span>
+          <span class="novel-regex-group-count">${group.items.length}</span>`;
+        const list = document.createElement("div");
+        list.className = "novel-regex-group-list";
+        list.style.display = "none"; // 默认收起
+        group.items.forEach((item) => {
+          const row = document.createElement("label");
+          row.className = "novel-regex-item";
+          renderRegexItem(row, item, item.source === "global" ? "全局" : "预设");
+          list.appendChild(row);
+        });
+        head.addEventListener("click", () => {
+          const expanded = list.style.display !== "none";
+          list.style.display = expanded ? "none" : "";
+          head.classList.toggle("novel-regex-group-open", !expanded);
+        });
+        groupEl.appendChild(head);
+        groupEl.appendChild(list);
+        regexActiveEl.appendChild(groupEl);
+      });
+    }
+
+    renderRegexActiveSummary();
+    renderRegexBaseList();
 
     // ---- 预设正则：先选预设，再勾选该预设中的正则（跨预设累积生效） ----
     const presetSelectEl = content.querySelector(".novel-regex-preset-select");
@@ -1629,17 +1701,7 @@ jQuery(async () => {
       items.forEach((item) => {
         const row = document.createElement("label");
         row.className = "novel-regex-item";
-        const checked =
-          regexEnabled.has(item.key) || regexEnabled.has(item.script.id);
-        row.innerHTML = `
-          <input type="checkbox" data-key="${escapeHtml(item.key)}" ${checked ? "checked" : ""} />
-          <span class="novel-regex-badge">预设</span>
-          <span class="novel-regex-name">${escapeHtml(
-            String(item.script.scriptName || item.script.id || "未命名"),
-          )}</span>`;
-        row.addEventListener("change", (e) =>
-          applyRegexToggle(item.key, e.target.checked),
-        );
+        renderRegexItem(row, item, "预设");
         presetListEl.appendChild(row);
       });
     }

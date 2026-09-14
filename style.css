@@ -1265,6 +1265,91 @@
     );
 }
 
+/* 已启用正则概览（位于全局正则上方，默认收起，点击分组标题展开） */
+.novel-regex-active-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+      transparent
+    );
+}
+
+.novel-regex-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.novel-regex-group-head:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
+    transparent
+  );
+}
+
+.novel-regex-group-arrow {
+  display: inline-block;
+  font-size: 0.7rem;
+  color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+  transition: transform 0.15s ease;
+  width: 1em;
+  text-align: center;
+}
+
+.novel-regex-group-open .novel-regex-group-arrow {
+  transform: rotate(90deg);
+}
+
+.novel-regex-group-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.novel-regex-group-count {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+    transparent
+  );
+  opacity: 0.85;
+}
+
+.novel-regex-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 4px;
+  margin-top: 2px;
+}
+
 .novel-regex-list {
   display: flex;
   flex-direction: column;
