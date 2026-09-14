@@ -80,7 +80,10 @@ export function createOverlayDialog(options = {}) {
   } = options;
 
   const overlay = document.createElement("div");
-  overlay.className = "novel-overlay" + (floating ? " novel-overlay-floating" : "");
+  overlay.className =
+    "novel-overlay" +
+    (compact ? " novel-overlay-compact" : "") +
+    (floating ? " novel-overlay-floating" : "");
   overlay.dataset.novelOverlay = "";
 
   const dialog = document.createElement("div");
