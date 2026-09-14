@@ -1296,10 +1296,10 @@ jQuery(async () => {
 
       <div class="novel-settings-row novel-regex-section">
         <div class="novel-regex-label-row">
-          <div class="novel-settings-label">正则过滤</div>
+          <div class="novel-settings-label">全局正则</div>
           <button type="button" class="novel-regex-toggle-all" data-scope="base">全选</button>
         </div>
-        <div class="novel-settings-hint">把酒馆正则应用到小说阅读：勾选后，正文渲染时会先按勾选的正则处理消息内容（隐藏 OOC 指令、去敏感词等）。全局正则自动跟随酒馆中你当前勾选的正则；角色正则仅在该角色的聊天中生效。</div>
+        <div class="novel-settings-hint">从酒馆中启用正则：全局正则自动跟随酒馆中你当前勾选的正则；角色正则仅在该角色的聊天中生效。勾选后，正文渲染时会先按勾选的正则处理消息内容（隐藏 OOC 指令、去敏感词等）。</div>
         <div class="novel-regex-active-summary"></div>
         <div class="novel-regex-list"></div>
       </div>
