@@ -8,6 +8,53 @@
 // 实现用纯 DOM（不依赖 ST 的 getContext().createPopperModal），CSS 类统一 novel- 前缀。
 
 /**
+ * 使 handleEl 可拖动 dialog（悬浮窗移动）。
+ * 拖动时排除按钮/输入框/选择器等交互元素，避免误触；窗口不超出视口。
+ * 也会给 handleEl 加上 .novel-dialog-float-drag 类（移动端媒体查询会禁用拖动 cursor）。
+ * @param {HTMLElement} dialog
+ * @param {HTMLElement} handleEl
+ */
+export function makeDraggable(dialog, handleEl) {
+  if (!dialog || !handleEl) return;
+  handleEl.classList.add("novel-dialog-float-drag");
+  let drag = null;
+  handleEl.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button, input, select, textarea, .interactable")) return;
+    drag = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origLeft: dialog.offsetLeft,
+      origTop: dialog.offsetTop,
+    };
+    try {
+      handleEl.setPointerCapture(e.pointerId);
+    } catch {}
+    e.preventDefault();
+  });
+  handleEl.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const left = Math.min(
+      Math.max(drag.origLeft + (e.clientX - drag.startX), 0),
+      window.innerWidth - dialog.offsetWidth,
+    );
+    const top = Math.min(
+      Math.max(drag.origTop + (e.clientY - drag.startY), 0),
+      window.innerHeight - dialog.offsetHeight,
+    );
+    dialog.style.left = `${left}px`;
+    dialog.style.top = `${top}px`;
+  });
+  const endDrag = (e) => {
+    drag = null;
+    try {
+      handleEl.releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+  handleEl.addEventListener("pointerup", endDrag);
+  handleEl.addEventListener("pointercancel", endDrag);
+}
+
+/**
  * 创建通用遮罩弹窗。
  * @param {object} options
  * @param {string} [options.title] 标题
