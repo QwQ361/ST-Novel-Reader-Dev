@@ -43,6 +43,7 @@ import {
 } from "./ui/modal/index.js";
 import {
   applyThemeCore,
+  resolveOpaqueBg,
   sampleStThemeCore,
 } from "./utils/theme.js";
 
@@ -266,7 +267,15 @@ jQuery(async () => {
         if (dialogRef !== dlg) return;
         const g2 = getGlobalSettings();
         if (!g2.readerSettings?.themeId) {
-          applyThemeCore(dlg.dialog, sampleStThemeCore());
+          // 与 applyReaderStyles 的 ∅ 分支保持一致：采样 + 悬浮窗不透明兜底
+          const sampled = sampleStThemeCore();
+          applyThemeCore(dlg.dialog, sampled);
+          if (dlg.dialog.classList.contains("novel-dialog-floating")) {
+            const sampledBg = sampled?.bg;
+            if (!sampledBg || /^rgba\(|^hsla\(/.test(sampledBg)) {
+              dlg.dialog.style.background = resolveOpaqueBg(sampledBg);
+            }
+          }
           themeTextBridge.refresh();
         }
       }, 300);
@@ -2144,7 +2153,16 @@ jQuery(async () => {
       dialogEl.style.background = "";
       dialogEl.style.removeProperty("--novel-fg");
       try {
-        applyThemeCore(dialogEl, sampleStThemeCore());
+        const sampled = sampleStThemeCore();
+        applyThemeCore(dialogEl, sampled);
+        // 悬浮窗：美化主题为半透明/渐变/图片时采样不到不透明背景，
+        // 直接写死不透明兜底色避免窗口透底（全屏因遮罩+窗口双倍叠加不明显）
+        if (dialogEl.classList.contains("novel-dialog-floating")) {
+          const sampledBg = sampled?.bg;
+          if (!sampledBg || /^rgba\(|^hsla\(/.test(sampledBg)) {
+            dialogEl.style.background = resolveOpaqueBg(sampledBg);
+          }
+        }
       } catch (err) {
         // 采样失败则保持现状
       }
