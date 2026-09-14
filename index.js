@@ -1544,6 +1544,7 @@ jQuery(async () => {
     // ---- 正则过滤：列出酒馆正则（全局 + 当前角色级），勾选后应用到小说阅读 ----
     const regexListEl = content.querySelector(".novel-regex-list");
     const regexActiveEl = content.querySelector(".novel-regex-active-summary");
+    const regexPresetSectionEl = content.querySelector(".novel-regex-preset-section");
     const avatarForRegex = state.currentChar?.avatar || "";
     // 全局/角色列表不包含预设正则（预设单独在下方子区块列出）
     const regexScripts = regexCore.getAllScripts({
@@ -1619,7 +1620,8 @@ jQuery(async () => {
       }
       const groups = [];
       const globalItems = active.filter((item) => item.source === "global");
-      if (globalItems.length) groups.push({ name: "全局", items: globalItems });
+      if (globalItems.length)
+        groups.push({ type: "global", name: "全局", items: globalItems });
       const presetNames = [
         ...new Set(
           active.filter((i) => i.source === "preset").map((i) => i.presetName),
@@ -1627,7 +1629,13 @@ jQuery(async () => {
       ];
       for (const pn of presetNames) {
         const items = active.filter((i) => i.presetName === pn);
-        if (items.length) groups.push({ name: `预设 · ${pn}`, items });
+        if (items.length)
+          groups.push({
+            type: "preset",
+            presetName: pn,
+            name: `预设 · ${pn}`,
+            items,
+          });
       }
       groups.forEach((group) => {
         const groupEl = document.createElement("div");
@@ -1651,6 +1659,45 @@ jQuery(async () => {
           const expanded = list.style.display !== "none";
           list.style.display = expanded ? "none" : "";
           head.classList.toggle("novel-regex-group-open", !expanded);
+          // 点击分组标题：展开/收起列表，同时跳转到对应位置
+          //  - 全局分组 → 滚动到下方全局/角色正则列表
+          //  - 预设分组 → 自动切换下拉框到该预设并渲染其正则列表，再滚动到预设区块
+          if (group.type === "preset" && presetSelectEl) {
+            // 若目标预设不在当前下拉选项（搜索/CFM 文件夹过滤排除了它），
+            // 先重置过滤条件再重新渲染选项，确保能切换到该预设
+            if (
+              ![...presetSelectEl.options].some(
+                (o) => o.value === group.presetName,
+              )
+            ) {
+              presetSearchEl.value = "";
+              if (
+                presetFolderFilter !== "__all__" &&
+                presetFolderBtn &&
+                cfmBridge.isCfmInstalled()
+              ) {
+                presetFolderFilter = "__all__";
+                presetFolderPanel?.close();
+              }
+              renderPresetOptions("");
+            }
+            presetSelectEl.value = group.presetName;
+            renderPresetRegexList(group.presetName);
+          }
+          const scrollTarget =
+            group.type === "global" ? regexListEl : regexPresetSectionEl;
+          if (scrollTarget) {
+            requestAnimationFrame(() => {
+              try {
+                scrollTarget.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+              } catch {
+                scrollTarget.scrollIntoView(true);
+              }
+            });
+          }
         });
         groupEl.appendChild(head);
         groupEl.appendChild(list);
