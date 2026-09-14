@@ -2348,6 +2348,8 @@
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+  /* 浮在标题/搜索框之上：长标题若一时延伸过来也不会压住按钮 */
+  z-index: 6;
 }
 .novel-dialog-floating .novel-topbar-search {
   flex: 1 1 auto;
@@ -2357,6 +2359,8 @@
 }
 .novel-dialog-floating .novel-topbar-title {
   flex: 0 1 auto; /* 允许截断，不强制完整显示 */
+  /* 关键：显式 min-width:0，避免长标题按 min-content 撑开把按钮区挤到屏幕外 */
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
