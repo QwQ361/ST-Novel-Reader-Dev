@@ -72,6 +72,10 @@ const READER_THEMES = [
 const BOOKMARK_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>';
 
+// 置顶图标（SVG，描边风格，与收藏一致；激活态由 CSS 高亮）
+const PIN_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
+
 jQuery(async () => {
   console.log("[NovelReader] 启动中…");
 
@@ -311,14 +315,18 @@ jQuery(async () => {
       <div class="novel-topbar-title">酒馆小说阅读器</div>
       <div class="novel-topbar-search">
         <input type="text" placeholder="搜索角色 / 聊天…" />
-        <button type="button" class="novel-cfm-folder-btn novel-cfm-char-filter" title="文件夹过滤" style="display:none">
-          <i class="fa-solid fa-folder-tree"></i>
-        </button>
+        ${
+          g0.windowMode === "floating"
+            ? ""
+            : '<button type="button" class="novel-cfm-folder-btn novel-cfm-char-filter" title="文件夹过滤" style="display:none"><i class="fa-solid fa-folder-tree"></i></button>'
+        }
       </div>
       <div class="novel-topbar-settings">
         ${
           g0.windowMode === "floating"
-            ? '<button class="novel-icon-btn novel-pin-btn" data-action="pin" title="置顶：点击弹窗外不自动关闭">📌</button>'
+            ? `
+        <button type="button" class="novel-cfm-folder-btn novel-cfm-char-filter" title="文件夹过滤" style="display:none"><i class="fa-solid fa-folder-tree"></i></button>
+        <button class="novel-icon-btn novel-pin-btn" data-action="pin" title="置顶：点击弹窗外不自动关闭">${PIN_SVG}</button>`
             : ""
         }
         <button class="novel-icon-btn" data-action="settings" title="全局设置">⚙</button>
