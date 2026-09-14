@@ -2333,34 +2333,22 @@
   opacity: 1;
 }
 
-/* 悬浮窗收窄时：设置与关闭按钮（⚙/×）常驻右上角，不随窗口变窄而溢出。
-   做法：settings 区块绝对定位在顶栏右上角，不参与 flex 压缩；
-   搜索框/标题可收缩，底部栏 flex-wrap 已保证自身始终可见。 */
-.novel-dialog-floating .novel-topbar {
-  position: relative; /* 作为 settings 绝对定位的父级 */
-}
+/* 悬浮窗收窄时：置顶/文件夹/⚙/× 按钮并入 flex 流，放在搜索框右侧。
+   顺序：返回 → 标题 → 搜索框 → 按钮区；标题/搜索框允许收缩，
+   按钮区 flex:0 0 auto 永远占据最右侧，任何长度标题都不会压住按钮。 */
 .novel-dialog-floating .novel-topbar-settings {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 0 0 auto;
-  /* 浮在标题/搜索框之上：长标题若一时延伸过来也不会压住按钮 */
-  z-index: 6;
+  flex: 0 0 auto; /* 不参与压缩，始终完整显示 */
 }
 .novel-dialog-floating .novel-topbar-search {
   flex: 1 1 auto;
   min-width: 0; /* 覆盖 120px，允许搜索框被压缩 */
-  /* 给绝对定位的按钮区留出空间：文件夹 + 置顶 + ⚙ + × 约 170px，避免被遮挡 */
-  padding-right: 178px;
 }
 .novel-dialog-floating .novel-topbar-title {
   flex: 0 1 auto; /* 允许截断，不强制完整显示 */
-  /* 关键：显式 min-width:0，避免长标题按 min-content 撑开把按钮区挤到屏幕外 */
-  min-width: 0;
+  min-width: 0; /* 允许收缩，避免长标题按 min-content 撑开布局 */
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -2369,7 +2357,7 @@
 }
 
 /* 移动端：悬浮窗保持小窗形态（不强制全屏，保留拖动/缩放与右下角手柄）。
-   顶栏完全复用 PC 悬浮窗布局（settings 绝对定位 + 搜索框 padding 预留），
+   顶栏完全复用 PC 悬浮窗布局（flex 流：标题/搜索框收缩 + 按钮区常驻右侧），
    仅把 settings 区内 CFM 文件夹按钮压得更紧凑（窄容器按钮区空间有限） */
 @media (max-width: 900px) {
   .novel-dialog-floating .novel-dialog-header {
