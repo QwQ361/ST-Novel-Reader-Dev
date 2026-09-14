@@ -2264,12 +2264,34 @@
   border-bottom-right-radius: 12px;
 }
 
-/* 悬浮窗模式下内容区保持 flex 撑满 */
-.novel-dialog-floating .novel-dialog-content {
-  flex: 1 1 auto;
-  min-height: 0;
+/* 悬浮窗收窄时：设置与关闭按钮（⚙/×）常驻右上角，不随窗口变窄而溢出。
+   做法：settings 区块绝对定位在顶栏右上角，不参与 flex 压缩；
+   搜索框/标题可收缩，底部栏 flex-wrap 已保证自身始终可见。 */
+.novel-dialog-floating .novel-topbar {
+  position: relative; /* 作为 settings 绝对定位的父级 */
+}
+.novel-dialog-floating .novel-topbar-settings {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.novel-dialog-floating .novel-topbar-search {
+  flex: 1 1 auto;
+  min-width: 0; /* 覆盖 120px，允许搜索框被压缩 */
+  padding-right: 96px; /* 给绝对定位的 ⚙/× 按钮留出空间，避免被遮挡 */
+}
+.novel-dialog-floating .novel-topbar-title {
+  flex: 0 1 auto; /* 允许截断，不强制完整显示 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.novel-dialog-floating .novel-topbar-back {
+  flex: 0 0 auto;
 }
 
 /* 移动端：悬浮窗强制全屏（拖动/缩放在小屏上体验差，直接占满） */
@@ -2293,5 +2315,17 @@
   }
   .novel-dialog-floating .novel-dialog-header {
     cursor: default;
+  }
+  /* 移动端全屏：恢复常规 flex 顶栏（绝对定位的 ⚙/× 回到流内） */
+  .novel-dialog-floating .novel-topbar {
+    position: static;
+  }
+  .novel-dialog-floating .novel-topbar-settings {
+    position: static;
+    transform: none;
+    margin-left: auto;
+  }
+  .novel-dialog-floating .novel-topbar-search {
+    padding-right: 0; /* 取消为绝对定位按钮预留的空间 */
   }
 }
