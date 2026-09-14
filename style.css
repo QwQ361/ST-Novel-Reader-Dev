@@ -1326,6 +1326,18 @@
     );
 }
 
+/* 概览区块顶部说明文字 */
+.novel-regex-summary-tip {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 75%,
+    transparent
+  );
+  padding: 0 2px;
+}
+
 .novel-regex-group-head {
   display: flex;
   align-items: center;

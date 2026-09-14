@@ -1694,6 +1694,13 @@ jQuery(async () => {
             items,
           });
       }
+      if (groups.length) {
+        const tip = document.createElement("div");
+        tip.className = "novel-regex-summary-tip";
+        tip.textContent =
+          "已勾选的正则：点击分组标题可展开查看，点击右侧定位按钮可快速跳转到对应位置。";
+        regexActiveEl.appendChild(tip);
+      }
       groups.forEach((group) => {
         const groupEl = document.createElement("div");
         groupEl.className = "novel-regex-group";
