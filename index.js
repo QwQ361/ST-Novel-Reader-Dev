@@ -1645,7 +1645,10 @@ jQuery(async () => {
         head.innerHTML = `
           <span class="novel-regex-group-arrow">▸</span>
           <span class="novel-regex-group-name">${escapeHtml(group.name)}</span>
-          <span class="novel-regex-group-count">${group.items.length}</span>`;
+          <span class="novel-regex-group-count">${group.items.length}</span>
+          <button class="novel-regex-group-locate" type="button" title="定位到对应位置">
+            <i class="fa-solid fa-location-crosshairs"></i>
+          </button>`;
         const list = document.createElement("div");
         list.className = "novel-regex-group-list";
         list.style.display = "none"; // 默认收起
@@ -1655,13 +1658,18 @@ jQuery(async () => {
           renderRegexItem(row, item, item.source === "global" ? "全局" : "预设");
           list.appendChild(row);
         });
+        // 点击分组标题：仅展开/收起列表（跳转交给右侧定位按钮）
         head.addEventListener("click", () => {
           const expanded = list.style.display !== "none";
           list.style.display = expanded ? "none" : "";
           head.classList.toggle("novel-regex-group-open", !expanded);
-          // 点击分组标题：展开/收起列表，同时跳转到对应位置
-          //  - 全局分组 → 滚动到下方全局/角色正则列表
-          //  - 预设分组 → 自动切换下拉框到该预设并渲染其正则列表，再滚动到预设区块
+        });
+        // 定位按钮：跳转到对应位置
+        //  - 全局分组 → 滚动到下方全局/角色正则列表
+        //  - 预设分组 → 自动切换下拉框到该预设并渲染其正则列表，再滚动到预设区块
+        const locateBtn = head.querySelector(".novel-regex-group-locate");
+        locateBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
           if (group.type === "preset" && presetSelectEl) {
             // 若目标预设不在当前下拉选项（搜索/CFM 文件夹过滤排除了它），
             // 先重置过滤条件再重新渲染选项，确保能切换到该预设

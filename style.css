@@ -1342,6 +1342,34 @@
   opacity: 0.85;
 }
 
+/* 定位按钮：位于分组最右侧（计数徽标之后），点击跳转到对应位置 */
+.novel-regex-group-locate {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+  font-size: 0.72rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.novel-regex-group-locate:hover {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+    transparent
+  );
+}
+
 .novel-regex-group-list {
   display: flex;
   flex-direction: column;
