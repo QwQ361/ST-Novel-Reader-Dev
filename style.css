@@ -2364,41 +2364,13 @@
   flex: 0 0 auto;
 }
 
-/* 移动端：悬浮窗强制全屏（拖动/缩放在小屏上体验差，直接占满） */
+/* 移动端：悬浮窗保持小窗形态（不强制全屏，保留拖动/缩放与右下角手柄）。
+   顶栏完全复用 PC 悬浮窗布局（settings 绝对定位 + 搜索框 padding 预留），
+   仅把 settings 区内 CFM 文件夹按钮压得更紧凑（窄容器按钮区空间有限） */
 @media (max-width: 900px) {
-  .novel-dialog-floating {
-    position: fixed;
-    inset: 0;
-    width: 100vw !important;
-    height: 100vh !important;
-    height: 100dvh !important;
-    min-width: 0;
-    min-height: 0;
-    max-width: none;
-    max-height: none;
-    border-radius: 0;
-    border: none;
-    box-shadow: none;
-  }
-  .novel-dialog-resize-handle {
-    display: none;
-  }
   .novel-dialog-floating .novel-dialog-header {
     cursor: default;
   }
-  /* 移动端全屏：恢复常规 flex 顶栏（绝对定位的 ⚙/× 回到流内） */
-  .novel-dialog-floating .novel-topbar {
-    position: static;
-  }
-  .novel-dialog-floating .novel-topbar-settings {
-    position: static;
-    transform: none;
-    margin-left: auto;
-  }
-  .novel-dialog-floating .novel-topbar-search {
-    padding-right: 0; /* 取消为绝对定位按钮预留的空间 */
-  }
-  /* 移动端全屏：settings 区内 CFM 按钮恢复紧凑尺寸（覆盖悬浮窗下的 icon-btn 尺寸） */
   .novel-dialog-floating .novel-topbar-settings .novel-cfm-folder-btn {
     width: 28px;
     height: 28px;

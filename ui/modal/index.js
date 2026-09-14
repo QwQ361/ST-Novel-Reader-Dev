@@ -153,16 +153,21 @@ export function createOverlayDialog(options = {}) {
     const vh = () => window.innerHeight;
     const minW = 360;
     const minH = 240;
-    // 恢复上次保存的大小与位置；未保存或越界则居中初始化
-    let initW = Math.min(880, vw() * 0.92);
-    let initH = Math.min(620, vh() * 0.88);
+    // 恢复上次保存的大小与位置；未保存或越界则居中初始化。
+    // 移动端（窄视口）初始窗口更小（92vw × 56vh），避免一打开就近全屏、看不到拖拽手柄
+    const mobile = vw() <= 900;
+    let initW = Math.min(mobile ? 640 : 880, vw() * (mobile ? 0.92 : 0.92));
+    let initH = Math.min(mobile ? 420 : 620, vh() * (mobile ? 0.56 : 0.88));
     let initX = (vw() - initW) / 2;
     let initY = (vh() - initH) / 2;
     if (floatingRect && floatingRect.w > 0 && floatingRect.h > 0) {
       const savedW = Math.max(floatingRect.w, minW);
       const savedH = Math.max(floatingRect.h, minH);
-      initW = Math.min(savedW, vw());
-      initH = Math.min(savedH, vh());
+      // 移动端额外限制上限（此前全屏时期可能保存过 100vw×100vh 的旧几何，避免恢复后仍全屏）
+      const capW = mobile ? vw() * 0.98 : vw();
+      const capH = mobile ? vh() * 0.7 : vh();
+      initW = Math.min(savedW, capW);
+      initH = Math.min(savedH, capH);
       // 位置越界（分辨率变化/窗口调整）时回退到左上安全区域
       initX = Math.min(Math.max(floatingRect.x ?? 0, 0), Math.max(vw() - initW, 0));
       initY = Math.min(Math.max(floatingRect.y ?? 0, 0), Math.max(vh() - initH, 0));
