@@ -41,6 +41,10 @@ import {
   createOverlayDialog,
   makeDraggable,
 } from "./ui/modal/index.js";
+import {
+  applyThemeCore,
+  sampleStThemeCore,
+} from "./utils/theme.js";
 
 const EXT_NAME = "ST-Novel-Reader";
 
