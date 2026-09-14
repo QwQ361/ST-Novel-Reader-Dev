@@ -187,6 +187,10 @@ jQuery(async () => {
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
     // 阅读窗口模式："fullscreen" = 全屏（默认），"floating" = 可拖动/可缩放的悬浮窗
     if (!g.windowMode) g.windowMode = "fullscreen";
+    // 悬浮窗上次的大小与位置 {w,h,x,y}（关闭→重开恢复）
+    if (g.floatingRect === undefined) g.floatingRect = null;
+    // 悬浮窗置顶状态：置顶后点击弹窗外不再自动关闭（仅悬浮窗模式生效）
+    if (g.floatingPinned === undefined) g.floatingPinned = false;
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
     if (g.showUserReplies === undefined) g.showUserReplies = true; // 是否显示 user 回复（默认显示）
     // 打开阅读器时显示哪个页面："last" = 上次关闭的页面（默认），"home" = 首页（书架）
@@ -246,8 +250,19 @@ jQuery(async () => {
       title: "",
       showClose: false,
       floating: g0.windowMode === "floating",
+      // 悬浮窗：恢复上次大小/位置；拖动/缩放结束时持久化
+      floatingRect: g0.floatingRect,
+      onFloatingRect: (rect) => {
+        const g = getGlobalSettings();
+        g.floatingRect = rect;
+        deps.saveSettings();
+      },
     });
     dialogRef = dlg;
+    // 悬浮窗置顶：置顶时点击遮罩不再自动关闭（仅悬浮窗模式有遮罩点击关闭）
+    if (g0.windowMode === "floating" && g0.floatingPinned) {
+      dlg.setPinned(true);
+    }
     dlg.onClose = () => {
       saveLastView(); // 记住关闭前的页面（角色/聊天/章节）
       charFolderPanel?.close(); // 关闭可能打开的角色文件夹过滤面板（独立挂 body）
@@ -301,10 +316,20 @@ jQuery(async () => {
         </button>
       </div>
       <div class="novel-topbar-settings">
+        ${
+          g0.windowMode === "floating"
+            ? '<button class="novel-icon-btn novel-pin-btn" data-action="pin" title="置顶：点击弹窗外不自动关闭">📌</button>'
+            : ""
+        }
         <button class="novel-icon-btn" data-action="settings" title="全局设置">⚙</button>
         <button class="novel-icon-btn novel-icon-close" data-action="close" title="关闭">×</button>
       </div>`;
     content.appendChild(topbarEl);
+
+    // 置顶按钮：初始状态高亮（读取持久化置顶状态）
+    if (g0.windowMode === "floating" && g0.floatingPinned) {
+      topbarEl.querySelector('[data-action="pin"]')?.classList.add("novel-pin-active");
+    }
 
     // 悬浮窗模式：顶部栏作为拖动柄（无 header；拖动时排除按钮/输入框等交互元素）
     if (g0.windowMode === "floating") {
@@ -1101,6 +1126,19 @@ jQuery(async () => {
       .querySelector('[data-action="settings"]')
       .addEventListener("click", () => {
         openGlobalSettings();
+      });
+    // 置顶按钮（仅悬浮窗模式存在）：置顶后点击弹窗外不再自动关闭
+    topbarEl
+      .querySelector('[data-action="pin"]')
+      ?.addEventListener("click", () => {
+        const g = getGlobalSettings();
+        const pinned = !g.floatingPinned;
+        g.floatingPinned = pinned;
+        deps.saveSettings();
+        dialogRef?.setPinned(pinned);
+        topbarEl
+          .querySelector('[data-action="pin"]')
+          ?.classList.toggle("novel-pin-active", pinned);
       });
     // 关闭按钮（×）：关闭阅读器，下次打开恢复原页面
     topbarEl

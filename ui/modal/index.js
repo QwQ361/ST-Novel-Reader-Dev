@@ -59,11 +59,14 @@ export function makeDraggable(dialog, handleEl) {
  * @param {object} options
  * @param {string} [options.title] 标题
  * @param {boolean} [options.backdropClose=true] 点击遮罩是否关闭
+ *        （悬浮窗模式可被置顶运行时关闭，见 togglePinOnOverlay）
  * @param {boolean} [options.showClose=true] 是否显示右上角关闭按钮
  * @param {boolean} [options.compact=false] 紧凑弹窗（小尺寸、居中、可滚动内容），用于设置类小弹窗
  * @param {boolean} [options.floating=false] 悬浮窗模式：半透明遮罩 + 固定尺寸可拖动/可缩放窗口
  *        （标题栏拖动移动，右下角手柄缩放；移动端由媒体查询强制全屏，见 style.css 末尾）
- * @returns {{ overlay: HTMLElement, dialog: HTMLElement, content: HTMLElement, close: Function, onClose: Function }}
+ * @param {object} [options.floatingRect] 悬浮窗上次保存的 {w,h,x,y}；提供则在打开时恢复大小与位置
+ * @param {Function} [options.onFloatingRect] (rect:{w,h,x,y}) => void 拖动/缩放结束时回调，用于持久化
+ * @returns {{ overlay: HTMLElement, dialog: HTMLElement, content: HTMLElement, close: Function, onClose: Function, setPinned: Function }}
  */
 export function createOverlayDialog(options = {}) {
   const {
@@ -72,6 +75,8 @@ export function createOverlayDialog(options = {}) {
     showClose = true,
     compact = false,
     floating = false,
+    floatingRect = null,
+    onFloatingRect = null,
   } = options;
 
   const overlay = document.createElement("div");
@@ -120,22 +125,59 @@ export function createOverlayDialog(options = {}) {
     onClose();
   }
 
+  // 置顶状态（悬浮窗）：置顶后点击遮罩不再关闭，仅可主动关闭。
+  // 用 overlay 的 dataset 标记，遮罩点击处理器运行时读取，免闭包同步。
+  overlay.dataset.novelPinned = "";
+
+  /** 切换遮罩点击是否关闭（置顶时置 false）。@param {boolean} pinned */
+  function setPinned(pinned) {
+    overlay.dataset.novelPinned = pinned ? "1" : "";
+  }
+
   if (backdropClose) {
     overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) close();
+      if (e.target !== overlay) return;
+      if (overlay.dataset.novelPinned === "1") return; // 置顶：点遮罩不关闭
+      close();
     });
   }
 
-  // ---- 悬浮窗模式：居中定位 + 标题栏拖动 + 右下角缩放 ----
+  // ---- 悬浮窗模式：居中定位（或恢复上次大小位置）+ 标题栏拖动 + 右下角缩放 ----
   if (floating) {
     const vw = () => window.innerWidth;
     const vh = () => window.innerHeight;
-    const initW = Math.min(880, vw() * 0.92);
-    const initH = Math.min(620, vh() * 0.88);
+    const minW = 360;
+    const minH = 240;
+    // 恢复上次保存的大小与位置；未保存或越界则居中初始化
+    let initW = Math.min(880, vw() * 0.92);
+    let initH = Math.min(620, vh() * 0.88);
+    let initX = (vw() - initW) / 2;
+    let initY = (vh() - initH) / 2;
+    if (floatingRect && floatingRect.w > 0 && floatingRect.h > 0) {
+      const savedW = Math.max(floatingRect.w, minW);
+      const savedH = Math.max(floatingRect.h, minH);
+      initW = Math.min(savedW, vw());
+      initH = Math.min(savedH, vh());
+      // 位置越界（分辨率变化/窗口调整）时回退到左上安全区域
+      initX = Math.min(Math.max(floatingRect.x ?? 0, 0), Math.max(vw() - initW, 0));
+      initY = Math.min(Math.max(floatingRect.y ?? 0, 0), Math.max(vh() - initH, 0));
+    }
     dialog.style.width = `${initW}px`;
     dialog.style.height = `${initH}px`;
-    dialog.style.left = `${(vw() - initW) / 2}px`;
-    dialog.style.top = `${(vh() - initH) / 2}px`;
+    dialog.style.left = `${initX}px`;
+    dialog.style.top = `${initY}px`;
+
+    // 拖动/缩放结束时把最新几何信息交回调用方持久化
+    const reportRect = () => {
+      if (typeof onFloatingRect === "function") {
+        onFloatingRect({
+          w: Math.round(dialog.offsetWidth),
+          h: Math.round(dialog.offsetHeight),
+          x: Math.round(dialog.offsetLeft),
+          y: Math.round(dialog.offsetTop),
+        });
+      }
+    };
 
     // 拖动：仅标题栏（点击关闭按钮不触发）
     if (header) {
@@ -172,6 +214,7 @@ export function createOverlayDialog(options = {}) {
         try {
           header.releasePointerCapture(e.pointerId);
         } catch {}
+        reportRect();
       };
       header.addEventListener("pointerup", endDrag);
       header.addEventListener("pointercancel", endDrag);
@@ -217,6 +260,7 @@ export function createOverlayDialog(options = {}) {
       try {
         handle.releasePointerCapture(e.pointerId);
       } catch {}
+      reportRect();
     };
     handle.addEventListener("pointerup", endResize);
     handle.addEventListener("pointercancel", endResize);
@@ -228,6 +272,7 @@ export function createOverlayDialog(options = {}) {
     dialog,
     content,
     close,
+    setPinned,
     set onClose(fn) {
       onClose = fn;
     },

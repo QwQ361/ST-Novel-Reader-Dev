@@ -2264,6 +2264,19 @@
   border-bottom-right-radius: 12px;
 }
 
+/* 置顶按钮（仅悬浮窗）：激活态用强调色高亮 */
+.novel-pin-btn {
+  font-size: 0.9rem;
+}
+.novel-pin-btn.novel-pin-active {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 22%,
+    transparent
+  );
+  color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+}
+
 /* 悬浮窗收窄时：设置与关闭按钮（⚙/×）常驻右上角，不随窗口变窄而溢出。
    做法：settings 区块绝对定位在顶栏右上角，不参与 flex 压缩；
    搜索框/标题可收缩，底部栏 flex-wrap 已保证自身始终可见。 */
