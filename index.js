@@ -37,7 +37,10 @@ import {
   isImageIconBackgroundCore,
   toCssUrlCore,
 } from "./integrations/topbar-icon.js";
-import { createOverlayDialog } from "./ui/modal/index.js";
+import {
+  createOverlayDialog,
+  makeDraggable,
+} from "./ui/modal/index.js";
 
 const EXT_NAME = "ST-Novel-Reader";
 
@@ -177,6 +180,8 @@ jQuery(async () => {
     if (g.readerSettings.textColor) delete g.readerSettings.textColor; // 旧字段（被主题取代）
     if (g.readerSettings.bgColor) delete g.readerSettings.bgColor; // 旧字段（被主题取代）
     if (!g.readerSettings.themeId) g.readerSettings.themeId = ""; // 阅读器主题（"" = 跟随酒馆）
+    // 阅读窗口模式："fullscreen" = 全屏（默认），"floating" = 可拖动/可缩放的悬浮窗
+    if (!g.windowMode) g.windowMode = "fullscreen";
     if (!g.customTopbarIcon) g.customTopbarIcon = ""; // 自定义顶栏图标 URL（空 = 自动检测）
     if (g.showUserReplies === undefined) g.showUserReplies = true; // 是否显示 user 回复（默认显示）
     // 打开阅读器时显示哪个页面："last" = 上次关闭的页面（默认），"home" = 首页（书架）
@@ -231,7 +236,12 @@ jQuery(async () => {
   function openReaderDialog() {
     if (dialogRef) return;
 
-    const dlg = createOverlayDialog({ title: "", showClose: false });
+    const g0 = getGlobalSettings();
+    const dlg = createOverlayDialog({
+      title: "",
+      showClose: false,
+      floating: g0.windowMode === "floating",
+    });
     dialogRef = dlg;
     dlg.onClose = () => {
       saveLastView(); // 记住关闭前的页面（角色/聊天/章节）
@@ -282,6 +292,12 @@ jQuery(async () => {
         <button class="novel-icon-btn novel-icon-close" data-action="close" title="关闭">×</button>
       </div>`;
     content.appendChild(topbarEl);
+
+    // 悬浮窗模式：顶部栏作为拖动柄（无 header；拖动时排除按钮/输入框等交互元素）
+    if (g0.windowMode === "floating") {
+      topbarEl.classList.add("novel-dialog-float-drag");
+      makeDraggable(dlg.dialog, topbarEl);
+    }
 
     // ---- 内容区（状态机切换） ----
     bodyEl = document.createElement("div");
@@ -833,8 +849,13 @@ jQuery(async () => {
       }, 400);
     });
 
-    // 点击正文（非交互元素）切换顶/底栏显隐
+    // 点击正文（非交互元素）切换顶/底栏显隐（悬浮窗模式禁用：顶栏即拖动柄，不可隐藏）
     scroll.addEventListener("click", (e) => {
+      if (
+        getGlobalSettings().windowMode === "floating"
+      ) {
+        return;
+      }
       if (
         e.target.closest(".novel-reader-inner") &&
         !e.target.closest("a,img,button,input,.novel-msg-name")
@@ -898,8 +919,13 @@ jQuery(async () => {
       }, 400);
     });
 
-    // 点击正文（非交互元素）切换顶/底栏显隐
+    // 点击正文（非交互元素）切换顶/底栏显隐（悬浮窗模式禁用：顶栏即拖动柄，不可隐藏）
     scroll.addEventListener("click", (e) => {
+      if (
+        getGlobalSettings().windowMode === "floating"
+      ) {
+        return;
+      }
       if (
         e.target.closest(".novel-reader-inner") &&
         !e.target.closest("a,img,button,input,.novel-msg-name")
@@ -1200,6 +1226,19 @@ jQuery(async () => {
       </div>
 
       <div class="novel-settings-row">
+        <div class="novel-settings-label">阅读窗口模式</div>
+        <select class="novel-window-mode-select">
+          <option value="fullscreen" ${
+            g.windowMode !== "floating" ? "selected" : ""
+          }>全屏</option>
+          <option value="floating" ${
+            g.windowMode === "floating" ? "selected" : ""
+          }>悬浮窗</option>
+        </select>
+        <div class="novel-settings-hint">全屏：阅读器占满整个屏幕；悬浮窗：小窗口显示，可拖动标题栏移动位置，拖动右下角调整大小。</div>
+      </div>
+
+      <div class="novel-settings-row">
         <div class="novel-settings-label">显示用户回复</div>
         <label class="novel-switch">
           <input type="checkbox" class="novel-show-user-input" ${
@@ -1352,6 +1391,13 @@ jQuery(async () => {
     const startPageInput = content.querySelector(".novel-start-page-select");
     startPageInput?.addEventListener("change", () => {
       g.startPage = startPageInput.value;
+      deps.saveSettings();
+    });
+
+    // ---- 阅读窗口模式：切换后保存设置（下次打开阅读器时生效） ----
+    const windowModeInput = content.querySelector(".novel-window-mode-select");
+    windowModeInput?.addEventListener("change", () => {
+      g.windowMode = windowModeInput.value;
       deps.saveSettings();
     });
 

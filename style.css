@@ -2203,3 +2203,95 @@
     min-width: 180px;
   }
 }
+
+/* ============================================================
+   悬浮窗模式（阅读窗口模式 = 悬浮窗）
+   ============================================================ */
+/* 遮罩：半透明，保留背景可见，仍可点击遮罩关闭 */
+.novel-overlay-floating {
+  background: rgba(0, 0, 0, 0.45);
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+/* 悬浮窗本体：固定定位（JS 用 left/top 定位），标题栏可拖动 */
+.novel-dialog-floating {
+  position: fixed;
+  width: 880px;
+  height: 620px;
+  min-width: 360px;
+  min-height: 240px;
+  max-width: 96vw;
+  max-height: 94vh;
+  border-radius: 14px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 18%,
+      transparent
+    );
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  z-index: 100011;
+}
+
+/* 标题栏拖动：仅悬浮窗 header 可拖动 */
+.novel-dialog-floating .novel-dialog-header {
+  cursor: move;
+  user-select: none;
+}
+
+/* 右下角缩放手柄 */
+.novel-dialog-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 22px;
+  height: 22px;
+  cursor: nwse-resize;
+  z-index: 5;
+  /* 视觉斜纹 */
+  background: linear-gradient(
+      135deg,
+      transparent 50%,
+      color-mix(
+        in srgb,
+        var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 45%,
+        transparent
+      ) 50%
+    );
+  background-size: 8px 8px;
+  border-bottom-right-radius: 12px;
+}
+
+/* 悬浮窗模式下内容区保持 flex 撑满 */
+.novel-dialog-floating .novel-dialog-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 移动端：悬浮窗强制全屏（拖动/缩放在小屏上体验差，直接占满） */
+@media (max-width: 900px) {
+  .novel-dialog-floating {
+    position: fixed;
+    inset: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-width: 0;
+    min-height: 0;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+  .novel-dialog-resize-handle {
+    display: none;
+  }
+  .novel-dialog-floating .novel-dialog-header {
+    cursor: default;
+  }
+}
