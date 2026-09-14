@@ -1677,6 +1677,7 @@ jQuery(async () => {
                 cfmBridge.isCfmInstalled()
               ) {
                 presetFolderFilter = "__all__";
+                presetFolderPanel?.setFilter("__all__");
                 presetFolderPanel?.close();
               }
               renderPresetOptions("");
