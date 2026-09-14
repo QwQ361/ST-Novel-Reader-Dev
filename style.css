@@ -1265,6 +1265,46 @@
     );
 }
 
+/* 正则区块标题行：标签靠左 + 全选按钮靠右 */
+.novel-regex-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 全选/取消全选按钮 */
+.novel-regex-toggle-all {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 45%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 12%,
+    transparent
+  );
+  color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.novel-regex-toggle-all:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 22%,
+    transparent
+  );
+  opacity: 0.9;
+}
+
 /* 已启用正则概览（位于全局正则上方，默认收起，点击分组标题展开） */
 .novel-regex-active-summary {
   display: flex;

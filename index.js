@@ -1295,14 +1295,20 @@ jQuery(async () => {
       </div>
 
       <div class="novel-settings-row novel-regex-section">
-        <div class="novel-settings-label">正则过滤</div>
+        <div class="novel-regex-label-row">
+          <div class="novel-settings-label">正则过滤</div>
+          <button type="button" class="novel-regex-toggle-all" data-scope="base">全选</button>
+        </div>
         <div class="novel-settings-hint">把酒馆正则应用到小说阅读：勾选后，正文渲染时会先按勾选的正则处理消息内容（隐藏 OOC 指令、去敏感词等）。全局正则自动跟随酒馆中你当前勾选的正则；角色正则仅在该角色的聊天中生效。</div>
         <div class="novel-regex-active-summary"></div>
         <div class="novel-regex-list"></div>
       </div>
 
       <div class="novel-settings-row novel-regex-preset-section">
-        <div class="novel-settings-label">预设正则</div>
+        <div class="novel-regex-label-row">
+          <div class="novel-settings-label">预设正则</div>
+          <button type="button" class="novel-regex-toggle-all" data-scope="preset">全选</button>
+        </div>
         <div class="novel-settings-hint">从 API 预设中启用正则：先选择预设，再勾选其中的正则。切换查看其他预设时，已勾选的正则依然生效（跨预设累积）。</div>
         <div class="novel-regex-preset-search-row">
           <input
@@ -1567,6 +1573,57 @@ jQuery(async () => {
       renderRegexBaseList();
       renderRegexActiveSummary();
       if (presetSelectEl) renderPresetRegexList(presetSelectEl.value);
+      updateToggleAllLabels();
+    }
+
+    // 全选/取消全选按钮文案刷新：根据当前区块勾选状态切换「全选/取消全选」
+    function updateToggleAllLabels() {
+      content
+        .querySelectorAll(".novel-regex-toggle-all")
+        .forEach((btn) => {
+          const scope = btn.dataset.scope;
+          let items = [];
+          if (scope === "base") {
+            items = regexScripts;
+          } else if (scope === "preset" && presetSelectEl) {
+            items = regexCore
+              .getAllScripts({ presetNames: [presetSelectEl.value] })
+              .filter((item) => item.source === "preset");
+          }
+          if (!items.length) {
+            btn.textContent = "全选";
+            return;
+          }
+          const allOn = items.every((item) => regexCore.isEnabled(item));
+          btn.textContent = allOn ? "取消全选" : "全选";
+        });
+    }
+
+    // 全选/取消全选：先统一勾选/取消当前区块全部正则，再同步渲染
+    function toggleAllRegex(scope) {
+      let items = [];
+      if (scope === "base") {
+        items = regexScripts;
+      } else if (scope === "preset" && presetSelectEl) {
+        items = regexCore
+          .getAllScripts({ presetNames: [presetSelectEl.value] })
+          .filter((item) => item.source === "preset");
+      }
+      if (!items.length) return;
+      const allOn = items.every((item) => regexCore.isEnabled(item));
+      items.forEach((item) => regexCore.setEnabledState(item, !allOn));
+      deps.saveSettings();
+      if (state.page === "reader") {
+        const ch = state.currentChapter;
+        if (ch) openChapter(ch);
+      } else if (state.page === "toc") {
+        const container = bodyEl.querySelector(".novel-page");
+        if (container) renderTocPage(container);
+      }
+      renderRegexBaseList();
+      renderRegexActiveSummary();
+      if (presetSelectEl) renderPresetRegexList(presetSelectEl.value);
+      updateToggleAllLabels();
     }
 
     /** 渲染一条正则勾选行（checkbox + 徽标 + 名称），change 时同步状态 */
@@ -1717,12 +1774,20 @@ jQuery(async () => {
     renderRegexActiveSummary();
     renderRegexBaseList();
 
+    // 全选按钮事件绑定（作用域：base = 全局/角色列表；preset = 当前选中预设）
+    content.querySelectorAll(".novel-regex-toggle-all").forEach((btn) => {
+      btn.addEventListener("click", () => toggleAllRegex(btn.dataset.scope));
+    });
+
     // ---- 预设正则：先选预设，再勾选该预设中的正则（跨预设累积生效） ----
     const presetSelectEl = content.querySelector(".novel-regex-preset-select");
     const presetListEl = content.querySelector(".novel-regex-preset-list");
     const presetSearchEl = content.querySelector(".novel-regex-preset-search");
     const presetFolderBtn = content.querySelector(".novel-cfm-preset-filter");
     const presetOptions = regexCore.getAllPresets();
+
+    // 初始刷新全选按钮文案（需在 presetSelectEl 声明之后调用，避免 TDZ）
+    updateToggleAllLabels();
 
     // CFM 预设文件夹过滤：仅同时安装 CFM 时显示；选中后仅展示该文件夹下的预设。
     // 面板控制器在下方 else 块内创建（需拿到 renderPresetOptions 供 onSelect 调用）。
@@ -1742,6 +1807,7 @@ jQuery(async () => {
           ? `没有匹配「${escapeHtml(kw)}」的预设。`
           : "请先在上方选择一个预设。";
         presetListEl.appendChild(empty);
+        updateToggleAllLabels();
         return;
       }
       const items = regexCore
@@ -1752,6 +1818,7 @@ jQuery(async () => {
         empty.className = "novel-regex-empty";
         empty.textContent = "该预设中没有正则脚本。";
         presetListEl.appendChild(empty);
+        updateToggleAllLabels();
         return;
       }
       items.forEach((item) => {
@@ -1760,6 +1827,7 @@ jQuery(async () => {
         renderRegexItem(row, item, "预设");
         presetListEl.appendChild(row);
       });
+      updateToggleAllLabels();
     }
 
     if (!presetOptions.length) {
