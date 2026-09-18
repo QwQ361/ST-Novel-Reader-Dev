@@ -1310,7 +1310,6 @@ jQuery(async () => {
             g.buttonMode === "wand" ? "novel-mode-active" : ""
           }" data-mode="wand"><i class="fa-solid fa-magic-wand-sparkles"></i> 魔术棒菜单</button>
         </div>
-        <div class="novel-settings-hint">选择阅读器入口的显示位置。切换后立即生效；悬浮球可长按拖拽调整位置，魔术棒入口位于右上角扩展菜单内。</div>
       </div>
 
       <div class="novel-settings-row">
