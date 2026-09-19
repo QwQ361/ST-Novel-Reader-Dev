@@ -2013,27 +2013,23 @@
      旧值 1050 会被顶栏/扩展菜单盖住，用户"找不到" */
   z-index: 30000;
   cursor: grab;
-  width: 48px;
-  height: 48px;
-  /* 强调色背景：不随主题混同，任何主题下都醒目 */
-  background-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
-  color: #fff;
-  border: 2px solid rgba(255, 255, 255, 0.85);
+  width: 44px;
+  height: 44px;
+  background-color: var(--SmartThemeBlurTintColor, #007bff);
+  color: var(--SmartThemeBodyColor, white);
+  border: 1px solid var(--SmartThemeBorderColor, #555);
   border-radius: 50%;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
   user-select: none;
-  transition:
-    box-shadow 0.2s,
-    transform 0.1s;
+  transition: box-shadow 0.2s;
   touch-action: none; /* 移动端：拖拽时禁止浏览器默认触摸行为（配合 passive:false） */
 }
 .novel-float-button:hover {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
-  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 .novel-float-button:active {
   cursor: grabbing;

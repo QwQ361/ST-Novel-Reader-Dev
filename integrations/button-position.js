@@ -95,7 +95,7 @@ export function createFloatingButtonCore(deps) {
   $("body").append(btn);
 
   // ---- 初始定位（恢复保存位置 + 边界校正；无保存 → 默认右上角） ----
-  const btnSize = 48; // 与 style.css .novel-float-button 尺寸保持一致
+  const btnSize = 44; // 与 style.css .novel-float-button 尺寸保持一致
   const winW = $(deps.window).width();
   const winH = $(deps.window).height();
   let savedPos = null;
