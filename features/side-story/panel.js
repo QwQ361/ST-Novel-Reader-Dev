@@ -193,9 +193,9 @@ export function createSideStoryPanel(deps) {
       row.innerHTML = `
         <i class="fa-solid fa-grip-vertical novel-ss-cmd-drag" title="拖拽到分类"></i>
         <div class="novel-ss-cmd-main">
-          <div class="novel-ss-cmd-text">${escapeHtml(cmd.text)}</div>
+          <div class="novel-ss-cmd-title">${escapeHtml(cmd.name || cmd.text)}</div>
           <div class="novel-ss-cmd-meta">
-            ${cmd.name ? `<span class="novel-ss-cmd-name">${escapeHtml(cmd.name)}</span>` : ""}
+            ${cmd.name ? `<span class="novel-ss-cmd-text">${escapeHtml(cmd.text)}</span>` : ""}
             <span class="novel-ss-cmd-cat">${escapeHtml(catName)}</span>
           </div>
         </div>
@@ -359,8 +359,6 @@ export function createSideStoryPanel(deps) {
       <div class="novel-ss-toolbar">
         <span class="novel-ss-toolbar-title"><i class="fa-solid fa-book-bookmark"></i> 番外指令库</span>
         <span class="novel-ss-toolbar-actions">
-          <i class="fa-solid fa-angles-down novel-ss-expand-all" title="展开全部分类"></i>
-          <i class="fa-solid fa-angles-up novel-ss-collapse-all" title="收起全部分类"></i>
           <i class="fa-solid fa-xmark novel-ss-close" title="关闭"></i>
         </span>
       </div>
@@ -372,7 +370,11 @@ export function createSideStoryPanel(deps) {
         <div class="novel-ss-tree-col">
           <div class="novel-ss-col-title">
             <span>分类</span>
-            <i class="fa-solid fa-plus novel-ss-new-cat" title="新建顶层分类"></i>
+            <span class="novel-ss-cat-title-actions">
+              <i class="fa-solid fa-angles-down novel-ss-expand-all" title="展开全部分类"></i>
+              <i class="fa-solid fa-angles-up novel-ss-collapse-all" title="收起全部分类"></i>
+              <i class="fa-solid fa-plus novel-ss-new-cat" title="新建顶层分类"></i>
+            </span>
           </div>
           <div class="novel-ss-tree"></div>
         </div>

@@ -3116,6 +3116,12 @@
   gap: 8px;
 }
 
+.novel-ss-cat-title-actions {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
 .novel-ss-tree {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -3260,6 +3266,15 @@
   gap: 2px;
 }
 
+.novel-ss-cmd-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: break-all;
+  font-weight: 600;
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
 .novel-ss-cmd-text {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3272,10 +3287,16 @@
   gap: 8px;
   font-size: 0.75rem;
   opacity: 0.6;
+  min-width: 0;
 }
 
-.novel-ss-cmd-name {
-  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+.novel-ss-cmd-meta .novel-ss-cmd-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.novel-ss-cmd-cat {
+  flex: none;
 }
 
 .novel-ss-cmd-actions {
