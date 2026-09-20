@@ -272,7 +272,9 @@ jQuery(async () => {
   // 番外标注核心：楼层配对 + 标记写入 + 隐藏 + 入指令库
   const markCore = createMarkCore({
     ...deps,
-    getChat: () => window.chat || [],
+    // 注意：不能用 window.chat（实测可能为空/非当前聊天数据源），
+    // 必须从 SillyTavern.getContext().chat 取当前聊天消息数组（索引 = mesid）。
+    getChat: () => getStContext()?.chat || [],
     getHideRange: () => hideChatMessageRangeFunc(),
     getSaveChat: () => saveChatConditionalFunc(),
     commandLib,

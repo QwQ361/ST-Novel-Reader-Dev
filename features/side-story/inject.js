@@ -1,6 +1,7 @@
 // features/side-story/inject.js
 // 番外按钮注入：
-//   1) 楼层操作栏：向每个楼层 .extraMesButtons（消息三点菜单内）追加「标注/取消番外」按钮
+//   1) 楼层操作栏：向每个楼层 .mes_buttons 追加「标注/取消番外」按钮，
+//      插入在「消息操作」（省略号 .extraMesButtonsHint）之前，与编辑/检查点等按钮同级直接可见。
 //   2) 输入框工具行：向 #rightSendForm（发送按钮同侧）注入「指令库」入口按钮
 // 启用番外功能时才显示；关闭时隐藏。
 // 采用事件委托（document 级 click），避免频繁重渲染造成的监听泄漏。
@@ -31,26 +32,38 @@ export function createInjectCore(deps) {
   // ---- 楼层按钮注入（事件委托） ----
 
   /**
-   * 为单个楼层 .extraMesButtons 容器注入番外按钮（幂等：已含则跳过）。
-   * @param {HTMLElement} container .extraMesButtons 容器
+   * 为单个楼层注入番外按钮（幂等：已含则跳过）。
+   * 插入位置：.mes_buttons 中「消息操作」省略号（.extraMesButtonsHint）之前，
+   * 与编辑/检查点等按钮同级，直接可见（不进三点菜单）。
+   * @param {HTMLElement} mesEl .mes 楼层根元素
    * @param {number} mesId 楼层索引
    */
-  function injectIntoMessage(container, mesId) {
-    if (!container || container.querySelector(".novel-side-story-btn")) return;
-    const btn = document.createElement("div");
-    btn.className = "mes_button novel-side-story-btn";
-    btn.dataset.mesid = String(mesId);
-    btn.dataset.mode = "mark"; // 初始为标注；渲染后按 isMarked 刷新
-    btn.innerHTML = '<i class="fa-solid fa-book"></i>';
-    btn.title = "标注为番外";
-    container.appendChild(btn);
+  function injectIntoMessage(mesEl, mesId) {
+    if (!mesEl) return;
+    const buttonsRow = mesEl.querySelector(".mes_buttons");
+    if (!buttonsRow) return;
+    // 幂等：按钮已存在则只同步状态（标注/取消后配对楼层的按钮也要刷新）
+    let btn = mesEl.querySelector(".novel-side-story-btn");
+    if (!btn) {
+      btn = document.createElement("div");
+      btn.className = "mes_button novel-side-story-btn";
+      btn.dataset.mesid = String(mesId);
+      btn.innerHTML = '<i class="fa-solid fa-book"></i>';
+      btn.title = "标注为番外";
+      // 插到「消息操作」省略号之前；没有省略号则追加到按钮行末尾
+      const hint = buttonsRow.querySelector(".extraMesButtonsHint");
+      if (hint) buttonsRow.insertBefore(btn, hint);
+      else buttonsRow.appendChild(btn);
+    }
     refreshButtonState(btn, isMarked(mesId));
   }
 
-  /** 刷新单个按钮的标注/取消状态 */
+  /** 刷新单个按钮的标注/取消状态（无变化不重绘，避免 MutationObserver 高频触发闪烁） */
   function refreshButtonState(btn, marked) {
     if (!btn) return;
-    btn.dataset.mode = marked ? "unmark" : "mark";
+    const mode = marked ? "unmark" : "mark";
+    if (btn.dataset.mode === mode) return;
+    btn.dataset.mode = mode;
     btn.title = marked ? "取消番外标注" : "标注为番外";
     btn.innerHTML = marked
       ? '<i class="fa-solid fa-bookmark"></i>'
@@ -64,14 +77,11 @@ export function createInjectCore(deps) {
    */
   function refreshAll() {
     if (!getEnabled()) return;
-    document
-      .querySelectorAll("#chat .mes")
-      .forEach((mesEl) => {
-        const mesId = Number(mesEl.getAttribute("mesid"));
-        if (Number.isNaN(mesId)) return;
-        const container = mesEl.querySelector(".extraMesButtons");
-        if (container) injectIntoMessage(container, mesId);
-      });
+    document.querySelectorAll("#chat .mes").forEach((mesEl) => {
+      const mesId = Number(mesEl.getAttribute("mesid"));
+      if (Number.isNaN(mesId)) return;
+      injectIntoMessage(mesEl, mesId);
+    });
   }
 
   /** 按 mesid 刷新某楼层按钮状态（标注/取消后调用） */

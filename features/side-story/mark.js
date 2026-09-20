@@ -126,6 +126,11 @@ export function createMarkCore(deps) {
     if (typeof getEnabled === "function" && !getEnabled()) {
       return { ok: false, msg: "番外功能未启用" };
     }
+    // 本楼层已标注（自身带指针，可能是已隐藏的配对楼）→ 直接提示，
+    // 避免 resolvePair 因 is_system 跳过配对楼层而误报"未找到配对"
+    if (readMark(mesId)) {
+      return { ok: false, msg: "该楼层已是番外" };
+    }
     const p = resolvePair(mesId);
     if (!p) return { ok: false, msg: "无法解析楼层" };
     if (p.charId == null) {
@@ -189,11 +194,33 @@ export function createMarkCore(deps) {
     if (!Array.isArray(chat) || !chat[mesId]) {
       return { ok: false, msg: "楼层不存在" };
     }
-    const p = resolvePair(mesId);
-    if (!p) return { ok: false, msg: "无法解析楼层" };
+    // 优先用双向指针反查配对（标注会隐藏楼层，resolvePair 会跳过 is_system
+    // 消息，导致无法配对已隐藏的楼层；而 mark 写入的 linked 指针不受影响）
+    const markSelf = readMark(mesId);
+    let charId = null;
+    let userId = null;
+    let userText = "";
+    if (markSelf) {
+      if (isUserMes(mesId)) {
+        // user 楼自身带指针 → 指向其 char 楼
+        userId = mesId;
+        charId = typeof markSelf.linked === "number" ? markSelf.linked : null;
+        userText = String(chat[mesId]?.mes || "");
+      } else {
+        // char 楼自身带指针 → 指向其 user 楼
+        charId = mesId;
+        userId = typeof markSelf.linked === "number" ? markSelf.linked : null;
+        if (userId != null) userText = String(chat[userId]?.mes || "");
+      }
+    } else {
+      // 未隐藏时走常规配对（此时楼层可见，resolvePair 可用）
+      const p = resolvePair(mesId);
+      if (!p) return { ok: false, msg: "无法解析楼层" };
+      charId = p.charId;
+      userId = p.userId;
+      userText = p.userText;
+    }
 
-    const charId = p.charId;
-    const userId = p.userId;
     if (charId == null && !readMark(mesId) && !isUserMes(mesId)) {
       return { ok: false, msg: "该楼层不是番外" };
     }
@@ -214,8 +241,8 @@ export function createMarkCore(deps) {
     }
 
     // 3) 移出指令库（仅当确认移除且存在对应 user 文本）
-    if (removeFromLib && userId != null && p.userText.trim()) {
-      const cmd = findCommandByText(commandLib, p.userText);
+    if (removeFromLib && userId != null && userText.trim()) {
+      const cmd = findCommandByText(commandLib, userText);
       if (cmd) commandLib.deleteCommand(cmd.id);
     }
 
