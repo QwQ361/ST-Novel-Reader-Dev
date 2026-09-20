@@ -48,11 +48,7 @@ import {
   isImageIconBackgroundCore,
   toCssUrlCore,
 } from "./integrations/topbar-icon.js";
-import {
-  createChoiceDialog,
-  createOverlayDialog,
-  makeDraggable,
-} from "./ui/modal/index.js";
+import { createOverlayDialog, makeDraggable } from "./ui/modal/index.js";
 import {
   applyThemeCore,
   resolveOpaqueBg,
@@ -718,21 +714,17 @@ jQuery(async () => {
   // ============ 聊天操作（删除 / 重命名，功能层在 chatlogs，此处只做 UI 编排） ============
 
   /**
-   * 删除聊天前的二次确认弹窗（破坏性操作统一走确认弹窗再执行）。
+   * 删除聊天前的二次确认（浏览器原生 confirm，破坏性操作统一确认后再执行）。
    */
   function confirmDeleteChat(char, chat) {
     const displayName = String(chat.file_name || "").replace(/\.jsonl$/i, "");
-    createChoiceDialog({
-      title: "删除聊天",
-      message: `确定要删除「${displayName}」吗？此操作不可撤销，该聊天的书签与阅读进度也会一并清除。`,
-      choices: [
-        { label: "取消", value: false },
-        { label: "删除", value: true, primary: true },
-      ],
-      onSelect: (confirmed) => {
-        if (confirmed) doDeleteChat(char, chat);
-      },
-    });
+    if (
+      window.confirm(
+        `确定要删除「${displayName}」吗？此操作不可撤销，该聊天的书签与阅读进度也会一并清除。`,
+      )
+    ) {
+      doDeleteChat(char, chat);
+    }
   }
 
   /**
