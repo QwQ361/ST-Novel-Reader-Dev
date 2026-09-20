@@ -166,6 +166,28 @@ export function messageFormattingFunc() {
 }
 
 /**
+ * 取「隐藏/恢复消息」函数（chats.js 命名导出；番外标注用）。
+ * @returns {Function|null} hideChatMessageRange(startIndex, endIndex, unhide)
+ *   将 chat 数组 [startIndex, endIndex] 区间的消息设为 is_system（从 AI 上下文排除），
+ *   unhide=true 时反向恢复。startIndex/endIndex 为 chat 数组索引（含端点）。
+ */
+export function hideChatMessageRangeFunc() {
+  return (
+    _chatsModule?.hideChatMessageRange ?? window.hideChatMessageRange ?? null
+  );
+}
+
+/**
+ * 取「保存聊天」函数（script.js 命名导出；番外标注后持久化隐藏与标记）。
+ * @returns {Function|null} saveChatConditional()
+ */
+export function saveChatConditionalFunc() {
+  return (
+    _scriptModule?.saveChatConditional ?? window.saveChatConditional ?? null
+  );
+}
+
+/**
  * 取「预设管理器」函数（preset-manager.js 命名导出 getPresetManager）。
  * 优先用 ST 上下文自带的（SillyTavern.getContext().getPresetManager，st-context.js 已挂载），
  * 再兜底动态导入的模块命名空间。

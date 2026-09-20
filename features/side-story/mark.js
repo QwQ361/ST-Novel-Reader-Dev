@@ -1,0 +1,259 @@
+// features/side-story/mark.js
+// 楼层番外标注/取消标注逻辑。
+// 语义（与阅读器分章规则一致：user+char 合并为一章）：
+//   - 点击 char 楼层：标记该 char 楼层 + 关联上一楼 user 楼层（构成一个番外单元）
+//   - 点击 user 楼层：标记该 user 楼层 + 关联下一楼 char 楼层（构成一个番外单元）
+// 标注 = 三合一同时执行：
+//   1) 标记：写入 ST 消息 mes.extra.novelExtra（挂在 char 楼层上，user 用 linked 引用）
+//   2) 隐藏：调用 ST hideChatMessageRange 把相关楼层设为 is_system=true
+//      （= ST 原生「从信息词中排除消息」，只影响 AI 上下文，不影响阅读器渲染）
+//   3) 入指令库：将 user 楼层文本收入番外指令库（按文本去重）
+// 取消标注：撤标记 + 撤隐藏（unhide）；确认后同时移出指令库。
+
+/**
+ * 创建楼层番外标注核心。
+ * @param {object} deps 依赖注入
+ * @param {Function} deps.getChat        () => Array  读取 ST 全局 chat 消息数组（索引 = mesid）
+ * @param {Function} deps.getHideRange   () => Function|null  ST hideChatMessageRange(start,end,unhide)
+ * @param {Function} deps.getSaveChat    () => Function|null  ST saveChatConditional()
+ * @param {object}   deps.commandLib     指令库核心（addFromMessage / existsByText / deleteCommand）
+ * @param {Function} deps.getEnabled     () => boolean 番外功能是否启用（未启用时不允许标注）
+ * @param {Function} [deps.getHidePair]  () => boolean 是否同时隐藏配对楼层（设置侧开关；默认 true）
+ * @param {Function} [deps.getCollectLib]() => boolean 是否将 user 指令收入指令库（设置侧开关；默认 true）
+ * @returns {object} mark API
+ */
+export function createMarkCore(deps) {
+  const {
+    getChat,
+    getHideRange,
+    getSaveChat,
+    commandLib,
+    getEnabled,
+    getHidePair,
+    getCollectLib,
+  } = deps;
+
+  /** 番外标记在 extra 中的命名空间 key */
+  const EXTRA_KEY = "novelExtra";
+
+  /** 读某条消息的番外标记 */
+  function readMark(mesId) {
+    const chat = getChat();
+    const mes = chat?.[mesId];
+    return mes?.extra?.[EXTRA_KEY] || null;
+  }
+
+  /** 写某条消息的番外标记（无则建 extra） */
+  function writeMark(mesId, mark) {
+    const chat = getChat();
+    const mes = chat?.[mesId];
+    if (!mes) return false;
+    if (!mes.extra) mes.extra = {};
+    if (mark) mes.extra[EXTRA_KEY] = mark;
+    else delete mes.extra[EXTRA_KEY];
+    return true;
+  }
+
+  /** 判断某楼层是否为 user 消息（is_user） */
+  function isUserMes(mesId) {
+    const chat = getChat();
+    return Boolean(chat?.[mesId]?.is_user);
+  }
+
+  /**
+   * 解析「番外单元」：给定楼层，返回 { charId, userId }（标记统一挂 char）。
+   * 配对规则：
+   *   - 点击 char：配对其上方最近一条紧邻的 user
+   *   - 点击 user：配对其下方最近一条紧邻的 char
+   * @param {number} mesId 被点击楼层索引
+   * @returns {{charId: number|null, userId: number|null, userText: string}|null}
+   */
+  function resolvePair(mesId) {
+    const chat = getChat();
+    if (!Array.isArray(chat)) return null;
+    const mes = chat[mesId];
+    if (!mes) return null;
+
+    if (isUserMes(mesId)) {
+      // user 楼层：找下一楼最近的 char（紧邻，跳过系统消息）
+      for (let i = mesId + 1; i < chat.length; i++) {
+        const m = chat[i];
+        if (!m) continue;
+        if (m.is_user) break; // 又遇到 user → 无配对
+        if (!m.is_system) {
+          return { charId: i, userId: mesId, userText: String(mes.mes || "") };
+        }
+      }
+      return { charId: null, userId: mesId, userText: String(mes.mes || "") };
+    }
+
+    // char 楼层：找上方最近一条紧邻的 user（跳过系统消息）
+    for (let i = mesId - 1; i >= 0; i--) {
+      const m = chat[i];
+      if (!m) continue;
+      if (!m.is_user) break; // 又遇到 char → 无配对
+      if (!m.is_system) {
+        return { charId: mesId, userId: i, userText: String(m.mes || "") };
+      }
+    }
+    return { charId: mesId, userId: null, userText: "" };
+  }
+
+  /** 该楼层是否已标注为番外（读 char 挂载点） */
+  function isMarked(mesId) {
+    const p = resolvePair(mesId);
+    if (!p) return false;
+    const charMark = p.charId != null ? readMark(p.charId) : null;
+    if (charMark) return true;
+    // 反向：若本楼层是某 char 的关联 user，也算已标注
+    const chat = getChat();
+    const mes = chat?.[mesId];
+    if (mes?.is_user && mes.extra?.[EXTRA_KEY]) return true;
+    return false;
+  }
+
+  /**
+   * 标注楼层为番外（三合一：标记 + 隐藏 + 入指令库）。
+   * @param {number} mesId 被点击楼层索引
+   * @returns {Promise<{ok:boolean, msg:string}>}
+   */
+  async function mark(mesId) {
+    const chat = getChat();
+    if (!Array.isArray(chat) || !chat[mesId]) {
+      return { ok: false, msg: "楼层不存在" };
+    }
+    // 番外功能未启用时不允许标注（防御：按钮正常不可见）
+    if (typeof getEnabled === "function" && !getEnabled()) {
+      return { ok: false, msg: "番外功能未启用" };
+    }
+    const p = resolvePair(mesId);
+    if (!p) return { ok: false, msg: "无法解析楼层" };
+    if (p.charId == null) {
+      return { ok: false, msg: "未找到配对的角色楼层" };
+    }
+    if (readMark(p.charId)) {
+      return { ok: false, msg: "该楼层已是番外" };
+    }
+
+    // 1) 标记（挂 char 楼层）
+    const markObj = {
+      fw: true,
+      linked: p.userId,
+    };
+    writeMark(p.charId, markObj);
+    if (p.userId != null && isUserMes(p.userId)) {
+      // user 楼层也挂一个轻量指针（便于 user 楼层按钮识别已标注）
+      writeMark(p.userId, { fw: true, linked: p.charId });
+    }
+
+    // 2) 隐藏：char 楼层 + （存在时）user 楼层，分别 hide（可由设置「隐藏配对楼层」关闭）
+    const hidePair = typeof getHidePair === "function" ? getHidePair() : true;
+    if (hidePair) {
+      const hideRange = getHideRange();
+      if (typeof hideRange === "function") {
+        await hideRange(p.charId, p.charId, false);
+        if (p.userId != null) await hideRange(p.userId, p.userId, false);
+      }
+    }
+
+    // 3) 入指令库（user 指令文本；去重；可由设置「标注时收入指令库」关闭）
+    const collectToLib =
+      typeof getCollectLib === "function" ? getCollectLib() : true;
+    if (collectToLib && p.userId != null && p.userText.trim()) {
+      commandLib.addFromMessage(p.userText, { name: "" });
+    }
+
+    // 保存聊天
+    const saveChat = getSaveChat();
+    if (typeof saveChat === "function") {
+      try {
+        await saveChat();
+      } catch (err) {
+        console.warn("[NovelReader] saveChatConditional 失败:", err);
+      }
+    }
+
+    return { ok: true, msg: "已标注为番外" };
+  }
+
+  /**
+   * 取消楼层番外标注（撤标记 + 撤隐藏；确认后移出指令库）。
+   * @param {number} mesId 被点击楼层索引
+   * @param {object} [options]
+   * @param {boolean} [options.removeFromLib=true] 是否同时移出指令库
+   * @returns {Promise<{ok:boolean, msg:string}>}
+   */
+  async function unmark(mesId, options = {}) {
+    const { removeFromLib = true } = options;
+    const chat = getChat();
+    if (!Array.isArray(chat) || !chat[mesId]) {
+      return { ok: false, msg: "楼层不存在" };
+    }
+    const p = resolvePair(mesId);
+    if (!p) return { ok: false, msg: "无法解析楼层" };
+
+    const charId = p.charId;
+    const userId = p.userId;
+    if (charId == null && !readMark(mesId) && !isUserMes(mesId)) {
+      return { ok: false, msg: "该楼层不是番外" };
+    }
+
+    // 1) 撤标记：char + user 都删
+    if (charId != null) writeMark(charId, null);
+    if (userId != null) writeMark(userId, null);
+    // 若点击的是已标注 user 楼层（其 extra 有指针），一并清理
+    if (isUserMes(mesId) && chat[mesId]?.extra?.[EXTRA_KEY]) {
+      writeMark(mesId, null);
+    }
+
+    // 2) 撤隐藏：unhide
+    const hideRange = getHideRange();
+    if (typeof hideRange === "function") {
+      if (charId != null) await hideRange(charId, charId, true);
+      if (userId != null) await hideRange(userId, userId, true);
+    }
+
+    // 3) 移出指令库（仅当确认移除且存在对应 user 文本）
+    if (removeFromLib && userId != null && p.userText.trim()) {
+      const cmd = findCommandByText(commandLib, p.userText);
+      if (cmd) commandLib.deleteCommand(cmd.id);
+    }
+
+    const saveChat = getSaveChat();
+    if (typeof saveChat === "function") {
+      try {
+        await saveChat();
+      } catch (err) {
+        console.warn("[NovelReader] saveChatConditional 失败:", err);
+      }
+    }
+
+    return { ok: true, msg: "已取消番外标注" };
+  }
+
+  return {
+    mark,
+    unmark,
+    isMarked,
+    resolvePair,
+    readMark,
+    isUserMes,
+    EXTRA_KEY,
+  };
+}
+
+/**
+ * 在指令库中按文本查找指令（trim 后完全一致；找不到返回 null）。
+ * @param {object} commandLib 指令库核心
+ * @param {string} text 指令文本
+ * @returns {object|null}
+ */
+function findCommandByText(commandLib, text) {
+  const txt = String(text || "").trim();
+  if (!txt) return null;
+  const cmds = commandLib.listCommands();
+  for (const cmd of Object.values(cmds)) {
+    if (String(cmd.text || "").trim() === txt) return cmd;
+  }
+  return null;
+}

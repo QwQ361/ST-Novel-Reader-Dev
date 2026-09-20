@@ -18,7 +18,6 @@ import { renderMessage, renderMessagesBatched } from "./render.js";
  * @returns {object} reader API
  */
 export function createReaderCore(deps) {
-
   // 当前正在渲染的聊天标识（用于并发竞态防护）
   let currentRequest = { avatar: "", fileName: "" };
   // 缓存：当前已加载聊天的消息数组 + 章节列表（换聊天时重建）
@@ -58,7 +57,15 @@ export function createReaderCore(deps) {
     const stripPrefix = deps.getStripChapterPrefix
       ? deps.getStripChapterPrefix()
       : true;
+    // 主线章显示编号计数器（番外不计入章节数，主线章编号连续）
+    let mainDisplayIndex = 0;
     const chapters = splitChapters(messages, { showUserReplies }).map((ch) => {
+      // 番外检测：章内任一消息带有番外标记（mes.extra.novelExtra.fw）即视为番外章
+      const isSideStory = ch.messages.some(
+        (m) => m?.extra?.novelExtra?.fw === true,
+      );
+      // 番外章不计入章节数：主线章 displayIndex 连续编号，番外章为 null
+      const displayIndex = isSideStory ? null : ++mainDisplayIndex;
       // 标签识别开启时，若章节标题来自标签（而非说话人），标记 titleSource="tag"
       let titleSource = "speaker";
       let title = "";
@@ -80,7 +87,7 @@ export function createReaderCore(deps) {
         if (stripPrefix) title = stripChapterNumberPrefix(title);
         title = filterTitleText(title, titleFilters);
       }
-      return { ...ch, title, titleSource };
+      return { ...ch, title, titleSource, isSideStory, displayIndex };
     });
 
     chatCache = { avatar, fileName, messages, chapters };
@@ -105,12 +112,24 @@ export function createReaderCore(deps) {
 
     // 构建章标题：第一行「N / 总章数」，第二行「第N章 章节名」
     // （仅当标题来自标签识别时附带章节名，否则只显示「第N章」，与目录一致）
+    // 番外章：显示「番外（标题）」，且不计入章节数（总章数 = 主线章数）
     const titleEl = document.createElement("h2");
     titleEl.className = "novel-chapter-title";
-    titleEl.textContent = `${chapter.index} / ${chatCache.chapters.length}`;
+    const mainTotal = chatCache.chapters.filter((c) => !c.isSideStory).length;
+    titleEl.textContent = chapter.isSideStory
+      ? `番外 / ${mainTotal} 章`
+      : `${chapter.displayIndex ?? chapter.index} / ${mainTotal} 章`;
 
-    let subtitleText = `第${chapter.index}章`;
-    if (chapter.titleSource === "tag" && chapter.title) {
+    let subtitleText = chapter.isSideStory
+      ? chapter.titleSource === "tag" && chapter.title
+        ? `番外 ${chapter.title}`
+        : "番外"
+      : `第${chapter.displayIndex ?? chapter.index}章`;
+    if (
+      !chapter.isSideStory &&
+      chapter.titleSource === "tag" &&
+      chapter.title
+    ) {
       subtitleText += ` ${chapter.title}`;
     }
     const subtitleEl = document.createElement("div");
@@ -197,11 +216,14 @@ export function createReaderCore(deps) {
   /** 获取当前聊天信息（章节数/标题等） */
   function getChatInfo() {
     if (!chatCache) return null;
+    // 番外不计入章节数：totalChapters 只统计主线章
+    const mainChapters = chatCache.chapters.filter((c) => !c.isSideStory);
     return {
       avatar: chatCache.avatar,
       fileName: chatCache.fileName,
       chapters: chatCache.chapters,
-      totalChapters: chatCache.chapters.length,
+      totalChapters: mainChapters.length,
+      sideStoryCount: chatCache.chapters.length - mainChapters.length,
     };
   }
 

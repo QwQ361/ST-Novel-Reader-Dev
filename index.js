@@ -18,6 +18,10 @@ import { createChatlogsCore } from "./features/chatlogs/index.js";
 import { createProgressCore } from "./features/progress/index.js";
 import { createReaderCore } from "./features/reader/index.js";
 import { createRegexCore } from "./features/regex/index.js";
+import { createCommandLibCore } from "./features/side-story/command-lib.js";
+import { createInjectCore } from "./features/side-story/inject.js";
+import { createMarkCore } from "./features/side-story/mark.js";
+import { createSideStoryPanel } from "./features/side-story/panel.js";
 import {
   createFloatingButtonCore,
   createTopbarButtonCore,
@@ -32,9 +36,11 @@ import {
   getPresetManagerFunc,
   getRequestHeaders,
   getStContext,
+  hideChatMessageRangeFunc,
   loadStCoreModules,
   renameGroupOrCharacterChatFunc,
   renderMarkdownCore,
+  saveChatConditionalFunc,
 } from "./integrations/sillytavern.js";
 import { createThemeTextBridgeCore } from "./integrations/theme-text.js";
 import {
@@ -240,9 +246,123 @@ jQuery(async () => {
     if (g.showTocChatActions === undefined) g.showTocChatActions = false;
     // 阅读页是否显示聊天删除/重命名按钮（默认关闭）
     if (g.showReaderChatActions === undefined) g.showReaderChatActions = false;
+    // 番外功能总开关：默认关闭（关闭时楼层无番外按钮、目录不显示番外过滤、指令库入口隐藏）
+    if (g.sideStoryEnabled === undefined) g.sideStoryEnabled = false;
+    // 番外功能相关子设置（仅 sideStoryEnabled 开启时在设置页显示）
+    // 番外隐藏是否同时加入番外指令库（默认开启；关闭则只隐藏楼层与标注，不入指令库）
+    if (g.sideStoryCollectToLib === undefined) g.sideStoryCollectToLib = true;
+    // 点击番外标注时隐藏配对楼层（默认开启；关闭则只标注与收录，不隐藏楼层）
+    if (g.sideStoryHidePair === undefined) g.sideStoryHidePair = true;
     // 按钮位置："topbar" = 顶栏（默认），"float" = 悬浮球，"wand" = 魔法棒菜单
     if (!g.buttonMode) g.buttonMode = "topbar";
     return g;
+  }
+
+  // ---- 3.5 番外功能核心（依赖 getGlobalSettings，故放在其后）----
+  // 番外指令库：分类树 + 指令（数据存 extension_settings，全局跨聊天汇总）
+  const commandLib = createCommandLibCore({
+    ...deps,
+    getSettings: () => deps.getSettings(),
+    saveSettings: () => deps.saveSettings(),
+  });
+
+  // 番外功能是否启用（统一取设置）
+  const sideStoryEnabled = () => getGlobalSettings().sideStoryEnabled === true;
+
+  // 番外标注核心：楼层配对 + 标记写入 + 隐藏 + 入指令库
+  const markCore = createMarkCore({
+    ...deps,
+    getChat: () => window.chat || [],
+    getHideRange: () => hideChatMessageRangeFunc(),
+    getSaveChat: () => saveChatConditionalFunc(),
+    commandLib,
+    getEnabled: sideStoryEnabled,
+    getHidePair: () => getGlobalSettings().sideStoryHidePair !== false,
+    getCollectLib: () => getGlobalSettings().sideStoryCollectToLib !== false,
+  });
+
+  // 番外按钮注入：楼层操作栏 + 输入框指令库入口
+  const injectCore = createInjectCore({
+    ...deps,
+    getEnabled: sideStoryEnabled,
+    isMarked: (mesId) => markCore.isMarked(mesId),
+    onMarkClick: async (mesId, btnEl) => {
+      const res = await markCore.mark(mesId);
+      if (res.ok) {
+        injectCore.refreshByMesId(mesId);
+        toast(`已标注为番外${res.msg.includes("已是") ? "（已是番外）" : ""}`);
+        // 重载阅读器：目录/正文中的番外显示与章节结构随之更新
+        try {
+          await reloadChatForSideStory();
+        } catch (err) {
+          console.warn("[NovelReader] 标注后重载阅读器失败:", err);
+        }
+      } else {
+        toast(res.msg);
+      }
+    },
+    onUnmarkClick: async (mesId, btnEl) => {
+      const res = await markCore.unmark(mesId);
+      if (res.ok) {
+        injectCore.refreshByMesId(mesId);
+        toast("已取消番外标注");
+        // 重载阅读器：目录/正文中的番外显示与章节结构随之更新
+        try {
+          await reloadChatForSideStory();
+        } catch (err) {
+          console.warn("[NovelReader] 取消标注后重载阅读器失败:", err);
+        }
+      } else {
+        toast(res.msg);
+      }
+    },
+    onOpenLibClick: () => sideStoryPanel.toggle(),
+    getMesIdFromBtn: (btnEl) => {
+      const id = Number(btnEl?.dataset?.mesid);
+      return Number.isNaN(id) ? null : id;
+    },
+  });
+
+  // 番外指令库浮动面板
+  const sideStoryPanel = createSideStoryPanel({
+    ...deps,
+    commandLib,
+    getEnabled: sideStoryEnabled,
+    getTextarea: () => document.getElementById("send_textarea"),
+    toast: (msg) => toast(msg),
+  });
+
+  // 番外注入刷新函数（设置开关变化时调用；由设置页事件引用）
+  let sideStoryRefresh = null;
+  sideStoryRefresh = () => injectCore.refresh();
+
+  /**
+   * 重载当前聊天（目录/正文页）：番外标注/取消/开关变化后，分章结果会变。
+   * 目录页：重新渲染目录（番外标题/过滤按钮更新）；
+   * 正文页：重开当前章节（章节结构/标题番外标记更新）。
+   * 依赖 state / bodyEl / reader / renderTocPage / openChapter（均为闭包级，调用时已就绪）。
+   */
+  async function reloadChatForSideStory() {
+    if (state.page !== "toc" && state.page !== "reader") return;
+    const char = state.currentChar;
+    const chat = state.currentChat;
+    if (!char || !chat) return;
+    const info = await reader.loadChat({
+      avatar: char.avatar,
+      fileName: chat.file_name,
+    });
+    if (state.page === "toc") {
+      const container = bodyEl.querySelector(".novel-page");
+      if (container) {
+        if (info && info.chapters.length) {
+          renderTocPage(container);
+        } else {
+          container.innerHTML = `<div class="novel-empty">该聊天暂无内容</div>`;
+        }
+      }
+    } else if (state.page === "reader") {
+      await openChapter(state.currentChapter || 1);
+    }
   }
 
   // ---- 4. UI 引用（全屏弹窗：顶部栏 + 内容区 + 底部栏）----
@@ -271,6 +391,7 @@ jQuery(async () => {
     currentChats: null, // 当前角色的聊天列表（缓存，供筛选）
     currentChapter: 0, // 当前章节索引（1 起）
     tocPage: 0, // 目录分页页码（0 起）
+    tocFilter: "all", // 目录番外筛选："all" 都看 | "main" 只看主线 | "side" 只看番外
     pendingHighlightOffset: null, // 待定位的消息章内偏移（搜索结果跳转）
   };
   let searchPanelEl = null; // 小说内检索结果面板
@@ -898,7 +1019,10 @@ jQuery(async () => {
         }
       } else if (state.page === "reader") {
         const cur = state.currentChapter;
-        await openChapter(Math.max(1, Math.min(cur, info?.totalChapters || 1)));
+        // 钳制到全部章节（含番外）范围内
+        await openChapter(
+          Math.max(1, Math.min(cur, info?.chapters?.length || 1)),
+        );
       }
       return;
     }
@@ -1017,6 +1141,7 @@ jQuery(async () => {
     state.currentChar = char;
     state.currentChat = chat;
     state.tocPage = 0;
+    state.tocFilter = "all"; // 打开新目录时重置番外筛选为「都看」
     setPage("toc");
     topbarEl.querySelector(".novel-topbar-title").textContent = escapeHtml(
       String(chat.file_name || "").replace(/\.jsonl$/i, ""),
@@ -1047,21 +1172,47 @@ jQuery(async () => {
     const perPage = g.chaptersPerPage;
     const info = reader.getChatInfo();
     if (!info) return;
-    const chapters = info.chapters;
-    const total = chapters.length;
+    const allChapters = info.chapters;
+    // 番外筛选（目录过滤：都看 / 只看主线 / 只看番外）
+    const sideEnabled = g.sideStoryEnabled === true;
+    const filtered = sideEnabled
+      ? allChapters.filter((ch) => {
+          if (state.tocFilter === "main") return !ch.isSideStory;
+          if (state.tocFilter === "side") return ch.isSideStory;
+          return true;
+        })
+      : allChapters;
+    // 番外不计入章节数：主线章数恒定显示（「都看/主线」显示主线章数，「番外」显示番外篇数）
+    const mainTotal = allChapters.filter((c) => !c.isSideStory).length;
+    const sideTotal = allChapters.filter((c) => c.isSideStory).length;
+    const total = filtered.length;
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     const start = state.tocPage * perPage;
-    const pageChapters = chapters.slice(start, start + perPage);
+    const pageChapters = filtered.slice(start, start + perPage);
 
     container.innerHTML = "";
     const toc = document.createElement("div");
     toc.className = "novel-toc";
     const gActions = getGlobalSettings();
     const showTocActions = gActions.showTocChatActions;
+    const sideCount = allChapters.filter((c) => c.isSideStory).length;
     toc.innerHTML = `
       <div class="novel-toc-head">
         <h2>目录</h2>
-        <span class="novel-toc-sub">${escapeHtml(String(total))} 章</span>
+        <span class="novel-toc-sub">${
+          state.tocFilter === "side"
+            ? `${escapeHtml(String(sideTotal))} 篇番外`
+            : `${escapeHtml(String(mainTotal))} 章`
+        }</span>
+        ${
+          sideEnabled
+            ? `<span class="novel-toc-filter">
+                 <button class="novel-toc-filter-btn${state.tocFilter === "all" ? " novel-toc-filter-active" : ""}" data-filter="all">都看</button>
+                 <button class="novel-toc-filter-btn${state.tocFilter === "main" ? " novel-toc-filter-active" : ""}" data-filter="main">主线</button>
+                 <button class="novel-toc-filter-btn${state.tocFilter === "side" ? " novel-toc-filter-active" : ""}" data-filter="side">番外${sideCount ? `(${sideCount})` : ""}</button>
+               </span>`
+            : ""
+        }
         <button class="novel-toc-bookmark-btn" title="查看收藏章节" data-action="bookmarks">${BOOKMARK_SVG}<span>收藏</span></button>
         ${
           showTocActions
@@ -1082,6 +1233,20 @@ jQuery(async () => {
         openBookmarksDialog();
       });
 
+    // 番外筛选按钮：切换过滤并重置页码
+    if (sideEnabled) {
+      toc.querySelectorAll(".novel-toc-filter-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const filter = btn.dataset.filter;
+          if (state.tocFilter === filter) return;
+          state.tocFilter = filter;
+          state.tocPage = 0;
+          renderTocPage(container);
+        });
+      });
+    }
+
     // 目录头删除/重命名按钮：针对当前正在阅读的聊天（state.currentChat）
     if (showTocActions && state.currentChar && state.currentChat) {
       const renameBtn = toc.querySelector('[data-action="rename"]');
@@ -1099,13 +1264,19 @@ jQuery(async () => {
     const list = toc.querySelector(".novel-toc-list");
     pageChapters.forEach((ch) => {
       const item = document.createElement("div");
-      item.className = "novel-toc-item";
-      // 自动识别标题开启且本章标题来自标签时，在「第N章」后附加副标题
+      item.className =
+        "novel-toc-item" + (ch.isSideStory ? " novel-toc-item-side" : "");
+      // 番外章：显示「番外（标题）」；主线章显示「第N章」（displayIndex = 连续主线编号，番外不计入）
       const tagTitle = ch.titleSource === "tag" ? ch.title : "";
+      const titleText = ch.isSideStory
+        ? tagTitle
+          ? `番外（${tagTitle}）`
+          : "番外"
+        : "第" + String(ch.displayIndex ?? ch.index) + "章";
       item.innerHTML = `
-        <span class="novel-toc-item-title">${escapeHtml("第" + String(ch.index) + "章")}</span>
+        <span class="novel-toc-item-title">${escapeHtml(titleText)}</span>
         ${
-          tagTitle
+          tagTitle && !ch.isSideStory
             ? `<span class="novel-toc-item-sub">${escapeHtml(String(tagTitle))}</span>`
             : ""
         }`;
@@ -1295,7 +1466,8 @@ jQuery(async () => {
   function updateBottomButtons() {
     if (!bottombarEl) return;
     const info = reader.getChatInfo();
-    const total = info?.totalChapters || 0;
+    // 番外不计入章节数，但底部翻页按全部章节顺序走（主线+番外都可通过 prev/next 翻阅）
+    const total = info?.chapters?.length || 0;
     const cur = state.currentChapter;
     const prev = bottombarEl.querySelector('[data-action="prev"]');
     const next = bottombarEl.querySelector('[data-action="next"]');
@@ -1405,12 +1577,12 @@ jQuery(async () => {
     renderItems();
   }
 
-  /** 上一章 / 下一章 */
+  /** 上一章 / 下一章（按全部章节顺序，含番外） */
   async function goChapter(delta) {
     const nextChapter = state.currentChapter + delta;
     const info = reader.getChatInfo();
     if (!info) return;
-    if (nextChapter < 1 || nextChapter > info.totalChapters) return;
+    if (nextChapter < 1 || nextChapter > (info.chapters?.length || 0)) return;
     await openChapter(nextChapter);
   }
 
@@ -1642,6 +1814,44 @@ jQuery(async () => {
         <div class="novel-settings-hint">聊天列表卡片始终显示；目录页与阅读页勾选时才显示。</div>
       </div>
 
+      <div class="novel-settings-row novel-side-story-section">
+        <div class="novel-settings-label">番外功能</div>
+        <label class="novel-switch">
+          <input type="checkbox" class="novel-side-story-enabled" ${
+            g.sideStoryEnabled ? "checked" : ""
+          } />
+          <span class="novel-switch-track"></span>
+          <span class="novel-switch-thumb"></span>
+        </label>
+        <div class="novel-settings-hint">开启后，可在聊天楼层中标注番外：标注的番外显示在目录（不计入章节数），且对应楼层可隐藏并收录进番外指令库。关闭后番外按钮与相关设置全部隐藏。</div>
+        <div class="novel-side-story-sub" ${
+          g.sideStoryEnabled ? "" : 'style="display:none"'
+        }>
+          <div class="novel-settings-row">
+            <span class="novel-settings-label">标注时隐藏楼层</span>
+            <label class="novel-switch">
+              <input type="checkbox" class="novel-side-story-hide-pair" ${
+                g.sideStoryHidePair !== false ? "checked" : ""
+              } />
+              <span class="novel-switch-track"></span>
+              <span class="novel-switch-thumb"></span>
+            </label>
+            <span class="novel-settings-hint">标注番外时同时隐藏配对楼层（角色楼层连同其上方用户楼层 / 用户楼层连同其下方角色楼层）。</span>
+          </div>
+          <div class="novel-settings-row">
+            <span class="novel-settings-label">收录进指令库</span>
+            <label class="novel-switch">
+              <input type="checkbox" class="novel-side-story-collect-lib" ${
+                g.sideStoryCollectToLib !== false ? "checked" : ""
+              } />
+              <span class="novel-switch-track"></span>
+              <span class="novel-switch-thumb"></span>
+            </label>
+            <span class="novel-settings-hint">标注番外时将用户指令自动收录进番外指令库（未分类，可去指令库面板重命名/归类）。</span>
+          </div>
+        </div>
+      </div>
+
       <div class="novel-settings-row">
         <div class="novel-settings-label">打开时显示</div>
         <select class="novel-start-page-select">
@@ -1840,6 +2050,39 @@ jQuery(async () => {
           await openChapter(1);
         }
       }
+    });
+
+    // ---- 番外功能：总开关（显示/隐藏子设置 + 刷新楼层按钮注入 + 目录） ----
+    const sideStoryEnabledInput = content.querySelector(
+      ".novel-side-story-enabled",
+    );
+    const sideStorySub = content.querySelector(".novel-side-story-sub");
+    const sideStoryHidePairInput = content.querySelector(
+      ".novel-side-story-hide-pair",
+    );
+    const sideStoryCollectLibInput = content.querySelector(
+      ".novel-side-story-collect-lib",
+    );
+
+    // reloadChatForSideStory 使用外层闭包版（与楼层标注共用），此处不再重复定义
+    sideStoryEnabledInput?.addEventListener("change", () => {
+      g.sideStoryEnabled = sideStoryEnabledInput.checked;
+      deps.saveSettings();
+      // 显示/隐藏番外子设置
+      if (sideStorySub) {
+        sideStorySub.style.display = g.sideStoryEnabled ? "" : "none";
+      }
+      // 刷新楼层番外按钮（inject 模块已挂载时）
+      sideStoryRefresh?.();
+      reloadChatForSideStory();
+    });
+    sideStoryHidePairInput?.addEventListener("change", () => {
+      g.sideStoryHidePair = sideStoryHidePairInput.checked;
+      deps.saveSettings();
+    });
+    sideStoryCollectLibInput?.addEventListener("change", () => {
+      g.sideStoryCollectToLib = sideStoryCollectLibInput.checked;
+      deps.saveSettings();
     });
 
     // ---- 聊天列表显示操作按钮：切换后保存设置 + 重绘当前页以刷新按钮显隐 ----
@@ -2706,8 +2949,9 @@ jQuery(async () => {
             }
           } else if (state.page === "reader") {
             const cur = state.currentChapter;
+            // 钳制到全部章节（含番外）范围内
             await openChapter(
-              Math.max(1, Math.min(cur, info?.totalChapters || 1)),
+              Math.max(1, Math.min(cur, info?.chapters?.length || 1)),
             );
           }
           return;
@@ -2851,6 +3095,13 @@ jQuery(async () => {
     console.warn("[NovelReader] 主题文本桥接启动失败:", err);
   }
 
+  // 番外功能：楼层按钮 + 指令库入口注入（未启用时按钮隐藏，启用后自动显示）
+  try {
+    injectCore.injectAll();
+  } catch (err) {
+    console.warn("[NovelReader] 番外功能注入失败:", err);
+  }
+
   // ============ 暴露全局 API ============
 
   window.NovelReader = {
@@ -2862,6 +3113,16 @@ jQuery(async () => {
     progress,
     bookmarks,
     chatlogs, // 聊天记录操作（deleteChatFile / renameChatFile，功能层纯净）
+    // 番外功能 API（标注 / 指令库 / 面板）
+    sideStory: {
+      enabled: sideStoryEnabled,
+      mark: markCore.mark,
+      unmark: markCore.unmark,
+      isMarked: markCore.isMarked,
+      commandLib,
+      panel: sideStoryPanel,
+      refresh: injectCore.refresh,
+    },
     // 按钮位置调试 API
     getButtonMode,
     switchButtonMode,
@@ -2880,4 +3141,15 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/** 轻量 toast 提示（ST 的 toastr；不可用时静默） */
+function toast(message) {
+  try {
+    if (window.toastr && typeof window.toastr.info === "function") {
+      window.toastr.info(String(message));
+    }
+  } catch {
+    // 忽略：toastr 异常不影响主流程
+  }
 }
