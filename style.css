@@ -61,6 +61,90 @@
   gap: 14px;
 }
 
+/* ---------- 通用按钮基础（弹窗/确认框等非底栏场景共用） ---------- */
+/* 底栏 .novel-bottombar .novel-btn 选择器更具体，会覆盖本基础样式 */
+.novel-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 18%,
+      transparent
+    );
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.novel-btn:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 18%,
+    transparent
+  );
+}
+
+/* 确认弹窗文案 */
+.novel-dialog-message {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  opacity: 0.9;
+  word-break: break-all;
+}
+
+/* 弹窗底部操作按钮行 */
+.novel-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* 重命名输入框 */
+.novel-rename-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 6%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 22%,
+      transparent
+    );
+  outline: none;
+  box-sizing: border-box;
+}
+
+.novel-rename-input:focus {
+  border-color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+  box-shadow: 0 0 0 2px
+    color-mix(
+      in srgb,
+      var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 25%,
+      transparent
+    );
+}
+
 /* ---------- 弹窗头部：标题靠左、关闭按钮靠右（右上角） ---------- */
 .novel-dialog-header {
   flex: 0 0 auto;
@@ -362,6 +446,72 @@
   margin-top: 6px;
 }
 
+/* 聊天卡片底部操作条：始终常显（非 hover），SVG 图标按钮 */
+.novel-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+      transparent
+    );
+}
+
+.novel-card-action {
+  flex: 1 1 0;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+      transparent
+    );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  /* 重置 button 默认样式：继承字体、无内边距 */
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0 6px;
+  line-height: 1;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.novel-card-action:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+    transparent
+  );
+}
+
+.novel-card-action svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke-width: 2;
+  margin-top: 1px;
+}
+
+/* 危险操作（删除）：hover 红色强调 */
+.novel-card-action-delete:hover {
+  background: color-mix(in srgb, #e5484d 18%, transparent);
+  border-color: #e5484d;
+  color: #e5484d;
+}
+
 /* ---------- 目录页 ---------- */
 .novel-toc {
   max-width: 760px;
@@ -428,6 +578,64 @@
   flex: 0 0 auto;
   stroke-width: 2;
   margin-top: 1px;
+}
+
+/* 目录头删除/重命名操作组：紧邻收藏按钮右侧（收藏按钮已占 margin-left:auto） */
+.novel-toc-chat-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.novel-toc-action {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+      transparent
+    );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  /* 重置 button 默认样式：继承字体、无内边距 */
+  font: inherit;
+  padding: 0;
+  line-height: 1;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.novel-toc-action:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+    transparent
+  );
+}
+
+.novel-toc-action svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke-width: 2;
+  margin-top: 1px;
+}
+
+.novel-toc-action-delete:hover {
+  background: color-mix(in srgb, #e5484d 18%, transparent);
+  border-color: #e5484d;
+  color: #e5484d;
 }
 
 .novel-toc-list {
@@ -540,6 +748,69 @@
       var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 15%,
       transparent
     );
+  /* 允许按钮行（操作组）跟随换行，不挤压章节标题 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 阅读页「第N章」旁的操作组：尺寸小于章标题（小图标按钮） */
+.novel-chapter-chat-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.novel-chapter-action {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+      transparent
+    );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  /* 重置 button 默认样式：继承字体、无内边距 */
+  font: inherit;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.6;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.novel-chapter-action:hover {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+    transparent
+  );
+}
+
+.novel-chapter-action svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  stroke-width: 2;
+  margin-top: 1px;
+}
+
+.novel-chapter-action-delete:hover {
+  background: color-mix(in srgb, #e5484d 18%, transparent);
+  border-color: #e5484d;
+  color: #e5484d;
 }
 
 /* ---------- 小说消息 ---------- */
@@ -2284,6 +2555,27 @@
   .novel-toc-bookmark-btn svg {
     width: 13px;
     height: 13px;
+  }
+
+  /* 移动端：目录头操作组按钮紧凑化，避免与收藏按钮挤在一行 */
+  .novel-toc-chat-actions {
+    gap: 4px;
+  }
+
+  .novel-toc-action {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* 移动端：阅读页操作组按钮更小 */
+  .novel-chapter-action {
+    width: 22px;
+    height: 22px;
+  }
+
+  .novel-chapter-action svg {
+    width: 11px;
+    height: 11px;
   }
 
   .novel-bookmark-list {
