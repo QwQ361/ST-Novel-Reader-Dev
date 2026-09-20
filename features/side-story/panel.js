@@ -25,7 +25,13 @@ export function createSideStoryPanel(deps) {
   let searchQuery = "";
   let expandedSet = new Set();
   let dragCmdId = null; // 正在拖拽的指令 id
+  let dragCmdIds = null; // 批量拖拽时携带的指令 id 数组（null 表示非批量）
   let dragCatId = null; // 正在拖拽的分类 id
+  // 批量操作状态（参照 CFM 批量模式）
+  let batchMode = false; // 批量操作模式开关
+  let batchSelected = new Set(); // 批量选中的指令 id
+  let batchLastClicked = null; // 框选锚点（上次点击的指令 id）
+  let batchRangeMode = false; // 框选模式开关
 
   // ---------------- 工具 ----------------
 
@@ -43,7 +49,7 @@ export function createSideStoryPanel(deps) {
 
     container.innerHTML = "";
 
-    // 「未分类」固定项（标注/新建指令默认归入）
+    // 「未分类」固定项（标注/新建指令默认归入；也作为拖拽目标）
     const fixedItems = [{ id: null, name: "未分类", icon: "fa-folder-minus" }];
     fixedItems.forEach((it) => {
       const row = document.createElement("div");
@@ -54,6 +60,35 @@ export function createSideStoryPanel(deps) {
       row.innerHTML = `<i class="fa-solid ${it.icon} novel-ss-cat-icon"></i><span class="novel-ss-cat-name">${escapeHtml(it.name)}</span>`;
       row.addEventListener("click", () => {
         selectedCategoryId = it.id;
+        render();
+      });
+      // 拖拽目标：指令（单个/批量）/分类可放入「未分类」
+      row.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      });
+      row.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const srcCmd = dragCmdId;
+        const srcCmds = dragCmdIds;
+        const srcCat = dragCatId || e.dataTransfer.getData("text/plain");
+        dragCmdId = null;
+        dragCmdIds = null;
+        dragCatId = null;
+        if (srcCmds && srcCmds.length) {
+          let moved = 0;
+          for (const cid of srcCmds) {
+            if (commandLib.updateCommand(cid, { categoryId: null })) moved++;
+          }
+          toast(`已移动 ${moved} 条指令到未分类`);
+        } else if (srcCmd) {
+          commandLib.updateCommand(srcCmd, { categoryId: null });
+          toast("已移入未分类");
+        } else if (srcCat) {
+          commandLib.moveCategory(srcCat, null);
+          toast("已移动分类到顶层");
+        }
         render();
       });
       container.appendChild(row);
@@ -113,10 +148,19 @@ export function createSideStoryPanel(deps) {
         e.stopPropagation();
         const srcCat = dragCatId || e.dataTransfer.getData("text/plain");
         const srcCmd = dragCmdId;
+        const srcCmds = dragCmdIds;
         dragCatId = null;
         dragCmdId = null;
-        if (srcCmd) {
-          // 指令 → 分类
+        dragCmdIds = null;
+        if (srcCmds && srcCmds.length) {
+          // 批量指令 → 分类
+          let moved = 0;
+          for (const cid of srcCmds) {
+            if (commandLib.updateCommand(cid, { categoryId: catId })) moved++;
+          }
+          toast(`已移动 ${moved} 条指令`);
+        } else if (srcCmd) {
+          // 单个指令 → 分类
           commandLib.updateCommand(srcCmd, { categoryId: catId });
           toast("已移入分类");
         } else if (srcCat && srcCat !== catId) {
@@ -160,19 +204,90 @@ export function createSideStoryPanel(deps) {
 
   // ---------------- 渲染：指令列表 ----------------
 
-  function renderCommands(container) {
-    container.innerHTML = "";
-
-    let cmds;
+  /** 当前可见指令列表（与渲染一致的筛选逻辑） */
+  function getVisibleCommands() {
     if (searchQuery) {
-      cmds = Object.values(commandLib.listCommands()).filter((c) =>
+      return Object.values(commandLib.listCommands()).filter((c) =>
         String(c.text || "")
           .toLowerCase()
           .includes(searchQuery),
       );
-    } else {
-      cmds = commandLib.listCommandsByCategory(selectedCategoryId);
     }
+    return commandLib.listCommandsByCategory(selectedCategoryId);
+  }
+
+  /** 批量选择切换（支持 Shift / 框选范围选择，参照 CFM toggleMultiSelectItemCore） */
+  function toggleBatchItem(id, shiftKey) {
+    if ((shiftKey || batchRangeMode) && batchLastClicked) {
+      const visible = getVisibleCommands().map((c) => c.id);
+      const lastIdx = visible.indexOf(batchLastClicked);
+      const curIdx = visible.indexOf(id);
+      if (lastIdx >= 0 && curIdx >= 0) {
+        const start = Math.min(lastIdx, curIdx);
+        const end = Math.max(lastIdx, curIdx);
+        for (let i = start; i <= end; i++) batchSelected.add(visible[i]);
+      }
+    } else {
+      if (batchSelected.has(id)) batchSelected.delete(id);
+      else batchSelected.add(id);
+    }
+    batchLastClicked = id;
+  }
+
+  /** 全选/全不选当前可见指令 */
+  function toggleSelectAllVisible() {
+    const visible = getVisibleCommands().map((c) => c.id);
+    const allSelected =
+      visible.length > 0 && visible.every((id) => batchSelected.has(id));
+    if (allSelected) visible.forEach((id) => batchSelected.delete(id));
+    else visible.forEach((id) => batchSelected.add(id));
+  }
+
+  /** 批量重命名：给所有选中的指令设置名称 */
+  function batchRenameSelected() {
+    const ids = Array.from(batchSelected);
+    if (!ids.length) {
+      toast("请先选择指令");
+      return;
+    }
+    const name = window.prompt(
+      `批量重命名 ${ids.length} 条指令的名称（可留空清除）：`,
+    );
+    if (name === null) return;
+    let n = 0;
+    for (const id of ids) {
+      if (commandLib.updateCommand(id, { name: String(name || "").trim() }))
+        n++;
+    }
+    toast(`已重命名 ${n} 条指令`);
+    render();
+  }
+
+  /** 批量删除：确认后删除所有选中的指令 */
+  function batchDeleteSelected() {
+    const ids = Array.from(batchSelected);
+    if (!ids.length) {
+      toast("请先选择指令");
+      return;
+    }
+    if (
+      !window.confirm(`确定删除选中的 ${ids.length} 条指令？此操作不可撤销。`)
+    )
+      return;
+    let n = 0;
+    for (const id of ids) {
+      if (commandLib.deleteCommand(id)) n++;
+    }
+    batchSelected.clear();
+    batchLastClicked = null;
+    toast(`已删除 ${n} 条指令`);
+    render();
+  }
+
+  function renderCommands(container) {
+    container.innerHTML = "";
+
+    const cmds = getVisibleCommands();
 
     if (!cmds.length) {
       container.innerHTML = `<div class="novel-ss-empty">暂无指令</div>`;
@@ -181,14 +296,17 @@ export function createSideStoryPanel(deps) {
 
     cmds.forEach((cmd) => {
       const row = document.createElement("div");
-      row.className = "novel-ss-cmd-row";
+      const selected = batchSelected.has(cmd.id);
+      row.className =
+        "novel-ss-cmd-row" +
+        (batchMode && selected ? " novel-ss-cmd-selected" : "");
       row.dataset.cmdId = cmd.id;
       row.draggable = true;
       const catName = cmd.categoryId
         ? commandLib.listCategories()[cmd.categoryId]?.name || "未分类"
         : "未分类";
       row.innerHTML = `
-        <i class="fa-solid fa-grip-vertical novel-ss-cmd-drag" title="拖拽到分类"></i>
+        ${batchMode ? `<i class="${selected ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-check" title="选择"></i>` : `<i class="fa-solid fa-grip-vertical novel-ss-cmd-drag" title="拖拽到分类"></i>`}
         <div class="novel-ss-cmd-main">
           <div class="novel-ss-cmd-title">${escapeHtml(cmd.name || cmd.text)}</div>
           <div class="novel-ss-cmd-meta">
@@ -200,32 +318,59 @@ export function createSideStoryPanel(deps) {
           <i class="fa-solid fa-pen novel-ss-cmd-rename" title="重命名"></i>
           <i class="fa-solid fa-trash novel-ss-cmd-del" title="删除"></i>
         </span>`;
-      // 点击指令 → 追加到输入框
+      // 批量模式下，点击行切换选中；否则追加到输入框
       row.addEventListener("click", (e) => {
         if (e.target.closest(".novel-ss-cmd-actions")) return;
-        appendToInput(cmd.text);
-        toast("已填入输入框");
+        if (batchMode) {
+          toggleBatchItem(cmd.id, e.shiftKey);
+          renderCommands(container);
+        } else {
+          appendToInput(cmd.text);
+          toast("已填入输入框");
+        }
       });
-      // 拖拽指令
+      // 复选框点击（批量模式下同样切换选中）
+      row
+        .querySelector(".novel-ss-cmd-check")
+        ?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          toggleBatchItem(cmd.id, e.shiftKey);
+          renderCommands(container);
+        });
+      // 拖拽指令：非批量单拖 → 单指令；批量选中包含该指令 → 批量拖
       row.addEventListener("dragstart", (e) => {
-        dragCmdId = cmd.id;
+        if (batchMode && batchSelected.has(cmd.id) && batchSelected.size > 1) {
+          dragCmdId = null;
+          dragCmdIds = Array.from(batchSelected);
+        } else {
+          dragCmdId = cmd.id;
+          dragCmdIds = null;
+        }
         e.dataTransfer.setData("text/plain", cmd.id);
         e.dataTransfer.effectAllowed = "move";
       });
       row.addEventListener("dragend", () => {
         dragCmdId = null;
+        dragCmdIds = null;
       });
       // 操作：重命名 / 删除
       row
         .querySelector(".novel-ss-cmd-rename")
         .addEventListener("click", (e) => {
           e.stopPropagation();
-          promptRenameCommand(cmd.id);
+          if (batchMode && batchSelected.has(cmd.id)) {
+            batchRenameSelected();
+          } else {
+            promptRenameCommand(cmd.id);
+          }
         });
       row.querySelector(".novel-ss-cmd-del").addEventListener("click", (e) => {
         e.stopPropagation();
-        if (window.confirm("删除这条指令？")) {
+        if (batchMode && batchSelected.has(cmd.id)) {
+          batchDeleteSelected();
+        } else if (window.confirm("删除这条指令？")) {
           commandLib.deleteCommand(cmd.id);
+          batchSelected.delete(cmd.id);
           toast("已删除");
           render();
         }
@@ -340,12 +485,34 @@ export function createSideStoryPanel(deps) {
 
   // ---------------- 面板整体渲染 ----------------
 
+  /** 刷新批量工具栏的可见性 / 计数 / 按钮激活态 */
+  function refreshBatchBar() {
+    if (!mounted || !panelEl) return;
+    const bar = panelEl.querySelector(".novel-ss-batch-bar");
+    if (!bar) return;
+    bar.style.display = batchMode ? "flex" : "none";
+    const countEl = bar.querySelector(".novel-ss-batch-count");
+    if (countEl) countEl.textContent = `已选 ${batchSelected.size} 项`;
+    const visible = getVisibleCommands();
+    const allSelected =
+      visible.length > 0 && visible.every((id) => batchSelected.has(id));
+    const selallBtn = bar.querySelector(".novel-ss-batch-selall");
+    if (selallBtn)
+      selallBtn.innerHTML = allSelected
+        ? `<i class="fa-solid fa-square-xmark"></i> 取消全选`
+        : `<i class="fa-solid fa-square-check"></i> 全选`;
+    const rangeBtn = bar.querySelector(".novel-ss-batch-range");
+    if (rangeBtn)
+      rangeBtn.classList.toggle("novel-ss-batch-active", batchRangeMode);
+  }
+
   function render() {
     if (!mounted || !panelEl) return;
     const tree = panelEl.querySelector(".novel-ss-tree");
     const list = panelEl.querySelector(".novel-ss-list");
     if (tree) renderTree(tree);
     if (list) renderCommands(list);
+    refreshBatchBar();
   }
 
   function buildPanel() {
@@ -380,7 +547,15 @@ export function createSideStoryPanel(deps) {
             <span class="novel-ss-list-actions">
               <i class="fa-solid fa-file-import novel-ss-import" title="从 txt 导入"></i>
               <i class="fa-solid fa-plus novel-ss-new-cmd" title="新建指令"></i>
+              <i class="fa-solid fa-list-check novel-ss-batch-toggle" title="批量操作"></i>
             </span>
+          </div>
+          <div class="novel-ss-batch-bar" style="display:none">
+            <button class="novel-ss-batch-btn novel-ss-batch-selall"><i class="fa-solid fa-square-check"></i> 全选</button>
+            <button class="novel-ss-batch-btn novel-ss-batch-range"><i class="fa-solid fa-arrow-down-short-wide"></i> 框选</button>
+            <span class="novel-ss-batch-count"></span>
+            <button class="novel-ss-batch-btn novel-ss-batch-rename"><i class="fa-solid fa-pen"></i> 重命名</button>
+            <button class="novel-ss-batch-btn novel-ss-batch-del"><i class="fa-solid fa-trash"></i> 删除</button>
           </div>
           <div class="novel-ss-list"></div>
         </div>
@@ -436,6 +611,41 @@ export function createSideStoryPanel(deps) {
     panelEl
       .querySelector(".novel-ss-import")
       .addEventListener("click", promptImportTxt);
+    // 批量操作开关
+    panelEl
+      .querySelector(".novel-ss-batch-toggle")
+      .addEventListener("click", () => {
+        batchMode = !batchMode;
+        if (!batchMode) {
+          batchSelected.clear();
+          batchLastClicked = null;
+          batchRangeMode = false;
+        }
+        render();
+      });
+    // 全选/全不选
+    panelEl
+      .querySelector(".novel-ss-batch-selall")
+      .addEventListener("click", () => {
+        toggleSelectAllVisible();
+        renderCommands(panelEl.querySelector(".novel-ss-list"));
+        refreshBatchBar();
+      });
+    // 框选模式
+    panelEl
+      .querySelector(".novel-ss-batch-range")
+      .addEventListener("click", () => {
+        batchRangeMode = !batchRangeMode;
+        refreshBatchBar();
+      });
+    // 批量重命名
+    panelEl
+      .querySelector(".novel-ss-batch-rename")
+      .addEventListener("click", batchRenameSelected);
+    // 批量删除
+    panelEl
+      .querySelector(".novel-ss-batch-del")
+      .addEventListener("click", batchDeleteSelected);
     // 点击面板外部关闭
     document.addEventListener("mousedown", function onClickOutside(e) {
       if (!panelEl || !mounted || panelEl.contains(e.target)) return;
@@ -471,6 +681,11 @@ export function createSideStoryPanel(deps) {
 
   function close() {
     if (!mounted || !panelEl) return;
+    // 关闭时退出批量模式，避免下次打开残留选中态
+    batchMode = false;
+    batchSelected.clear();
+    batchLastClicked = null;
+    batchRangeMode = false;
     panelEl.style.display = "none";
   }
 

@@ -3333,6 +3333,94 @@
   font-size: 0.85rem;
 }
 
+/* 批量操作工具栏（右栏指令列表上方，batchMode 时显示） */
+.novel-ss-batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+      transparent
+    );
+  flex-wrap: wrap;
+}
+
+.novel-ss-batch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  border-radius: 5px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 18%,
+      transparent
+    );
+  background: transparent;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  cursor: pointer;
+  opacity: 0.8;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease;
+}
+
+.novel-ss-batch-btn:hover {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+}
+
+.novel-ss-batch-btn.novel-ss-batch-active {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 22%,
+    transparent
+  );
+  border-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
+.novel-ss-batch-count {
+  flex: 1 1 auto;
+  text-align: right;
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+/* 批量模式下指令行的复选框 */
+.novel-ss-cmd-check {
+  flex: none;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.novel-ss-cmd-check:hover {
+  opacity: 1;
+}
+
+/* 批量模式下选中行高亮 */
+.novel-ss-cmd-row.novel-ss-cmd-selected {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 18%,
+    transparent
+  );
+}
+
+.novel-ss-cmd-row.novel-ss-cmd-selected .novel-ss-cmd-check {
+  opacity: 1;
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
 /* 移动端：指令库面板全屏化 */
 @media (max-width: 600px) {
   .novel-ss-panel {
