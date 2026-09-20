@@ -21,7 +21,7 @@ export function createSideStoryPanel(deps) {
 
   let panelEl = null;
   let mounted = false;
-  let selectedCategoryId = null; // null = 未分类；"__all__" = 全部
+  let selectedCategoryId = null; // null = 未分类
   let searchQuery = "";
   let expandedSet = new Set();
   let dragCmdId = null; // 正在拖拽的指令 id
@@ -43,11 +43,8 @@ export function createSideStoryPanel(deps) {
 
     container.innerHTML = "";
 
-    // 「全部」与「未分类」固定项
-    const fixedItems = [
-      { id: "__all__", name: "全部", icon: "fa-folder-open" },
-      { id: null, name: "未分类", icon: "fa-folder-minus" },
-    ];
+    // 「未分类」固定项（标注/新建指令默认归入）
+    const fixedItems = [{ id: null, name: "未分类", icon: "fa-folder-minus" }];
     fixedItems.forEach((it) => {
       const row = document.createElement("div");
       row.className =
@@ -295,7 +292,7 @@ export function createSideStoryPanel(deps) {
     const text = window.prompt("输入指令文本：");
     if (!text) return;
     const cmd = commandLib.createCommand(text, {
-      categoryId: selectedCategoryId === "__all__" ? null : selectedCategoryId,
+      categoryId: selectedCategoryId,
     });
     if (cmd) {
       toast("已创建指令");
@@ -329,8 +326,7 @@ export function createSideStoryPanel(deps) {
         let added = 0;
         for (const line of lines) {
           const cmd = commandLib.createCommand(line, {
-            categoryId:
-              selectedCategoryId === "__all__" ? null : selectedCategoryId,
+            categoryId: selectedCategoryId,
           });
           if (cmd) added += 1;
         }
