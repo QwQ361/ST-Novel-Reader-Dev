@@ -1624,27 +1624,22 @@ jQuery(async () => {
       </div>
 
       <div class="novel-settings-row">
-        <div class="novel-settings-label">聊天列表显示操作按钮</div>
-        <label class="novel-switch">
-          <input type="checkbox" class="novel-show-toc-chat-actions" ${
-            g.showTocChatActions ? "checked" : ""
-          } />
-          <span class="novel-switch-track"></span>
-          <span class="novel-switch-thumb"></span>
-        </label>
-        <div class="novel-settings-hint">在聊天列表卡片与目录页头部显示删除/重命名聊天按钮（默认关闭）。删除当前阅读的聊天会自动返回列表并保留阅读进度；重命名会同步迁移书签与进度。</div>
-      </div>
-
-      <div class="novel-settings-row">
-        <div class="novel-settings-label">阅读页显示操作按钮</div>
-        <label class="novel-switch">
-          <input type="checkbox" class="novel-show-reader-chat-actions" ${
-            g.showReaderChatActions ? "checked" : ""
-          } />
-          <span class="novel-switch-track"></span>
-          <span class="novel-switch-thumb"></span>
-        </label>
-        <div class="novel-settings-hint">在正文阅读页章标题旁显示删除/重命名当前聊天按钮（默认关闭）。</div>
+        <div class="novel-settings-label">删除与重命名按钮</div>
+        <div class="novel-chat-actions-checkbox-row">
+          <label class="novel-chat-actions-checkbox">
+            <input type="checkbox" class="novel-show-toc-chat-actions" ${
+              g.showTocChatActions ? "checked" : ""
+            } />
+            <span>目录页</span>
+          </label>
+          <label class="novel-chat-actions-checkbox">
+            <input type="checkbox" class="novel-show-reader-chat-actions" ${
+              g.showReaderChatActions ? "checked" : ""
+            } />
+            <span>阅读页</span>
+          </label>
+        </div>
+        <div class="novel-settings-hint">聊天列表卡片始终显示；目录页与阅读页勾选时才显示。</div>
       </div>
 
       <div class="novel-settings-row">

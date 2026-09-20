@@ -1281,6 +1281,27 @@
   line-height: 1.5;
 }
 
+/* 删除与重命名按钮：目录页/阅读页复选框行 */
+.novel-chat-actions-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.novel-chat-actions-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.novel-chat-actions-checkbox input[type="checkbox"] {
+  accent-color: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+  cursor: pointer;
+}
+
 /* 自动识别标题：识别标签输入行 */
 .novel-chapter-title-tag-row {
   display: flex;
