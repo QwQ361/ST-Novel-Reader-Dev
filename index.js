@@ -48,7 +48,11 @@ import {
   isImageIconBackgroundCore,
   toCssUrlCore,
 } from "./integrations/topbar-icon.js";
-import { createOverlayDialog, makeDraggable } from "./ui/modal/index.js";
+import {
+  createChoiceDialog,
+  createOverlayDialog,
+  makeDraggable,
+} from "./ui/modal/index.js";
 import {
   applyThemeCore,
   resolveOpaqueBg,
@@ -984,21 +988,17 @@ jQuery(async () => {
       const preview = String(chat.last_mes || "").trim();
       const isIsoStamp =
         /^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})?$/.test(preview);
-      const showActions = getGlobalSettings().showTocChatActions;
+      // 聊天卡片操作条（删除/重命名）：始终常显，不受设置开关控制（开关只影响目录页/阅读页按钮）
       card.innerHTML = `
         <div class="novel-card-title">${escapeHtml(String(fileName).replace(/\.jsonl$/i, ""))}</div>
         ${preview && !isIsoStamp ? `<div class="novel-card-preview">${escapeHtml(preview)}</div>` : ""}
         ${metaParts.length ? `<div class="novel-card-meta">${metaParts.map((v) => escapeHtml(v)).join(" · ")}</div>` : ""}
-        ${
-          showActions
-            ? `<div class="novel-card-actions">
-                 <button class="novel-card-action" data-action="rename" title="重命名聊天">${RENAME_SVG}</button>
-                 <button class="novel-card-action novel-card-action-delete" data-action="delete" title="删除聊天">${DELETE_SVG}</button>
-               </div>`
-            : ""
-        }`;
+        <div class="novel-card-actions">
+          <button class="novel-card-action" data-action="rename" title="重命名聊天">${RENAME_SVG}</button>
+          <button class="novel-card-action novel-card-action-delete" data-action="delete" title="删除聊天">${DELETE_SVG}</button>
+        </div>`;
       // 操作条按钮事件：stopPropagation 防止冒泡触发卡片点击（openToc）
-      if (showActions) {
+      {
         const renameBtn = card.querySelector('[data-action="rename"]');
         const deleteBtn = card.querySelector('[data-action="delete"]');
         renameBtn.addEventListener("click", (e) => {

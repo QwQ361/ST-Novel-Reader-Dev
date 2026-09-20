@@ -421,6 +421,11 @@
   text-overflow: ellipsis;
 }
 
+/* 聊天卡片：flex 纵向布局，标题区撑满剩余高度，底部操作条统一对齐 */
+.novel-chat-card {
+  display: flex;
+  flex-direction: column;
+}
 /* 聊天卡片：标题允许换行，避免长名字被截成省略号 */
 .novel-chat-card .novel-card-title {
   white-space: normal;
@@ -428,6 +433,8 @@
   text-overflow: clip;
   word-break: break-all;
   line-height: 1.35;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .novel-card-preview {
