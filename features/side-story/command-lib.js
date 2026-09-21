@@ -236,13 +236,35 @@ export function createCommandLibCore(deps) {
 
   /**
    * 从消息文本加入指令库（番外标注自动入库用；按文本去重）。
+   * 未提供名称时自动命名为「未命名-N」（N 为自增序号），避免 name 为空
+   * 导致批量重命名时把指令正文误识别为公共前/后缀。
    * @param {string} text 指令文本（user 楼层正文）
    * @param {object} [options] 同 createCommand
    * @returns {object|null} 已存在返回 null（不入库）；新增返回新指令
    */
   function addFromMessage(text, options = {}) {
     if (existsByText(text)) return null;
-    return createCommand(text, options);
+    let name = String(options.name || "").trim();
+    if (!name) {
+      let n = 1;
+      while (existsByName(`未命名-${n}`)) n += 1;
+      name = `未命名-${n}`;
+    }
+    return createCommand(text, { ...options, name });
+  }
+
+  /**
+   * 按名称查重（trim 后完全一致）。
+   * @param {string} name 指令名称
+   * @returns {boolean} 已存在则 true
+   */
+  function existsByName(name) {
+    const t = table();
+    const n = String(name || "").trim();
+    if (!n) return false;
+    return Object.values(t.commands).some(
+      (cmd) => String(cmd.name || "").trim() === n,
+    );
   }
 
   /**
@@ -297,6 +319,7 @@ export function createCommandLibCore(deps) {
     listCommandsByCategory,
     createCommand,
     existsByText,
+    existsByName,
     addFromMessage,
     updateCommand,
     deleteCommand,

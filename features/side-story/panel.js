@@ -278,24 +278,55 @@ export function createSideStoryPanel(deps) {
   }
 
   /**
-   * 批量重命名弹窗（Promise 模式）。
-   * @param {string[]} labels 选中指令的显示名（用于预览与前后缀检测）
-   * @returns {Promise<string|null>} 确认返回新名称（留空 = "" 表示清除），取消返回 null
+   * 批量重命名弹窗（Promise 模式，五种操作：增加/删除前后缀 + 逐个重命名）。
+   * 公共前/后缀检测仅用指令「名称」（name），不参与文本兜底，
+   * 避免未命名指令的正文被误识别为公共部分。
+   * @param {Array<{id:string, name:string}>} items 选中指令 {id, name}
+   * @returns {Promise<object|null>}
+   *   - 批量操作 → { mode:"batch", action:"add-prefix"|"add-suffix"|"del-prefix"|"del-suffix", text }
+   *   - 逐个重命名 → { mode:"individual", renameMap:{ [id]: 新名称 } }
+   *   - 取消 → null
    */
-  function showBatchRenamePopup(labels) {
+  function showBatchRenamePopup(items) {
+    const names = items.map((it) => it.name || "");
     const overlay = document.createElement("div");
     overlay.className = "novel-ss-edit-popup-overlay";
     overlay.innerHTML = `
       <div class="novel-ss-edit-popup">
-        <div class="novel-ss-edit-popup-title">批量重命名 ${labels.length} 条指令</div>
-        <div class="novel-ss-edit-popup-names">${nameListHtml(labels)}</div>
-        <div class="novel-ss-edit-popup-detect">
-          <span class="novel-ss-edit-detect-label">公共部分：</span>
-          <span class="novel-ss-edit-detect-none">（无）</span>
-        </div>
+        <div class="novel-ss-edit-popup-title">批量重命名 ${items.length} 条指令</div>
+        <div class="novel-ss-edit-popup-names">${nameListHtml(names)}</div>
         <div class="novel-ss-edit-popup-field">
-          <label>新名称</label>
-          <input type="text" class="novel-ss-edit-input" placeholder="输入新名称（留空则清除名称）" autocomplete="off" />
+          <label>操作类型</label>
+          <select class="novel-ss-edit-input novel-ss-rename-action">
+            <option value="add-prefix">增加前缀</option>
+            <option value="add-suffix">增加后缀</option>
+            <option value="del-prefix">删除前缀</option>
+            <option value="del-suffix">删除后缀</option>
+            <option value="individual">逐个重命名</option>
+          </select>
+        </div>
+        <div class="novel-ss-edit-popup-field novel-ss-rename-text-field">
+          <label class="novel-ss-rename-text-label">前缀内容</label>
+          <input type="text" class="novel-ss-edit-input novel-ss-rename-text" placeholder="输入要添加的前缀" autocomplete="off" />
+        </div>
+        <div class="novel-ss-edit-popup-field novel-ss-rename-auto-detect" style="display:none">
+          <label>自动检测到的公共前/后缀</label>
+          <div class="novel-ss-rename-detected"></div>
+        </div>
+        <div class="novel-ss-rename-individual-field" style="display:none">
+          <label>逐个指定新名称（留空则不修改）</label>
+          <div class="novel-ss-rename-individual-list">
+            ${items
+              .map(
+                (it) => `
+              <div class="novel-ss-rename-individual-row" data-id="${escapeHtml(it.id)}">
+                <span class="novel-ss-rename-old-name" title="${escapeHtml(it.name)}">${escapeHtml(it.name || "（未命名）")}</span>
+                <span class="novel-ss-rename-arrow">→</span>
+                <input type="text" class="novel-ss-rename-new-input" placeholder="留空则不修改" value="" autocomplete="off" />
+              </div>`,
+              )
+              .join("")}
+          </div>
         </div>
         <div class="novel-ss-edit-popup-actions">
           <button class="novel-ss-edit-popup-cancel">取消</button>
@@ -303,40 +334,79 @@ export function createSideStoryPanel(deps) {
         </div>
       </div>`;
     document.body.appendChild(overlay);
-    const input = overlay.querySelector(".novel-ss-edit-input");
-    input.focus();
-    input.select();
 
-    // 公共前/后缀检测：点击胶囊直接填入输入框
-    const prefix = findCommonPrefix(labels);
-    const suffix = findCommonSuffix(labels);
-    if (prefix || suffix) {
-      const detectBox = overlay.querySelector(".novel-ss-edit-popup-detect");
-      detectBox.innerHTML =
-        '<span class="novel-ss-edit-detect-label">公共部分：</span>';
-      if (prefix) {
-        const cap = document.createElement("span");
-        cap.className = "novel-ss-edit-detect-item";
-        cap.textContent = `前缀「${prefix}」`;
-        cap.title = "点击填入";
-        cap.addEventListener("click", () => {
-          input.value = prefix;
-          input.focus();
-        });
-        detectBox.appendChild(cap);
+    const select = overlay.querySelector(".novel-ss-rename-action");
+    const textField = overlay.querySelector(".novel-ss-rename-text-field");
+    const textLabel = overlay.querySelector(".novel-ss-rename-text-label");
+    const textInput = overlay.querySelector(".novel-ss-rename-text");
+    const autoDetect = overlay.querySelector(".novel-ss-rename-auto-detect");
+    const detected = overlay.querySelector(".novel-ss-rename-detected");
+    const individualField = overlay.querySelector(
+      ".novel-ss-rename-individual-field",
+    );
+    const namesBlock = overlay.querySelector(".novel-ss-edit-popup-names");
+
+    /** 渲染检测胶囊：点击将实际前后缀值填入输入框并聚焦（显示文本含说明，填入用 value） */
+    function bindDetectCapsule(label, value) {
+      detected.innerHTML = "";
+      const cap = document.createElement("span");
+      cap.className = "novel-ss-edit-detect-item";
+      cap.textContent = label;
+      cap.title = "点击填入";
+      cap.addEventListener("click", () => {
+        textInput.value = value;
+        textInput.focus();
+      });
+      detected.appendChild(cap);
+    }
+
+    /** 统一控制 文本区 / 检测区 / 逐个表格 的显隐与文案（参照 CFM updateRenameUI） */
+    function updateRenameUI() {
+      const action = select.value;
+      if (action === "individual") {
+        textField.style.display = "none";
+        autoDetect.style.display = "none";
+        namesBlock.style.display = "none";
+        individualField.style.display = "flex";
+        const first = individualField.querySelector(
+          ".novel-ss-rename-new-input",
+        );
+        first?.focus();
+        return;
       }
-      if (suffix) {
-        const cap = document.createElement("span");
-        cap.className = "novel-ss-edit-detect-item";
-        cap.textContent = `后缀「${suffix}」`;
-        cap.title = "点击填入";
-        cap.addEventListener("click", () => {
-          input.value = suffix;
-          input.focus();
-        });
-        detectBox.appendChild(cap);
+      individualField.style.display = "none";
+      textField.style.display = "flex";
+      namesBlock.style.display = "flex";
+      if (action === "add-prefix") {
+        textLabel.textContent = "前缀内容";
+        textInput.placeholder = "输入要添加的前缀";
+        autoDetect.style.display = "none";
+      } else if (action === "add-suffix") {
+        textLabel.textContent = "后缀内容";
+        textInput.placeholder = "输入要添加的后缀";
+        autoDetect.style.display = "none";
+      } else if (action === "del-prefix") {
+        textLabel.textContent = "要删除的前缀";
+        textInput.placeholder = "输入要删除的前缀，或点击下方自动检测结果";
+        autoDetect.style.display = "flex";
+        const p = findCommonPrefix(names);
+        if (p) bindDetectCapsule(`公共前缀「${p}」`, p);
+        else
+          detected.innerHTML =
+            '<span class="novel-ss-edit-detect-none">未检测到公共前缀</span>';
+      } else if (action === "del-suffix") {
+        textLabel.textContent = "要删除的后缀";
+        textInput.placeholder = "输入要删除的后缀，或点击下方自动检测结果";
+        autoDetect.style.display = "flex";
+        const s = findCommonSuffix(names);
+        if (s) bindDetectCapsule(`公共后缀「${s}」`, s);
+        else
+          detected.innerHTML =
+            '<span class="novel-ss-edit-detect-none">未检测到公共后缀</span>';
       }
     }
+    select.addEventListener("change", updateRenameUI);
+    updateRenameUI();
 
     return new Promise((resolve) => {
       const finish = (value) => {
@@ -352,12 +422,27 @@ export function createSideStoryPanel(deps) {
         if (e.target.classList.contains("novel-ss-edit-popup-overlay"))
           finish(null);
       });
-      // 确认：留空也返回 ""（表示清除名称），仅取消返回 null
+      // 确认：逐个重命名收集 renameMap；批量操作返回 action + text
       overlay
         .querySelector(".novel-ss-edit-popup-confirm")
-        .addEventListener("click", () => finish(input.value.trim()));
-      // 键盘：Enter 确认 / Escape 取消
-      input.addEventListener("keydown", (e) => {
+        .addEventListener("click", () => {
+          const action = select.value;
+          if (action === "individual") {
+            const renameMap = {};
+            overlay
+              .querySelectorAll(".novel-ss-rename-individual-row")
+              .forEach((row) => {
+                const input = row.querySelector(".novel-ss-rename-new-input");
+                const newName = input.value.trim();
+                if (newName) renameMap[row.dataset.id] = newName;
+              });
+            finish({ mode: "individual", renameMap });
+          } else {
+            finish({ mode: "batch", action, text: textInput.value.trim() });
+          }
+        });
+      // 键盘：Enter 确认 / Escape 取消（批量文本输入框）
+      textInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
           overlay.querySelector(".novel-ss-edit-popup-confirm").click();
@@ -365,10 +450,21 @@ export function createSideStoryPanel(deps) {
           overlay.querySelector(".novel-ss-edit-popup-cancel").click();
         }
       });
+      // 键盘：逐个重命名表格输入框同样支持 Enter/Esc
+      individualField.querySelectorAll(".novel-ss-rename-new-input").forEach((inp) => {
+        inp.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            overlay.querySelector(".novel-ss-edit-popup-confirm").click();
+          } else if (e.key === "Escape") {
+            overlay.querySelector(".novel-ss-edit-popup-cancel").click();
+          }
+        });
+      });
     });
   }
 
-  /** 批量重命名：给所有选中的指令设置名称 */
+  /** 批量重命名：按弹窗结果执行五种操作（增加/删除前后缀 + 逐个重命名），带统计汇总 */
   async function batchRenameSelected() {
     const cmds = commandLib.listCommands();
     const ids = Array.from(batchSelected).filter((id) => cmds[id]);
@@ -376,15 +472,64 @@ export function createSideStoryPanel(deps) {
       toast("请先选择指令");
       return;
     }
-    const labels = ids.map((id) => cmds[id]?.name || cmds[id]?.text || "");
-    const name = await showBatchRenamePopup(labels);
-    if (name === null) return;
-    let n = 0;
-    for (const id of ids) {
-      if (commandLib.updateCommand(id, { name: String(name || "").trim() }))
-        n++;
+    const items = ids.map((id) => ({ id, name: cmds[id]?.name || "" }));
+    const result = await showBatchRenamePopup(items);
+    if (!result) return;
+
+    let success = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    if (result.mode === "batch") {
+      const { action, text } = result;
+      if (!text) {
+        toast("请输入内容");
+        return;
+      }
+      for (const id of ids) {
+        const oldName = String(cmds[id]?.name || "");
+        let newName;
+        if (action === "add-prefix") {
+          newName = text + oldName;
+        } else if (action === "add-suffix") {
+          newName = oldName + text;
+        } else if (action === "del-prefix") {
+          if (!oldName.startsWith(text)) {
+            skipped++;
+            continue;
+          }
+          newName = oldName.substring(text.length);
+        } else if (action === "del-suffix") {
+          if (!oldName.endsWith(text)) {
+            skipped++;
+            continue;
+          }
+          newName = oldName.substring(0, oldName.length - text.length);
+        }
+        if (commandLib.updateCommand(id, { name: newName })) success++;
+        else failed++;
+      }
+    } else if (result.mode === "individual") {
+      const { renameMap } = result;
+      for (const id of ids) {
+        const newName = renameMap[id];
+        if (!newName) {
+          skipped++;
+          continue;
+        }
+        if (newName === String(cmds[id]?.name || "")) {
+          skipped++;
+          continue;
+        }
+        if (commandLib.updateCommand(id, { name: newName })) success++;
+        else failed++;
+      }
     }
-    toast(`已重命名 ${n} 条指令`);
+
+    let msg = `批量重命名完成：成功 ${success} 个`;
+    if (skipped > 0) msg += `，跳过 ${skipped} 个`;
+    if (failed > 0) msg += `，失败 ${failed} 个`;
+    toast(msg);
     render();
   }
 

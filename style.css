@@ -3618,3 +3618,80 @@
     opacity: 1;
   }
 }
+
+/* 批量重命名：下拉（select 复用 .novel-ss-edit-input 基础样式） */
+.novel-ss-rename-action {
+  appearance: auto;
+  cursor: pointer;
+}
+
+/* 自动检测公共前/后缀区（仅删除前缀/后缀操作显示） */
+.novel-ss-rename-auto-detect {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.novel-ss-rename-detected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* 逐个重命名表格：容器限高滚动 */
+.novel-ss-rename-individual-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.novel-ss-rename-individual-field > label {
+  font-size: 12px;
+  opacity: 0.75;
+}
+.novel-ss-rename-individual-list {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+/* 行：旧名(40%) + 箭头 + 输入框(flex 1) */
+.novel-ss-rename-individual-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.novel-ss-rename-old-name {
+  flex: 0 0 40%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 12px;
+}
+.novel-ss-rename-arrow {
+  color: #a6adc8;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.novel-ss-rename-new-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  border-radius: 6px;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  padding: 6px 8px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+.novel-ss-rename-new-input:focus {
+  border-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+  outline: none;
+}
