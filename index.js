@@ -1222,8 +1222,8 @@ jQuery(async () => {
           return true;
         })
       : allChapters;
-    // 番外不计入章节数：主线章数恒定显示（「都看/主线」显示主线章数，「番外」显示番外篇数）
-    const mainTotal = allChapters.filter((c) => !c.isSideStory).length;
+    // 番外也计入章节数：总章数 = 全部章节；番外筛选时显示番外篇数
+    const mainTotal = allChapters.length;
     const sideTotal = allChapters.filter((c) => c.isSideStory).length;
     const total = filtered.length;
     const totalPages = Math.max(1, Math.ceil(total / perPage));
@@ -1306,11 +1306,9 @@ jQuery(async () => {
       const item = document.createElement("div");
       // 番外条目样式与普通章节一致（不区分配色）
       item.className = "novel-toc-item";
-      // 番外章：主标题「番外」+ 副标题（标题名），与主线章「第N章」+ 副标题结构对齐（displayIndex = 连续主线编号，番外不计入）
+      // 番外章与主线章统一显示「第N章」（番外也计入编号），副标题为章节名
       const tagTitle = ch.titleSource === "tag" ? ch.title : "";
-      const mainText = ch.isSideStory
-        ? "番外"
-        : "第" + String(ch.displayIndex ?? ch.index) + "章";
+      const mainText = "第" + String(ch.displayIndex ?? ch.index) + "章";
       item.innerHTML = `
         <span class="novel-toc-item-title">${escapeHtml(mainText)}</span>
         ${
@@ -1504,7 +1502,7 @@ jQuery(async () => {
   function updateBottomButtons() {
     if (!bottombarEl) return;
     const info = reader.getChatInfo();
-    // 番外不计入章节数，但底部翻页按全部章节顺序走（主线+番外都可通过 prev/next 翻阅）
+    // 番外也计入章节数：底部翻页按全部章节顺序走（主线+番外都可通过 prev/next 翻阅）
     const total = info?.chapters?.length || 0;
     const cur = state.currentChapter;
     const prev = bottombarEl.querySelector('[data-action="prev"]');
@@ -1861,7 +1859,7 @@ jQuery(async () => {
           <span class="novel-switch-track"></span>
           <span class="novel-switch-thumb"></span>
         </label>
-        <div class="novel-settings-hint">开启后，可在聊天楼层中标注番外：标注的番外显示在目录（不计入章节数），且对应楼层可隐藏并收录进番外指令库。关闭后番外按钮与相关设置全部隐藏。</div>
+        <div class="novel-settings-hint">开启后，可在聊天楼层中标注番外：标注的番外也计入章节编号并显示在目录（可筛选），且对应楼层可隐藏并收录进番外指令库。关闭后番外按钮与相关设置全部隐藏。</div>
         <div class="novel-side-story-sub" ${
           g.sideStoryEnabled ? "" : 'style="display:none"'
         }>
