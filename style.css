@@ -3215,13 +3215,10 @@
 }
 
 .novel-ss-cat-actions {
-  display: none;
+  display: inline-flex;
   gap: 4px;
   flex: none;
-}
-
-.novel-ss-cat-row:hover .novel-ss-cat-actions {
-  display: inline-flex;
+  margin-right: 2px;
 }
 
 .novel-ss-cat-actions i {
@@ -3229,7 +3226,7 @@
   padding: 2px;
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .novel-ss-cat-actions i:hover {
@@ -3257,12 +3254,6 @@
     var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
     transparent
   );
-}
-
-.novel-ss-cmd-drag {
-  flex: none;
-  opacity: 0.4;
-  cursor: grab;
 }
 
 .novel-ss-cmd-main {
@@ -3300,10 +3291,6 @@
 .novel-ss-cmd-meta .novel-ss-cmd-text {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.novel-ss-cmd-cat {
-  flex: none;
 }
 
 .novel-ss-cmd-actions {
@@ -3428,14 +3415,8 @@
   color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
 }
 
-/* ---------- 收藏置顶节点（左栏顶部 ⭐ 收藏） ---------- */
+/* ---------- 收藏置顶节点（左栏顶部 ⭐ 收藏，简洁无边框） ---------- */
 .novel-ss-cat-fav {
-  border: 1px dashed
-    color-mix(
-      in srgb,
-      var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 40%,
-      transparent
-    );
   background: color-mix(
     in srgb,
     var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 8%,

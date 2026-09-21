@@ -159,6 +159,12 @@ export function createSideStoryPanel(deps) {
         </span>
         ${cat.pinned ? '<i class="fa-solid fa-thumbtack novel-ss-cat-icon novel-ss-cat-pin"></i>' : '<i class="fa-solid fa-folder novel-ss-cat-icon"></i>'}
         <span class="novel-ss-cat-name">${escapeHtml(cat.name)}</span>
+        <span class="novel-ss-cat-actions">
+          <i class="fa-solid fa-plus novel-ss-cat-add" title="新建子分类"></i>
+          ${cat.pinned ? '<i class="fa-solid fa-thumbtack novel-ss-cat-pin-toggle novel-ss-cat-pin-on" title="取消置顶"></i>' : '<i class="fa-solid fa-thumbtack novel-ss-cat-pin-toggle" title="置顶"></i>'}
+          <i class="fa-solid fa-pen novel-ss-cat-rename" title="重命名"></i>
+          <i class="fa-solid fa-trash novel-ss-cat-del" title="删除"></i>
+        </span>
         <span class="novel-ss-cat-count">${count}</span>`;
       row.draggable = true;
 
@@ -261,14 +267,8 @@ export function createSideStoryPanel(deps) {
         );
         if (newRow) flashDragTarget(newRow);
       });
-      // 分类操作按钮（悬停显示）：新建子分类 / 置顶 / 重命名 / 删除
-      const actions = document.createElement("span");
-      actions.className = "novel-ss-cat-actions";
-      actions.innerHTML = `
-        <i class="fa-solid fa-plus novel-ss-cat-add" title="新建子分类"></i>
-        ${cat.pinned ? '<i class="fa-solid fa-thumbtack novel-ss-cat-pin-toggle novel-ss-cat-pin-on" title="取消置顶"></i>' : '<i class="fa-solid fa-thumbtack novel-ss-cat-pin-toggle" title="置顶"></i>'}
-        <i class="fa-solid fa-pen novel-ss-cat-rename" title="重命名"></i>
-        <i class="fa-solid fa-trash novel-ss-cat-del" title="删除"></i>`;
+      // 分类操作按钮（始终常显，位于计数左侧）：新建子分类 / 置顶 / 重命名 / 删除
+      const actions = row.querySelector(".novel-ss-cat-actions");
       actions
         .querySelector(".novel-ss-cat-add")
         .addEventListener("click", (e) => {
@@ -296,7 +296,6 @@ export function createSideStoryPanel(deps) {
           e.stopPropagation();
           promptDeleteCategory(catId);
         });
-      row.appendChild(actions);
       container.appendChild(row);
 
       if (expanded) children.forEach((cid) => renderNode(cid, depth + 1));
@@ -728,16 +727,12 @@ export function createSideStoryPanel(deps) {
         (batchMode && selected ? " novel-ss-cmd-selected" : "");
       row.dataset.cmdId = cmd.id;
       row.draggable = true;
-      const catName = cmd.categoryId
-        ? commandLib.listCategories()[cmd.categoryId]?.name || "未分类"
-        : "未分类";
       row.innerHTML = `
-        ${batchMode ? `<i class="${selected ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-check" title="选择"></i>` : `<i class="fa-solid fa-grip-vertical novel-ss-cmd-drag" title="拖拽到分类"></i>`}
+        ${batchMode ? `<i class="${selected ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-check" title="选择"></i>` : ""}
         <div class="novel-ss-cmd-main">
           <div class="novel-ss-cmd-title">${escapeHtml(cmd.name || cmd.text)}</div>
           <div class="novel-ss-cmd-meta">
             ${cmd.name ? `<span class="novel-ss-cmd-text">${escapeHtml(cmd.text)}</span>` : ""}
-            <span class="novel-ss-cmd-cat">${escapeHtml(catName)}</span>
           </div>
         </div>
         <span class="novel-ss-cmd-actions">
@@ -961,6 +956,16 @@ export function createSideStoryPanel(deps) {
     for (const id of Array.from(batchSelected)) {
       if (!cmds[id]) batchSelected.delete(id);
     }
+    // 右栏标题：显示当前文件夹名（搜索 / 收藏 / 未分类 / 分类名）
+    const titleEl = panelEl.querySelector(".novel-ss-list-title-label");
+    if (titleEl) {
+      if (searchQuery) titleEl.textContent = "搜索结果";
+      else if (selectedCategoryId === "__favorites__") titleEl.textContent = "收藏";
+      else if (selectedCategoryId === null) titleEl.textContent = "未分类";
+      else
+        titleEl.textContent =
+          commandLib.listCategories()[selectedCategoryId]?.name || "指令";
+    }
     const tree = panelEl.querySelector(".novel-ss-tree");
     const list = panelEl.querySelector(".novel-ss-list");
     if (tree) renderTree(tree);
@@ -996,7 +1001,7 @@ export function createSideStoryPanel(deps) {
         </div>
         <div class="novel-ss-list-col">
           <div class="novel-ss-col-title">
-            <span>指令</span>
+            <span class="novel-ss-list-title-label">指令</span>
             <span class="novel-ss-list-actions">
               <i class="fa-solid fa-file-import novel-ss-import" title="从 txt 导入"></i>
               <i class="fa-solid fa-plus novel-ss-new-cmd" title="新建指令"></i>
