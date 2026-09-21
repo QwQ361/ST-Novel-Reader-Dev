@@ -379,6 +379,14 @@ jQuery(async () => {
     const char = state.currentChar;
     const chat = state.currentChat;
     if (!char || !chat) return;
+    // 番外标注/取消只改了 is_system / extra.novelExtra，聊天文件大小未必变化，
+    // 而内容缓存（TTL 5 分钟 + file_size 失效）可能命中旧数据导致分章不含最新标注。
+    // 重载前先强制失效并重拉该聊天的完整内容，保证分章/过滤读到最新数据。
+    try {
+      await bookshelf.refreshChatMessages(char.avatar, chat.file_name);
+    } catch (err) {
+      console.warn("[NovelReader] 强制刷新聊天内容失败:", err);
+    }
     const info = await reader.loadChat({
       avatar: char.avatar,
       fileName: chat.file_name,
