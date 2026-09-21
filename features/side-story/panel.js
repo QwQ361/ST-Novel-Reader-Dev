@@ -719,7 +719,7 @@ export function createSideStoryPanel(deps) {
    * 批量设置标签：为选中 N 条指令批量设置标签。
    * 模仿批量重命名弹窗：操作类型支持「统一标签 / 逐个标签」两种模式。
    * - 统一标签：选一个 tag + 添加/移除 → 全部选中指令生效
-   * - 逐个标签：每个 tag 一行（胶囊 + 添加/移除/不操作），确认后逐 tag 批量执行
+   * - 逐个标签：每条指令一行（指令名 + tag 胶囊勾选区），逐条设置标签，确认后按行整体替换 tagIds
    */
   function showBatchTagPopup() {
     const cmds = commandLib.listCommands();
@@ -756,6 +756,7 @@ export function createSideStoryPanel(deps) {
           <div class="novel-ss-batch-tag-list"></div>
         </div>
         <div class="novel-ss-batch-tag-individual" style="display:none">
+          <label class="novel-ss-batch-tag-individual-label">逐个设置每条指令的标签（点击 tag 胶囊切换勾选，留空则清除全部）</label>
           <div class="novel-ss-batch-tag-individual-list"></div>
         </div>
         <div class="novel-ss-edit-popup-actions">
@@ -800,27 +801,44 @@ export function createSideStoryPanel(deps) {
       listEl.appendChild(row);
     });
 
-    // ---- 逐个模式：每个 tag 一行（胶囊 + 操作下拉） ----
-    tags.forEach((tag) => {
+    // ---- 逐个模式：每条指令一行（指令名 + tag 胶囊勾选区） ----
+    // 每行行内 tag 胶囊为独立状态：点击切换勾选，确认后按行整体替换 tagIds。
+    if (!tags.length) {
+      indivListEl.innerHTML =
+        '<div class="novel-ss-empty">暂无标签，请先在「管理标签」中创建</div>';
+    }
+    ids.forEach((id) => {
+      const cmd = cmds[id];
+      if (!cmd) return;
+      const cur = new Set(cmd.tagIds || []);
       const row = document.createElement("div");
       row.className = "novel-ss-batch-tag-row novel-ss-batch-tag-row-indiv";
-      row.dataset.tagId = tag.id;
-      row.innerHTML = `
-        <span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>
-        <select class="novel-ss-edit-input novel-ss-batch-tag-indiv-action">
-          <option value="">不操作</option>
-          <option value="add">添加</option>
-          <option value="remove">移除</option>
-        </select>`;
-      const sel = row.querySelector(".novel-ss-batch-tag-indiv-action");
-      sel.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          overlay.querySelector(".novel-ss-edit-popup-confirm").click();
-        } else if (e.key === "Escape") {
-          overlay.querySelector(".novel-ss-edit-popup-cancel").click();
-        }
+      row.dataset.id = id;
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "novel-ss-batch-tag-cmd-name";
+      nameSpan.textContent = cmd.name || cmd.text || "（未命名）";
+      nameSpan.title = cmd.name || cmd.text || "";
+      const chipsWrap = document.createElement("div");
+      chipsWrap.className = "novel-ss-batch-tag-cmd-chips";
+      tags.forEach((tag) => {
+        const chip = document.createElement("span");
+        chip.className =
+          "novel-ss-tag-chip novel-ss-batch-tag-indiv-chip" +
+          (cur.has(tag.id) ? " novel-ss-batch-tag-indiv-chip-on" : "");
+        chip.dataset.tagId = tag.id;
+        chip.textContent = tag.name;
+        chip.title = "点击切换勾选";
+        chip.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const on = chip.classList.contains(
+            "novel-ss-batch-tag-indiv-chip-on",
+          );
+          chip.classList.toggle("novel-ss-batch-tag-indiv-chip-on", !on);
+        });
+        chipsWrap.appendChild(chip);
       });
+      row.appendChild(nameSpan);
+      row.appendChild(chipsWrap);
       indivListEl.appendChild(row);
     });
 
@@ -842,7 +860,7 @@ export function createSideStoryPanel(deps) {
 
       // ---- 先完成校验与数据读取（校验失败不关闭弹窗） ----
       let action = null;
-      let plans = null;
+      let rowPlans = null; // 逐个模式：{ id, tagIds: string[] } 列表
       if (mode === "uniform") {
         action = overlay
           .querySelector(".novel-ss-batch-tag-action")
@@ -852,37 +870,35 @@ export function createSideStoryPanel(deps) {
           return;
         }
       } else {
-        plans = [];
+        rowPlans = [];
         indivListEl
           .querySelectorAll(".novel-ss-batch-tag-row-indiv")
           .forEach((row) => {
-            const act = row
-              .querySelector(".novel-ss-batch-tag-indiv-action")
-              .value.trim();
-            if (act) plans.push({ tagId: row.dataset.tagId, action: act });
+            const tagIds = Array.from(
+              row.querySelectorAll(
+                ".novel-ss-batch-tag-indiv-chip.novel-ss-batch-tag-indiv-chip-on",
+              ),
+            ).map((chip) => chip.dataset.tagId);
+            rowPlans.push({ id: row.dataset.id, tagIds });
           });
-        if (!plans.length) {
-          toast("请至少为一行选择「添加/移除」");
-          return;
-        }
       }
 
       overlay.remove();
-      let changed = 0; // 受影响的（指令,标签）操作数
-      const applyTag = (cmd, tagId, act) => {
-        const cur = new Set(cmd.tagIds || []);
-        if (act === "add") {
-          if (cur.has(tagId)) return false;
-          cur.add(tagId);
-        } else {
-          if (!cur.has(tagId)) return false;
-          cur.delete(tagId);
-        }
-        commandLib.updateCommand(cmd.id, { tagIds: Array.from(cur) });
-        return true;
-      };
+      let changed = 0; // 实际发生变化的指令数
 
       if (mode === "uniform") {
+        const applyTag = (cmd, tagId, act) => {
+          const cur = new Set(cmd.tagIds || []);
+          if (act === "add") {
+            if (cur.has(tagId)) return false;
+            cur.add(tagId);
+          } else {
+            if (!cur.has(tagId)) return false;
+            cur.delete(tagId);
+          }
+          commandLib.updateCommand(cmd.id, { tagIds: Array.from(cur) });
+          return true;
+        };
         for (const id of ids) {
           const cmd = cmds[id];
           if (cmd && applyTag(cmd, picked, action)) changed++;
@@ -893,25 +909,23 @@ export function createSideStoryPanel(deps) {
           }」：${changed} 条指令受影响`,
         );
       } else {
-        // 逐个模式：按收集到的配置逐 tag 执行
-        let tagSummary = [];
-        plans.forEach((plan) => {
-          let n = 0;
-          for (const id of ids) {
-            const cmd = cmds[id];
-            if (cmd && applyTag(cmd, plan.tagId, plan.action)) n++;
-          }
-          if (n > 0) {
-            const t = tags.find((tg) => tg.id === plan.tagId);
-            tagSummary.push(
-              `${t?.name || ""}${plan.action === "add" ? "+" : "-"}${n}`,
-            );
-          }
-          changed += n;
+        // 逐个模式：按行整体替换 tagIds
+        rowPlans.forEach((plan) => {
+          const cmd = cmds[plan.id];
+          if (!cmd) return;
+          const cur = new Set(cmd.tagIds || []);
+          const next = new Set(plan.tagIds);
+          if (
+            cur.size === next.size &&
+            Array.from(cur).every((x) => next.has(x))
+          )
+            return; // 未变化
+          commandLib.updateCommand(cmd.id, { tagIds: Array.from(next) });
+          changed++;
         });
         toast(
-          tagSummary.length
-            ? `已批量设置标签：${tagSummary.join("，")}`
+          changed
+            ? `已批量设置标签：${changed} 条指令发生变化`
             : "无指令发生变化",
         );
       }

@@ -3682,22 +3682,54 @@
   margin-top: 8px;
 }
 
-/* 逐个模式：tag 列表（每行 = 胶囊 + 操作下拉） */
+/* 逐个模式：每条指令一行（指令名 + tag 胶囊勾选区） */
+.novel-ss-batch-tag-individual-label {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-top: 10px;
+  display: block;
+}
 .novel-ss-batch-tag-individual-list {
   max-height: 40vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 8px;
+  padding-right: 4px;
 }
 .novel-ss-batch-tag-row-indiv {
   cursor: default;
-  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
-.novel-ss-batch-tag-row-indiv .novel-ss-batch-tag-indiv-action {
-  width: 110px;
-  flex-shrink: 0;
+.novel-ss-batch-tag-cmd-name {
+  flex: 0 0 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  opacity: 0.9;
+}
+.novel-ss-batch-tag-cmd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.novel-ss-batch-tag-indiv-chip {
+  cursor: pointer;
+  opacity: 0.55;
+}
+.novel-ss-batch-tag-indiv-chip-on {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 30%,
+    transparent
+  );
 }
 
 /* ---------- 番外指令库：批量重命名弹窗（Promise 模式，参照 CFM） ---------- */
