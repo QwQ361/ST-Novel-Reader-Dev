@@ -21,8 +21,10 @@ export function createSideStoryPanel(deps) {
 
   let panelEl = null;
   let mounted = false;
-  // 当前筛选：null=全部 / "__untagged__"=未标记 / "__favorites__"=收藏 / "tag_xxx"=某 tag
-  let selectedFilter = null;
+  // 当前 tag 筛选：Set，可含 "__untagged__"=未标记 / "__favorites__"=收藏 / "tag_xxx"=某 tag；空=全部
+  let selectedTagFilters = new Set();
+  // 搜索栏 tag 筛选下拉面板状态
+  let tagFilterDropdown = null;
   let searchQuery = "";
   // 批量操作状态
   let batchMode = false;
@@ -42,16 +44,25 @@ export function createSideStoryPanel(deps) {
   function getVisibleCommands() {
     let list = Object.values(commandLib.listCommands());
 
-    // 1. tag 下拉筛选（与搜索 AND 叠加）
-    if (selectedFilter === "__untagged__") {
-      list = list.filter((c) => !c.tagIds || c.tagIds.length === 0);
-    } else if (selectedFilter === "__favorites__") {
-      list = list.filter((c) => c.favorite);
-    } else if (selectedFilter && selectedFilter.startsWith("tag_")) {
-      const tagId = selectedFilter;
-      list = list.filter(
-        (c) => Array.isArray(c.tagIds) && c.tagIds.includes(tagId),
+    // 1. tag 多选筛选（与搜索 AND 叠加；多个筛选条件之间 OR，命中任一即保留）
+    if (selectedTagFilters.size) {
+      const wantUntagged = selectedTagFilters.has("__untagged__");
+      const wantFavorites = selectedTagFilters.has("__favorites__");
+      const tagIds = Array.from(selectedTagFilters).filter((f) =>
+        f.startsWith("tag_"),
       );
+      list = list.filter((c) => {
+        if (wantUntagged && (!c.tagIds || c.tagIds.length === 0)) return true;
+        if (wantFavorites && c.favorite) return true;
+        if (
+          tagIds.length &&
+          Array.isArray(c.tagIds) &&
+          c.tagIds.some((tid) => tagIds.includes(tid))
+        ) {
+          return true;
+        }
+        return false;
+      });
     }
 
     // 2. 搜索：文本（text/name）模糊 或 tag 名包含（大小写不敏感），取并集
@@ -1207,14 +1218,18 @@ export function createSideStoryPanel(deps) {
           toggleBatchItem(cmd.id, e.shiftKey);
           renderCommands(container);
         });
-      // tag 胶囊点击：跳转该 tag 筛选
+      // tag 胶囊点击：切换该 tag 筛选（若已在筛选中则取消，否则只保留该 tag）
       row
         .querySelectorAll(".novel-ss-cmd-tags .novel-ss-tag-chip")
         .forEach((chip) => {
           chip.addEventListener("click", (e) => {
             e.stopPropagation();
             const tagId = chip.dataset.tagId;
-            selectedFilter = tagId;
+            if (selectedTagFilters.has(tagId)) selectedTagFilters.delete(tagId);
+            else {
+              selectedTagFilters.clear();
+              selectedTagFilters.add(tagId);
+            }
             searchQuery = "";
             const searchInput = panelEl.querySelector(".novel-ss-search");
             if (searchInput) searchInput.value = "";
@@ -1356,28 +1371,135 @@ export function createSideStoryPanel(deps) {
       rangeBtn.classList.toggle("novel-ss-batch-active", batchRangeMode);
   }
 
-  /** 刷新 tag 下拉筛选框选项（保留当前选中值） */
+  /** 刷新 tag 多选筛选按钮外观（按钮文本 + 已选胶囊区） */
   function refreshTagFilter() {
     if (!mounted || !panelEl) return;
-    const select = panelEl.querySelector(".novel-ss-tag-filter");
-    if (!select) return;
-    const cur = selectedFilter;
+    const btn = panelEl.querySelector(".novel-ss-tag-filter-btn");
+    if (!btn) return;
+    const tags = commandLib.listTags();
+    const tagIds = Array.from(selectedTagFilters).filter((f) =>
+      f.startsWith("tag_"),
+    );
+    const hasSpecial =
+      selectedTagFilters.has("__untagged__") ||
+      selectedTagFilters.has("__favorites__");
+    const total = selectedTagFilters.size;
+    btn.classList.toggle("novel-ss-tag-filter-active", total > 0);
+    const btnLabel = btn.querySelector(".novel-ss-tag-filter-btn-label");
+    if (btnLabel) {
+      btnLabel.textContent = total > 0 ? `标签(${total})` : "标签";
+    }
+    // 已选胶囊区（点 ✕ 移除单项）；无筛选时隐藏
+    const chipsEl = panelEl.querySelector(".novel-ss-tag-filter-chips");
+    if (!chipsEl) return;
+    chipsEl.innerHTML = "";
+    const names = [];
+    for (const f of selectedTagFilters) {
+      if (f === "__untagged__") names.push("未标记");
+      else if (f === "__favorites__") names.push("⭐ 收藏");
+      else if (tags[f]) names.push(tags[f].name);
+    }
+    chipsEl.style.display = names.length ? "flex" : "none";
+    names.forEach((name) => {
+      const chip = document.createElement("span");
+      chip.className = "novel-ss-tag-chip novel-ss-tag-filter-chip";
+      chip.textContent = name;
+      chip.title = "点击移除该筛选";
+      chip.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const f =
+          name === "未标记"
+            ? "__untagged__"
+            : name === "⭐ 收藏"
+              ? "__favorites__"
+              : Object.values(tags).find((t) => t.name === name)?.id;
+        if (f) {
+          selectedTagFilters.delete(f);
+          render();
+        }
+      });
+      chipsEl.appendChild(chip);
+    });
+    const clearBtn = panelEl.querySelector(".novel-ss-tag-filter-clear");
+    if (clearBtn)
+      clearBtn.style.display = selectedTagFilters.size ? "inline-flex" : "none";
+  }
+
+  /** 关闭 tag 多选筛选下拉面板 */
+  function closeTagFilterDropdown() {
+    if (tagFilterDropdown) {
+      tagFilterDropdown.remove();
+      tagFilterDropdown = null;
+    }
+  }
+
+  /** 渲染并定位 tag 多选筛选下拉面板（挂 panel 内、fixed 定位、防裁剪翻转） */
+  function openTagFilterDropdown() {
+    closeTagFilterDropdown();
+    const btn = panelEl.querySelector(".novel-ss-tag-filter-btn");
+    if (!btn) return;
     const tags = Object.values(commandLib.listTags()).sort((a, b) =>
       String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
     );
-    select.innerHTML = `
-      <option value="">全部标签</option>
-      <option value="__untagged__">未标记</option>
-      <option value="__favorites__">⭐ 收藏</option>
-      ${tags
-        .map(
-          (t) =>
-            `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`,
+    const dd = document.createElement("div");
+    dd.className = "novel-ss-tag-filter-dropdown";
+    const optHtml = (val, label, checked) => `
+      <div class="novel-ss-tag-filter-opt${checked ? " novel-ss-tag-filter-opt-on" : ""}" data-val="${val}">
+        <i class="fa-regular fa-square${checked ? " fa-solid fa-square-check" : ""}"></i>
+        <span>${label}</span>
+      </div>`;
+    let inner = `
+      ${optHtml("__untagged__", "未标记", selectedTagFilters.has("__untagged__"))}
+      ${optHtml("__favorites__", "⭐ 收藏", selectedTagFilters.has("__favorites__"))}
+      <div class="novel-ss-tag-filter-sep"></div>`;
+    if (!tags.length) {
+      inner += `<div class="novel-ss-tag-filter-empty">暂无标签，请先在「管理标签」中创建</div>`;
+    } else {
+      inner += tags
+        .map((t) =>
+          optHtml(t.id, escapeHtml(t.name), selectedTagFilters.has(t.id)),
         )
-        .join("")}`;
-    select.value = cur || "";
-    const clearBtn = panelEl.querySelector(".novel-ss-tag-filter-clear");
-    if (clearBtn) clearBtn.style.display = cur ? "inline-flex" : "none";
+        .join("");
+    }
+    dd.innerHTML = inner;
+    dd.addEventListener("click", (e) => {
+      // 阻止冒泡到 document（避免下拉被点击外部监听关闭）
+      e.stopPropagation();
+      const opt = e.target.closest(".novel-ss-tag-filter-opt");
+      if (!opt) return;
+      const val = opt.dataset.val;
+      if (selectedTagFilters.has(val)) {
+        selectedTagFilters.delete(val);
+      } else {
+        selectedTagFilters.add(val);
+      }
+      // 手动更新该项勾选样式（render 不重建下拉）
+      opt.classList.toggle(
+        "novel-ss-tag-filter-opt-on",
+        selectedTagFilters.has(val),
+      );
+      const icon = opt.querySelector("i");
+      if (icon) {
+        icon.className = selectedTagFilters.has(val)
+          ? "fa-solid fa-square-check"
+          : "fa-regular fa-square";
+      }
+      render();
+    });
+    panelEl.appendChild(dd);
+    tagFilterDropdown = dd;
+    // 定位（相对按钮，fixed 坐标取按钮视口位置）
+    const r = btn.getBoundingClientRect();
+    dd.style.left = r.right - Math.min(r.width, 200) + "px";
+    dd.style.top = r.bottom + 4 + "px";
+    dd.style.minWidth = Math.max(160, Math.min(r.width, 220)) + "px";
+    const dr = dd.getBoundingClientRect();
+    if (dr.right > window.innerWidth - 8) {
+      dd.style.left = Math.max(8, window.innerWidth - dr.width - 8) + "px";
+    }
+    if (dr.bottom > window.innerHeight - 8) {
+      dd.style.top = Math.max(8, r.top - dr.height - 4) + "px";
+    }
   }
 
   function render() {
@@ -1387,13 +1509,10 @@ export function createSideStoryPanel(deps) {
     for (const id of Array.from(batchSelected)) {
       if (!cmds[id]) batchSelected.delete(id);
     }
-    // 若当前筛选的 tag 已被删除，回退到全部
-    if (
-      selectedFilter &&
-      selectedFilter.startsWith("tag_") &&
-      !commandLib.listTags()[selectedFilter]
-    ) {
-      selectedFilter = null;
+    // 若当前筛选的 tag 已被删除，移出筛选集
+    const tags = commandLib.listTags();
+    for (const f of Array.from(selectedTagFilters)) {
+      if (f.startsWith("tag_") && !tags[f]) selectedTagFilters.delete(f);
     }
     const list = panelEl.querySelector(".novel-ss-list");
     if (list) renderCommands(list);
@@ -1415,7 +1534,14 @@ export function createSideStoryPanel(deps) {
       <div class="novel-ss-search-row">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="text" class="novel-ss-search" placeholder="搜索指令或标签…" autocomplete="off" />
-        <select class="novel-ss-tag-filter" title="按标签筛选"></select>
+        <div class="novel-ss-tag-filter-wrap">
+          <button type="button" class="novel-ss-tag-filter-btn" title="按标签筛选（可多选）">
+            <i class="fa-solid fa-tags"></i>
+            <span class="novel-ss-tag-filter-btn-label">标签</span>
+            <i class="fa-solid fa-caret-down"></i>
+          </button>
+          <div class="novel-ss-tag-filter-chips" style="display:none"></div>
+        </div>
         <i class="fa-solid fa-xmark novel-ss-tag-filter-clear" style="display:none" title="清除标签筛选"></i>
       </div>
       <div class="novel-ss-list-toolbar">
@@ -1464,17 +1590,24 @@ export function createSideStoryPanel(deps) {
         .toLowerCase();
       renderCommands(panelEl.querySelector(".novel-ss-list"));
     });
-    // tag 下拉筛选
-    const tagFilter = panelEl.querySelector(".novel-ss-tag-filter");
-    tagFilter.addEventListener("change", () => {
-      selectedFilter = tagFilter.value || null;
-      render();
+    // tag 多选筛选：点击按钮开合下拉面板
+    const tagFilterBtn = panelEl.querySelector(".novel-ss-tag-filter-btn");
+    tagFilterBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (tagFilterDropdown) closeTagFilterDropdown();
+      else openTagFilterDropdown();
     });
-    // 清除 tag 筛选
+    // 滚动 / 点击面板外关闭下拉（捕获阶段，覆盖所有滚动源）
+    const closeDd = () => closeTagFilterDropdown();
+    panelEl.addEventListener("scroll", closeDd, true);
+    window.addEventListener("scroll", closeDd, true);
+    document.addEventListener("click", closeDd);
+    // 清除全部 tag 筛选
     panelEl
       .querySelector(".novel-ss-tag-filter-clear")
-      .addEventListener("click", () => {
-        selectedFilter = null;
+      .addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectedTagFilters.clear();
         render();
       });
     // 新建指令
@@ -1568,6 +1701,8 @@ export function createSideStoryPanel(deps) {
     batchSelected.clear();
     batchLastClicked = null;
     batchRangeMode = false;
+    // 关闭 tag 筛选下拉
+    closeTagFilterDropdown();
     panelEl.style.display = "none";
   }
 

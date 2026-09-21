@@ -3336,10 +3336,21 @@
   opacity: 1;
 }
 
-/* ---------- 搜索栏：tag 筛选下拉 + ✕ 清除 ---------- */
-.novel-ss-tag-filter {
+/* ---------- 搜索栏：tag 多选筛选按钮 + 已选胶囊 + 下拉面板 + ✕ 清除 ---------- */
+.novel-ss-tag-filter-wrap {
+  position: relative;
   flex: none;
-  max-width: 140px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.novel-ss-tag-filter-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid
     color-mix(
@@ -3350,13 +3361,112 @@
   border-radius: 6px;
   color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
   font-size: 0.8rem;
-  padding: 4px 6px;
+  padding: 4px 8px;
   outline: none;
   cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
 }
 
-.novel-ss-tag-filter:focus {
+.novel-ss-tag-filter-btn:hover,
+.novel-ss-tag-filter-btn:focus-visible {
   border-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
+.novel-ss-tag-filter-btn.novel-ss-tag-filter-active {
+  border-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 14%,
+    transparent
+  );
+}
+
+/* 已选筛选胶囊区（按钮下方，可换行） */
+.novel-ss-tag-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.novel-ss-tag-filter-chip {
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0 7px;
+  line-height: 1.7;
+}
+
+/* 多选下拉面板：挂 panel 内 fixed 定位，视口边缘自动翻转 */
+.novel-ss-tag-filter-dropdown {
+  position: fixed;
+  z-index: 100001; /* 压过弹窗 overlay */
+  background: var(--novel-bg, var(--SmartThemeBlurTintColor, #1a1d23));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  border-radius: 8px;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.novel-ss-tag-filter-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 0.8rem;
+  transition: background 0.12s ease;
+}
+
+.novel-ss-tag-filter-opt:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+}
+
+.novel-ss-tag-filter-opt i {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.novel-ss-tag-filter-opt.novel-ss-tag-filter-opt-on {
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
+.novel-ss-tag-filter-opt.novel-ss-tag-filter-opt-on i {
+  opacity: 1;
+}
+
+.novel-ss-tag-filter-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+    transparent
+  );
+}
+
+.novel-ss-tag-filter-empty {
+  font-size: 12px;
+  opacity: 0.6;
+  padding: 6px 8px;
 }
 
 .novel-ss-tag-filter-clear {
@@ -3419,6 +3529,18 @@
     flex-wrap: wrap;
   }
   .novel-ss-batch-tag-picker {
+    flex: 1 1 100%;
+  }
+  /* 窄屏：tag 筛选按钮区换行，胶囊区独立一行 */
+  .novel-ss-tag-filter-wrap {
+    flex-wrap: wrap;
+    flex: 1 1 100%;
+  }
+  .novel-ss-tag-filter-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+  .novel-ss-tag-filter-chips {
     flex: 1 1 100%;
   }
 }
