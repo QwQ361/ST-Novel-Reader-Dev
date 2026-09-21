@@ -750,8 +750,10 @@ export function createSideStoryPanel(deps) {
           <div class="novel-ss-edit-popup-field">
             <label>操作</label>
             <select class="novel-ss-edit-input novel-ss-batch-tag-action">
-              <option value="add">添加标签</option>
-              <option value="remove">移除标签</option>
+              <option value="add">统一添加标签</option>
+              <option value="overwrite">统一修改标签（覆盖）</option>
+              <option value="remove">统一移除标签</option>
+              <option value="clear">清空全部标签</option>
             </select>
           </div>
           <div class="novel-ss-batch-tag-utils">
@@ -828,6 +830,20 @@ export function createSideStoryPanel(deps) {
       pickedSet.clear();
       renderUniform();
     });
+
+    // 操作 select：clear（清空全部标签）时隐藏 tag 选择列表，无需勾选
+    const actionSelect = overlay.querySelector(".novel-ss-batch-tag-action");
+    const uniformUtilsEl = overlay.querySelector(".novel-ss-batch-tag-utils");
+    const uniformListWrapEl = listEl; // 列表容器
+    function updateActionUI() {
+      const act = actionSelect.value;
+      const isClear = act === "clear";
+      uniformUtilsEl.style.display = isClear ? "none" : "flex";
+      uniformListWrapEl.style.display = isClear ? "none" : "flex";
+      if (isClear) pickedSet.clear();
+    }
+    actionSelect.addEventListener("change", updateActionUI);
+    updateActionUI();
 
     // ---- 逐个模式：每条指令一行（指令名 → 选择框 + 下拉面板） ----
     // 模仿逐个重命名行布局；点击选择框弹出 tag 下拉面板（挂 overlay 定位，
@@ -990,7 +1006,8 @@ export function createSideStoryPanel(deps) {
         action = overlay
           .querySelector(".novel-ss-batch-tag-action")
           .value.trim();
-        if (!pickedSet.size) {
+        // clear（清空全部标签）无需勾选 tag；其余行为需要至少勾选一个
+        if (action !== "clear" && !pickedSet.size) {
           toast("请先选择至少一个标签");
           return;
         }
@@ -1024,24 +1041,70 @@ export function createSideStoryPanel(deps) {
             }
           }
           if (!dirty) return false;
-          commandLib.updateCommand(cmd.id, { tagIds: Array.from(cur) });
+          // 按 tag 顺序存储
+          const ordered = tags.filter((t) => cur.has(t.id)).map((t) => t.id);
+          commandLib.updateCommand(cmd.id, { tagIds: ordered });
           return true;
         };
         const pickedArr = Array.from(pickedSet);
         const pickedNames = pickedArr
           .map((id) => tags.find((t) => t.id === id)?.name)
           .filter(Boolean);
-        for (const id of ids) {
-          const cmd = cmds[id];
-          if (cmd && applyTag(cmd, pickedArr, action)) changed++;
+
+        if (action === "clear") {
+          // 清空全部标签：所有选中指令 tagIds 置空
+          for (const id of ids) {
+            const cmd = cmds[id];
+            if (!cmd) continue;
+            const cur = new Set(cmd.tagIds || []);
+            if (!cur.size) continue;
+            commandLib.updateCommand(cmd.id, { tagIds: [] });
+            changed++;
+          }
+          toast(
+            changed
+              ? `已清空全部标签：${changed} 条指令受影响`
+              : "指令均无标签",
+          );
+        } else if (action === "overwrite") {
+          // 统一修改（覆盖）：整体替换为勾选的 tag 集合（按 tag 顺序存储）
+          const nextArr = tags
+            .filter((t) => pickedSet.has(t.id))
+            .map((t) => t.id);
+          for (const id of ids) {
+            const cmd = cmds[id];
+            if (!cmd) continue;
+            const cur = new Set(cmd.tagIds || []);
+            const next = new Set(nextArr);
+            if (
+              cur.size === next.size &&
+              Array.from(cur).every((x) => next.has(x))
+            )
+              continue;
+            commandLib.updateCommand(cmd.id, { tagIds: nextArr });
+            changed++;
+          }
+          toast(
+            changed
+              ? `已覆盖为标签「${pickedNames.join(
+                  "、",
+                )}」：${changed} 条指令受影响`
+              : "指令标签均已是所选标签",
+          );
+        } else {
+          // 统一添加 / 统一移除
+          for (const id of ids) {
+            const cmd = cmds[id];
+            if (cmd && applyTag(cmd, pickedArr, action)) changed++;
+          }
+          toast(
+            `已${action === "add" ? "添加" : "移除"}标签「${pickedNames.join(
+              "、",
+            )}」：${changed} 条指令受影响`,
+          );
         }
-        toast(
-          `已${action === "add" ? "添加" : "移除"}标签「${pickedNames.join(
-            "、",
-          )}」：${changed} 条指令受影响`,
-        );
       } else {
-        // 逐个模式：按行整体替换 tagIds
+        // 逐个模式：按行整体替换 tagIds（按 tag 顺序存储）
         rowPlans.forEach((plan) => {
           const cmd = cmds[plan.id];
           if (!cmd) return;
@@ -1052,7 +1115,8 @@ export function createSideStoryPanel(deps) {
             Array.from(cur).every((x) => next.has(x))
           )
             return; // 未变化
-          commandLib.updateCommand(cmd.id, { tagIds: Array.from(next) });
+          const ordered = tags.filter((t) => next.has(t.id)).map((t) => t.id);
+          commandLib.updateCommand(cmd.id, { tagIds: ordered });
           changed++;
         });
         toast(
@@ -1082,6 +1146,12 @@ export function createSideStoryPanel(deps) {
 
     const cmds = getVisibleCommands();
     const tags = commandLib.listTags();
+    // tag 显示顺序统一为「tag 顺序」（与 tag 管理/筛选一致：按名称拼音排序）
+    const tagOrder = Object.values(tags)
+      .sort((a, b) =>
+        String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
+      )
+      .map((t) => t.id);
 
     if (!cmds.length) {
       container.innerHTML = `<div class="novel-ss-empty">暂无指令</div>`;
@@ -1104,7 +1174,8 @@ export function createSideStoryPanel(deps) {
           </div>
           ${
             (cmd.tagIds || []).length
-              ? `<div class="novel-ss-cmd-tags">${(cmd.tagIds || [])
+              ? `<div class="novel-ss-cmd-tags">${tagOrder
+                  .filter((tid) => (cmd.tagIds || []).includes(tid))
                   .map((tid) => (tags[tid] ? tagChipHtml(tags[tid]) : ""))
                   .join("")}</div>`
               : ""
