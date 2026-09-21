@@ -1615,8 +1615,8 @@ export function createSideStoryPanel(deps) {
             <span class="novel-ss-tag-filter-btn-label">标签</span>
             <i class="fa-solid fa-caret-down"></i>
           </button>
-          <div class="novel-ss-tag-filter-chips" style="display:none"></div>
           <i class="fa-solid fa-xmark novel-ss-tag-filter-clear" style="display:none" title="清除标签筛选"></i>
+          <div class="novel-ss-tag-filter-chips" style="display:none"></div>
         </div>
       </div>
       <div class="novel-ss-list-toolbar">

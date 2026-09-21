@@ -3024,6 +3024,7 @@
   opacity: 0.6;
 }
 
+/* 搜索框与放大镜图标同行，占满第一行剩余宽度 */
 .novel-ss-search {
   flex: 1 1 auto;
   min-width: 0;
@@ -3338,7 +3339,8 @@
 }
 
 /* ---------- 搜索栏：tag 多选筛选按钮 + 已选胶囊 + 下拉面板 + ✕ 清除 ---------- */
-/* wrap 独占一行：搜索框一行，标签按钮/已选胶囊/清除按钮换行到下一行，互不挤压 */
+/* wrap 独占第二行：内部为 标签按钮 → ✕ 清除 → 已选胶囊，同一行排列，
+   已选胶囊多时在 wrap 内换行，不影响搜索框宽度 */
 .novel-ss-tag-filter-wrap {
   position: relative;
   flex: 1 1 100%;
@@ -3387,9 +3389,9 @@
   );
 }
 
-/* 已选筛选胶囊区（按钮下方，独占一行，可换行） */
+/* 已选筛选胶囊区（按钮右侧，占剩余宽度，多时内部换行） */
 .novel-ss-tag-filter-chips {
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -3535,17 +3537,17 @@
   .novel-ss-batch-tag-picker {
     flex: 1 1 100%;
   }
-  /* 窄屏：tag 筛选按钮区换行，胶囊区独立一行 */
+  /* 窄屏：标签筛选按钮、X、已选胶囊保持同行（多余在胶囊区内换行） */
   .novel-ss-tag-filter-wrap {
     flex-wrap: wrap;
     flex: 1 1 100%;
   }
   .novel-ss-tag-filter-btn {
-    flex: 1 1 auto;
+    flex: none;
     justify-content: center;
   }
   .novel-ss-tag-filter-chips {
-    flex: 1 1 100%;
+    flex: 1 1 auto;
   }
 }
 
