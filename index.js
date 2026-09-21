@@ -1306,17 +1306,15 @@ jQuery(async () => {
       const item = document.createElement("div");
       // 番外条目样式与普通章节一致（不区分配色）
       item.className = "novel-toc-item";
-      // 番外章：显示「番外（标题）」；主线章显示「第N章」（displayIndex = 连续主线编号，番外不计入）
+      // 番外章：主标题「番外」+ 副标题（标题名），与主线章「第N章」+ 副标题结构对齐（displayIndex = 连续主线编号，番外不计入）
       const tagTitle = ch.titleSource === "tag" ? ch.title : "";
-      const titleText = ch.isSideStory
-        ? tagTitle
-          ? `番外（${tagTitle}）`
-          : "番外"
+      const mainText = ch.isSideStory
+        ? "番外"
         : "第" + String(ch.displayIndex ?? ch.index) + "章";
       item.innerHTML = `
-        <span class="novel-toc-item-title">${escapeHtml(titleText)}</span>
+        <span class="novel-toc-item-title">${escapeHtml(mainText)}</span>
         ${
-          tagTitle && !ch.isSideStory
+          tagTitle
             ? `<span class="novel-toc-item-sub">${escapeHtml(String(tagTitle))}</span>`
             : ""
         }`;
