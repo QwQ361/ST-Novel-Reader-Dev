@@ -3415,13 +3415,8 @@
   color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
 }
 
-/* ---------- 收藏置顶节点（左栏顶部 ⭐ 收藏，简洁无边框） ---------- */
+/* ---------- 收藏置顶节点（左栏顶部 ⭐ 收藏，与普通文件夹未选中态一致，仅星标金色区分） ---------- */
 .novel-ss-cat-fav {
-  background: color-mix(
-    in srgb,
-    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 8%,
-    transparent
-  );
   margin-bottom: 4px;
 }
 
