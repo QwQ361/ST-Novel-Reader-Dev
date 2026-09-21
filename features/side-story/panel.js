@@ -1,9 +1,9 @@
 // features/side-story/panel.js
 // 番外指令库浮动面板。
-// 布局：左侧分类树（无限层级文件夹式）+ 右侧指令列表（当前选中分类）+ 顶部搜索。
+// 布局：单列流式（toolbar + 搜索/tag筛选 + 指令列表）。
 // 交互：
-//   - 分类：新建（顶层/子级）、重命名、删除、拖拽移动（到另一个分类下）
-//   - 指令：新建（手写）、重命名、删除、拖拽归类（到分类上）、从 txt 导入
+//   - tag：管理弹窗（批量新增/全选/框选/反选/删除/重命名）、下拉筛选、指令行胶囊、批量设置标签
+//   - 指令：新建（手写）、重命名、删除、从 txt 导入、收藏、批量操作（全选/框选/重命名/删除/设置标签）
 //   - 点击指令 → 追加到输入框末尾（#send_textarea 已有内容则追加，空则直接填入）
 // 面板挂 document.body 的 fixed 浮动层。
 
@@ -21,88 +21,14 @@ export function createSideStoryPanel(deps) {
 
   let panelEl = null;
   let mounted = false;
-  let selectedCategoryId = null; // null = 未分类；"__favorites__" = 收藏视图
+  // 当前筛选：null=全部 / "__untagged__"=未标记 / "__favorites__"=收藏 / "tag_xxx"=某 tag
+  let selectedFilter = null;
   let searchQuery = "";
-  let expandedSet = new Set();
-  let dragCmdId = null; // 正在拖拽的指令 id
-  let dragCmdIds = null; // 批量拖拽时携带的指令 id 数组（null 表示非批量）
-  let dragCatId = null; // 正在拖拽的分类 id
-  // 批量操作状态（参照 CFM 批量模式）
-  let batchMode = false; // 批量操作模式开关
-  let batchSelected = new Set(); // 批量选中的指令 id
-  let batchLastClicked = null; // 框选锚点（上次点击的指令 id）
-  let batchRangeMode = false; // 框选模式开关
-
-  // ---------------- 拖拽视觉（参照 CFM：多选 ghost / 三区域指示 / 落点闪烁） ----------------
-
-  /** 注入拖拽高亮脉冲样式（全局只注入一次） */
-  function ensureDragHighlightStyle() {
-    if (document.getElementById("novel-ss-drag-highlight-style")) return;
-    const style = document.createElement("style");
-    style.id = "novel-ss-drag-highlight-style";
-    style.textContent = `
-      .novel-ss-drag-highlighted {
-        animation: novelSsDragHighlightPulse 0.9s ease-out;
-      }
-      @keyframes novelSsDragHighlightPulse {
-        0%   { box-shadow: 0 0 0 3px rgba(249, 226, 175, 0.9); }
-        100% { box-shadow: 0 0 0 3px rgba(249, 226, 175, 0); }
-      }`;
-    document.head.appendChild(style);
-  }
-
-  /** 落点闪烁：给元素加一次金色脉冲动画（重触发用 void offsetWidth） */
-  function flashDragTarget(el) {
-    if (!el) return;
-    el.classList.remove("novel-ss-drag-highlighted");
-    void el.offsetWidth;
-    el.classList.add("novel-ss-drag-highlighted");
-  }
-
-  /** 多选拖拽 ghost：自定义拖拽图像「📦 共 N 项」（参照 CFM pcDragStartCore） */
-  function setMultiDragGhost(e, count) {
-    if (!(count > 1)) return;
-    const ghost = document.createElement("div");
-    ghost.className = "novel-ss-drag-ghost";
-    ghost.textContent = `📦 共 ${count} 项`;
-    document.body.appendChild(ghost);
-    try {
-      e.dataTransfer?.setDragImage(ghost, 0, 0);
-    } catch (err) {
-      /* 兼容性异常忽略 */
-    }
-    setTimeout(() => ghost.remove(), 0);
-  }
-
-  /**
-   * 三区域判定：按悬停相对高度分 before / after / into（参照 CFM tree-view.js）。
-   * @param {DragEvent} e 拖拽事件
-   * @param {HTMLElement} el 目标元素
-   * @returns {"before"|"after"|"into"} 目标区域
-   */
-  function getDropZone(e, el) {
-    const rect = el.getBoundingClientRect();
-    if (!rect.height) return "into";
-    const relativeY = (e.clientY - rect.top) / rect.height;
-    if (relativeY < 0.25) return "before";
-    if (relativeY > 0.75) return "after";
-    return "into";
-  }
-
-  /** 清除某容器内所有拖放指示类（dragend 统一清理） */
-  function clearDropIndicators() {
-    if (!panelEl) return;
-    panelEl
-      .querySelectorAll(".novel-ss-cat-row, .novel-ss-cmd-row")
-      .forEach((el) =>
-        el.classList.remove(
-          "novel-ss-drop-target",
-          "novel-ss-drop-before",
-          "novel-ss-drop-after",
-          "novel-ss-drop-forbidden",
-        ),
-      );
-  }
+  // 批量操作状态
+  let batchMode = false;
+  let batchSelected = new Set();
+  let batchLastClicked = null;
+  let batchRangeMode = false;
 
   // ---------------- 工具 ----------------
 
@@ -112,265 +38,52 @@ export function createSideStoryPanel(deps) {
     return el.innerHTML;
   }
 
-  // ---------------- 渲染：分类树 ----------------
-
-  function renderTree(container) {
-    const cats = commandLib.listCategories();
-    const rootIds = commandLib.getChildCategoryIds(null);
-
-    container.innerHTML = "";
-
-    // ---- 顶部：⭐ 收藏 置顶节点（查看全部收藏指令；收藏是属性，非容器，不可拖放） ----
-    const favRow = document.createElement("div");
-    favRow.className =
-      "novel-ss-cat-row novel-ss-cat-fav" +
-      (selectedCategoryId === "__favorites__" ? " novel-ss-cat-selected" : "");
-    favRow.dataset.catId = "__favorites__";
-    favRow.innerHTML = `
-      <i class="fa-solid fa-star novel-ss-cat-icon novel-ss-fav-star"></i>
-      <span class="novel-ss-cat-name">收藏</span>
-      <span class="novel-ss-cat-count">${commandLib.listFavoriteCount()}</span>`;
-    favRow.addEventListener("click", () => {
-      selectedCategoryId = "__favorites__";
-      render();
-    });
-    container.appendChild(favRow);
-
-    // 递归渲染分类
-    const renderNode = (catId, depth) => {
-      const cat = cats[catId];
-      if (!cat) return;
-      const children = commandLib.getChildCategoryIds(catId);
-      const hasChildren = children.length > 0;
-      const expanded = expandedSet.has(catId);
-      const count = commandLib.listCommandsByCategory(catId).length;
-
-      const row = document.createElement("div");
-      row.className =
-        "novel-ss-cat-row" +
-        (selectedCategoryId === catId ? " novel-ss-cat-selected" : "");
-      row.dataset.catId = catId;
-      row.style.paddingLeft = `${12 + depth * 16}px`;
-      // 自身 + 全部子孙（拖拽禁止态用：分类不能拖到自身或子孙里）
-      const selfDesc = new Set(commandLib.getDescendantCategoryIds(catId));
-      row.innerHTML = `
-        <span class="novel-ss-cat-arrow ${hasChildren ? "" : "novel-ss-cat-arrow-empty"}">
-          <i class="fa-solid fa-chevron-right ${expanded ? "novel-ss-rotated" : ""}"></i>
-        </span>
-        ${cat.pinned ? '<i class="fa-solid fa-thumbtack novel-ss-cat-icon novel-ss-cat-pin"></i>' : '<i class="fa-solid fa-folder novel-ss-cat-icon"></i>'}
-        <span class="novel-ss-cat-name">${escapeHtml(cat.name)}</span>
-        <span class="novel-ss-cat-actions">
-          <i class="fa-solid fa-plus novel-ss-cat-add" title="新建子分类"></i>
-          ${cat.pinned ? '<i class="fa-solid fa-thumbtack novel-ss-cat-pin-toggle novel-ss-cat-pin-on" title="取消置顶"></i>' : '<i class="fa-solid fa-thumbtack novel-ss-cat-pin-toggle" title="置顶"></i>'}
-          <i class="fa-solid fa-pen novel-ss-cat-rename" title="重命名"></i>
-          <i class="fa-solid fa-trash novel-ss-cat-del" title="删除"></i>
-        </span>
-        <span class="novel-ss-cat-count">${count}</span>`;
-      row.draggable = true;
-
-      // 箭头：切换展开
-      row
-        .querySelector(".novel-ss-cat-arrow")
-        .addEventListener("click", (e) => {
-          e.stopPropagation();
-          if (!hasChildren) return;
-          if (expandedSet.has(catId)) expandedSet.delete(catId);
-          else expandedSet.add(catId);
-          render();
-        });
-      // 行点击：选中分类
-      row.addEventListener("click", () => {
-        selectedCategoryId = catId;
-        render();
-      });
-      // 拖拽：分类可拖（移入别的分类 / 同级重排 before-after）
-      row.addEventListener("dragstart", (e) => {
-        dragCatId = catId;
-        e.dataTransfer.setData("text/plain", catId);
-        e.dataTransfer.effectAllowed = "move";
-        row.classList.add("novel-ss-dragging");
-      });
-      row.addEventListener("dragend", () => {
-        dragCatId = null;
-        row.classList.remove("novel-ss-dragging");
-        clearDropIndicators();
-      });
-      // 悬停：三区域指示（before/after/into）；拖到自身或子孙 → 禁止态红叉
-      row.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        const srcCat = dragCatId || e.dataTransfer.getData("text/plain");
-        if (srcCat && selfDesc.has(srcCat)) {
-          e.dataTransfer.dropEffect = "none";
-          row.classList.add("novel-ss-drop-forbidden");
-          row.classList.remove(
-            "novel-ss-drop-before",
-            "novel-ss-drop-after",
-            "novel-ss-drop-target",
-          );
-          return;
-        }
-        e.dataTransfer.dropEffect = "move";
-        const zone = getDropZone(e, row);
-        row.classList.toggle("novel-ss-drop-before", zone === "before");
-        row.classList.toggle("novel-ss-drop-after", zone === "after");
-        row.classList.toggle("novel-ss-drop-target", zone === "into");
-        row.classList.remove("novel-ss-drop-forbidden");
-      });
-      row.addEventListener("dragleave", () => {
-        row.classList.remove(
-          "novel-ss-drop-target",
-          "novel-ss-drop-before",
-          "novel-ss-drop-after",
-          "novel-ss-drop-forbidden",
-        );
-      });
-      row.addEventListener("drop", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const srcCat = dragCatId || e.dataTransfer.getData("text/plain");
-        const srcCmd = dragCmdId;
-        const srcCmds = dragCmdIds;
-        dragCatId = null;
-        dragCmdId = null;
-        dragCmdIds = null;
-        clearDropIndicators();
-        // 分类拖到自身/子孙 → 禁止
-        if (srcCat && selfDesc.has(srcCat)) return;
-        const zone = getDropZone(e, row);
-        if (srcCmds && srcCmds.length) {
-          // 批量指令 → 移入分类
-          let moved = 0;
-          for (const cid of srcCmds) {
-            if (commandLib.updateCommand(cid, { categoryId: catId })) moved++;
-          }
-          toast(`已移动 ${moved} 条指令`);
-        } else if (srcCmd) {
-          // 单个指令 → 移入分类
-          commandLib.updateCommand(srcCmd, { categoryId: catId });
-          toast("已移入分类");
-        } else if (srcCat) {
-          if (zone === "before" || zone === "after") {
-            // 同级重排（pinned 分组不一致会被拒绝）
-            const ok = commandLib.reorderCategory(srcCat, catId, zone);
-            if (ok) toast("已调整分类顺序");
-          } else {
-            // 移入目标分类下
-            if (srcCat === catId) return;
-            commandLib.moveCategory(srcCat, catId);
-            expandedSet.add(catId);
-            toast("已移动分类");
-          }
-        }
-        render();
-        const newRow = panelEl.querySelector(
-          `.novel-ss-cat-row[data-cat-id="${catId}"]`,
-        );
-        if (newRow) flashDragTarget(newRow);
-      });
-      // 分类操作按钮（始终常显，位于计数左侧）：新建子分类 / 置顶 / 重命名 / 删除
-      const actions = row.querySelector(".novel-ss-cat-actions");
-      actions
-        .querySelector(".novel-ss-cat-add")
-        .addEventListener("click", (e) => {
-          e.stopPropagation();
-          promptNewCategory(catId);
-        });
-      actions
-        .querySelector(".novel-ss-cat-pin-toggle")
-        .addEventListener("click", (e) => {
-          e.stopPropagation();
-          const pinned = commandLib.toggleCategoryPin(catId);
-          if (pinned) expandedSet.add(catId);
-          toast(pinned ? "已置顶" : "已取消置顶");
-          render();
-        });
-      actions
-        .querySelector(".novel-ss-cat-rename")
-        .addEventListener("click", (e) => {
-          e.stopPropagation();
-          promptRenameCategory(catId);
-        });
-      actions
-        .querySelector(".novel-ss-cat-del")
-        .addEventListener("click", (e) => {
-          e.stopPropagation();
-          promptDeleteCategory(catId);
-        });
-      container.appendChild(row);
-
-      if (expanded) children.forEach((cid) => renderNode(cid, depth + 1));
-    };
-    rootIds.forEach((cid) => renderNode(cid, 0));
-
-    // ---- 底部：未分类 固定节点（指令/分类可移入；into 语义） ----
-    const unRow = document.createElement("div");
-    unRow.className =
-      "novel-ss-cat-row novel-ss-cat-uncat" +
-      (selectedCategoryId === null ? " novel-ss-cat-selected" : "");
-    unRow.dataset.catId = "__uncat__";
-    unRow.innerHTML = `
-      <i class="fa-solid fa-folder-minus novel-ss-cat-icon"></i>
-      <span class="novel-ss-cat-name">未分类</span>
-      <span class="novel-ss-cat-count">${commandLib.listCommandsByCategory(null).length}</span>`;
-    unRow.addEventListener("click", () => {
-      selectedCategoryId = null;
-      render();
-    });
-    // 拖拽目标（into 语义：指令/分类放入未分类）
-    unRow.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      unRow.classList.add("novel-ss-drop-target");
-    });
-    unRow.addEventListener("dragleave", () => {
-      unRow.classList.remove("novel-ss-drop-target");
-    });
-    unRow.addEventListener("drop", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const srcCmd = dragCmdId;
-      const srcCmds = dragCmdIds;
-      const srcCat = dragCatId || e.dataTransfer.getData("text/plain");
-      dragCmdId = null;
-      dragCmdIds = null;
-      dragCatId = null;
-      if (srcCmds && srcCmds.length) {
-        let moved = 0;
-        for (const cid of srcCmds) {
-          if (commandLib.updateCommand(cid, { categoryId: null })) moved++;
-        }
-        toast(`已移动 ${moved} 条指令到未分类`);
-      } else if (srcCmd) {
-        commandLib.updateCommand(srcCmd, { categoryId: null });
-        toast("已移入未分类");
-      } else if (srcCat) {
-        commandLib.moveCategory(srcCat, null);
-        toast("已移动分类到顶层");
-      }
-      render();
-      const newRow = panelEl.querySelector(
-        `.novel-ss-cat-row[data-cat-id="__uncat__"]`,
-      );
-      if (newRow) flashDragTarget(newRow);
-    });
-    container.appendChild(unRow);
-  }
-
-  // ---------------- 渲染：指令列表 ----------------
-
-  /** 当前可见指令列表（与渲染一致的筛选逻辑） */
+  /** 当前可见指令列表（与渲染一致的筛选逻辑：tag 筛选 AND 搜索） */
   function getVisibleCommands() {
-    if (searchQuery) {
-      return Object.values(commandLib.listCommands()).filter((c) =>
-        String(c.text || "")
-          .toLowerCase()
-          .includes(searchQuery),
+    let list = Object.values(commandLib.listCommands());
+
+    // 1. tag 下拉筛选（与搜索 AND 叠加）
+    if (selectedFilter === "__untagged__") {
+      list = list.filter((c) => !c.tagIds || c.tagIds.length === 0);
+    } else if (selectedFilter === "__favorites__") {
+      list = list.filter((c) => c.favorite);
+    } else if (selectedFilter && selectedFilter.startsWith("tag_")) {
+      const tagId = selectedFilter;
+      list = list.filter(
+        (c) => Array.isArray(c.tagIds) && c.tagIds.includes(tagId),
       );
     }
-    return commandLib.listCommandsByCategory(selectedCategoryId);
+
+    // 2. 搜索：文本（text/name）模糊 或 tag 名包含（大小写不敏感），取并集
+    if (searchQuery) {
+      const q = searchQuery;
+      const matchTagIds = new Set(
+        Object.values(commandLib.listTags())
+          .filter((tag) =>
+            String(tag.name || "")
+              .toLowerCase()
+              .includes(q),
+          )
+          .map((tag) => tag.id),
+      );
+      list = list.filter((c) => {
+        const textHit =
+          String(c.text || "")
+            .toLowerCase()
+            .includes(q) ||
+          String(c.name || "")
+            .toLowerCase()
+            .includes(q);
+        const tagHit =
+          Array.isArray(c.tagIds) && c.tagIds.some((id) => matchTagIds.has(id));
+        return textHit || tagHit;
+      });
+    }
+
+    return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
 
-  /** 批量选择切换（支持 Shift / 框选范围选择，参照 CFM toggleMultiSelectItemCore） */
+  /** 批量选择切换（支持 Shift / 框选范围选择） */
   function toggleBatchItem(id, shiftKey) {
     if ((shiftKey || batchRangeMode) && batchLastClicked) {
       const visible = getVisibleCommands().map((c) => c.id);
@@ -397,7 +110,7 @@ export function createSideStoryPanel(deps) {
     else visible.forEach((id) => batchSelected.add(id));
   }
 
-  // ---------------- 批量重命名弹窗（Promise 模式，参照 CFM rename.js） ----------------
+  // ---------------- 批量重命名弹窗（Promise 模式） ----------------
 
   /** 求公共前缀（传入名称数组） */
   function findCommonPrefix(names) {
@@ -433,8 +146,6 @@ export function createSideStoryPanel(deps) {
 
   /**
    * 批量重命名弹窗（Promise 模式，五种操作：增加/删除前后缀 + 逐个重命名）。
-   * 公共前/后缀检测仅用指令「名称」（name），不参与文本兜底，
-   * 避免未命名指令的正文被误识别为公共部分。
    * @param {Array<{id:string, name:string}>} items 选中指令 {id, name}
    * @returns {Promise<object|null>}
    *   - 批量操作 → { mode:"batch", action:"add-prefix"|"add-suffix"|"del-prefix"|"del-suffix", text }
@@ -500,7 +211,7 @@ export function createSideStoryPanel(deps) {
     );
     const namesBlock = overlay.querySelector(".novel-ss-edit-popup-names");
 
-    /** 渲染检测胶囊：点击将实际前后缀值填入输入框并聚焦（显示文本含说明，填入用 value） */
+    /** 渲染检测胶囊：点击将实际前后缀值填入输入框并聚焦 */
     function bindDetectCapsule(label, value) {
       detected.innerHTML = "";
       const cap = document.createElement("span");
@@ -514,7 +225,7 @@ export function createSideStoryPanel(deps) {
       detected.appendChild(cap);
     }
 
-    /** 统一控制 文本区 / 检测区 / 逐个表格 的显隐与文案（参照 CFM updateRenameUI） */
+    /** 统一控制 文本区 / 检测区 / 逐个表格 的显隐与文案 */
     function updateRenameUI() {
       const action = select.value;
       if (action === "individual") {
@@ -571,12 +282,12 @@ export function createSideStoryPanel(deps) {
       overlay
         .querySelector(".novel-ss-edit-popup-cancel")
         .addEventListener("click", () => finish(null));
-      // 遮罩点击关闭：校验目标类名，避免点卡片内部误关
+      // 遮罩点击关闭
       overlay.addEventListener("click", (e) => {
         if (e.target.classList.contains("novel-ss-edit-popup-overlay"))
           finish(null);
       });
-      // 确认：逐个重命名收集 renameMap；批量操作返回 action + text
+      // 确认
       overlay
         .querySelector(".novel-ss-edit-popup-confirm")
         .addEventListener("click", () => {
@@ -595,7 +306,7 @@ export function createSideStoryPanel(deps) {
             finish({ mode: "batch", action, text: textInput.value.trim() });
           }
         });
-      // 键盘：Enter 确认 / Escape 取消（批量文本输入框）
+      // 键盘：Enter 确认 / Escape 取消
       textInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -604,21 +315,22 @@ export function createSideStoryPanel(deps) {
           overlay.querySelector(".novel-ss-edit-popup-cancel").click();
         }
       });
-      // 键盘：逐个重命名表格输入框同样支持 Enter/Esc
-      individualField.querySelectorAll(".novel-ss-rename-new-input").forEach((inp) => {
-        inp.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            overlay.querySelector(".novel-ss-edit-popup-confirm").click();
-          } else if (e.key === "Escape") {
-            overlay.querySelector(".novel-ss-edit-popup-cancel").click();
-          }
+      individualField
+        .querySelectorAll(".novel-ss-rename-new-input")
+        .forEach((inp) => {
+          inp.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              overlay.querySelector(".novel-ss-edit-popup-confirm").click();
+            } else if (e.key === "Escape") {
+              overlay.querySelector(".novel-ss-edit-popup-cancel").click();
+            }
+          });
         });
-      });
     });
   }
 
-  /** 批量重命名：按弹窗结果执行五种操作（增加/删除前后缀 + 逐个重命名），带统计汇总 */
+  /** 批量重命名：按弹窗结果执行五种操作，带统计汇总 */
   async function batchRenameSelected() {
     const cmds = commandLib.listCommands();
     const ids = Array.from(batchSelected).filter((id) => cmds[id]);
@@ -709,10 +421,412 @@ export function createSideStoryPanel(deps) {
     render();
   }
 
+  // ---------------- tag 管理弹窗 ----------------
+
+  /** 渲染 tag 管理弹窗（批量新增 / 全选 / 框选 / 反选 / 删除 / 重命名） */
+  function showTagManagePopup() {
+    const overlay = document.createElement("div");
+    overlay.className = "novel-ss-edit-popup-overlay";
+    overlay.innerHTML = `
+      <div class="novel-ss-edit-popup novel-ss-tag-manage">
+        <div class="novel-ss-edit-popup-title">管理标签</div>
+        <div class="novel-ss-tag-manage-new">
+          <input type="text" class="novel-ss-edit-input novel-ss-tag-new-input" placeholder="输入标签名，多个用逗号分隔（如：tag1，tag2）" autocomplete="off" />
+          <button class="novel-ss-tag-manage-add">＋ 新增标签</button>
+        </div>
+        <div class="novel-ss-tag-manage-toolbar">
+          <button class="novel-ss-tag-btn novel-ss-tag-selall"><i class="fa-solid fa-square-check"></i> 全选</button>
+          <button class="novel-ss-tag-btn novel-ss-tag-range"><i class="fa-solid fa-arrow-down-short-wide"></i> 框选</button>
+          <button class="novel-ss-tag-btn novel-ss-tag-invert"><i class="fa-solid fa-arrows-rotate"></i> 反选</button>
+          <span class="novel-ss-tag-manage-count"></span>
+          <button class="novel-ss-tag-btn novel-ss-tag-del-selected"><i class="fa-solid fa-trash"></i> 删除选中</button>
+        </div>
+        <div class="novel-ss-tag-manage-list"></div>
+        <div class="novel-ss-edit-popup-actions">
+          <button class="novel-ss-edit-popup-cancel">关闭</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const listEl = overlay.querySelector(".novel-ss-tag-manage-list");
+    const countEl = overlay.querySelector(".novel-ss-tag-manage-count");
+    const newInput = overlay.querySelector(".novel-ss-tag-new-input");
+    let tagSelected = new Set();
+    let tagRangeMode = false;
+    let tagLastClicked = null;
+
+    /** 渲染 tag 列表 */
+    function renderTagList() {
+      const tags = Object.values(commandLib.listTags()).sort((a, b) =>
+        String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
+      );
+      listEl.innerHTML = "";
+      if (!tags.length) {
+        listEl.innerHTML =
+          '<div class="novel-ss-empty">暂无标签，可在上方输入框创建</div>';
+      }
+      tags.forEach((tag) => {
+        const row = document.createElement("div");
+        const checked = tagSelected.has(tag.id);
+        const cmdCount = commandLib.listCommandsByTag(tag.id).length;
+        row.className =
+          "novel-ss-tag-row" + (checked ? " novel-ss-tag-row-selected" : "");
+        row.dataset.tagId = tag.id;
+        row.innerHTML = `
+          <i class="${checked ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-tag-row-check" title="选择"></i>
+          <span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>
+          <span class="novel-ss-tag-manage-count">${cmdCount} 条</span>
+          <span class="novel-ss-tag-manage-actions">
+            <i class="fa-solid fa-pen novel-ss-tag-rename" title="重命名"></i>
+            <i class="fa-solid fa-trash novel-ss-tag-del" title="删除"></i>
+          </span>`;
+        // 行点击：切换选中（支持 Shift / 框选范围）
+        row.addEventListener("click", (e) => {
+          if (e.target.closest(".novel-ss-tag-manage-actions")) return;
+          if ((e.shiftKey || tagRangeMode) && tagLastClicked) {
+            const ids = tags.map((t) => t.id);
+            const lastIdx = ids.indexOf(tagLastClicked);
+            const curIdx = ids.indexOf(tag.id);
+            if (lastIdx >= 0 && curIdx >= 0) {
+              const start = Math.min(lastIdx, curIdx);
+              const end = Math.max(lastIdx, curIdx);
+              for (let i = start; i <= end; i++) tagSelected.add(ids[i]);
+            }
+          } else {
+            if (tagSelected.has(tag.id)) tagSelected.delete(tag.id);
+            else tagSelected.add(tag.id);
+          }
+          tagLastClicked = tag.id;
+          renderTagList();
+        });
+        // 重命名
+        row
+          .querySelector(".novel-ss-tag-rename")
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            const name = window.prompt("重命名标签：", tag.name);
+            if (!name) return;
+            if (commandLib.renameTag(tag.id, name.trim())) {
+              toast("已重命名标签");
+              renderTagList();
+              render();
+            } else {
+              toast("重命名失败：名称不能为空或已存在");
+            }
+          });
+        // 单个删除
+        row
+          .querySelector(".novel-ss-tag-del")
+          .addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (
+              !window.confirm(
+                `确定删除标签「${tag.name}」？该操作将从所有指令中移除该标签。`,
+              )
+            )
+              return;
+            commandLib.deleteTag(tag.id);
+            tagSelected.delete(tag.id);
+            toast("已删除标签");
+            renderTagList();
+            render();
+          });
+        listEl.appendChild(row);
+      });
+      countEl.textContent = `已选 ${tagSelected.size} 项`;
+      const selall = overlay.querySelector(".novel-ss-tag-selall");
+      if (selall)
+        selall.innerHTML =
+          tagSelected.size === tags.length && tags.length > 0
+            ? '<i class="fa-solid fa-square-xmark"></i> 取消全选'
+            : '<i class="fa-solid fa-square-check"></i> 全选';
+    }
+
+    // 批量新增：逗号分隔一次创建多个（中英文逗号均可）
+    function addNewTags() {
+      const text = newInput.value.trim();
+      if (!text) {
+        toast("请输入标签名");
+        return;
+      }
+      const created = commandLib.createTags(text);
+      if (created.length) {
+        toast(`已新增 ${created.length} 个标签（重复已跳过）`);
+        newInput.value = "";
+        renderTagList();
+        render();
+      } else {
+        toast("没有新增：名称为空或已存在");
+      }
+    }
+    overlay
+      .querySelector(".novel-ss-tag-manage-add")
+      .addEventListener("click", addNewTags);
+    newInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addNewTags();
+      } else if (e.key === "Escape") {
+        overlay.querySelector(".novel-ss-edit-popup-cancel").click();
+      }
+    });
+
+    // 全选 / 反选
+    overlay
+      .querySelector(".novel-ss-tag-selall")
+      .addEventListener("click", () => {
+        const tags = Object.values(commandLib.listTags());
+        const allSelected =
+          tags.length > 0 && tags.every((t) => tagSelected.has(t.id));
+        if (allSelected) tagSelected.clear();
+        else tags.forEach((t) => tagSelected.add(t.id));
+        renderTagList();
+      });
+    overlay
+      .querySelector(".novel-ss-tag-invert")
+      .addEventListener("click", () => {
+        const tags = Object.values(commandLib.listTags());
+        const cur = new Set(tagSelected);
+        tagSelected.clear();
+        tags.forEach((t) => {
+          if (!cur.has(t.id)) tagSelected.add(t.id);
+        });
+        renderTagList();
+      });
+    // 框选模式
+    overlay
+      .querySelector(".novel-ss-tag-range")
+      .addEventListener("click", (e) => {
+        tagRangeMode = !tagRangeMode;
+        e.currentTarget.classList.toggle(
+          "novel-ss-tag-btn-active",
+          tagRangeMode,
+        );
+      });
+    // 批量删除选中
+    overlay
+      .querySelector(".novel-ss-tag-del-selected")
+      .addEventListener("click", () => {
+        const ids = Array.from(tagSelected);
+        if (!ids.length) {
+          toast("请先选择标签");
+          return;
+        }
+        if (
+          !window.confirm(
+            `确定删除选中的 ${ids.length} 个标签？该操作将从所有指令中移除这些标签。`,
+          )
+        )
+          return;
+        const n = commandLib.deleteTags(ids);
+        tagSelected.clear();
+        tagLastClicked = null;
+        toast(`已删除 ${n} 个标签`);
+        renderTagList();
+        render();
+      });
+
+    // 关闭
+    const finish = () => overlay.remove();
+    overlay
+      .querySelector(".novel-ss-edit-popup-cancel")
+      .addEventListener("click", finish);
+    overlay.addEventListener("click", (e) => {
+      if (e.target.classList.contains("novel-ss-edit-popup-overlay")) finish();
+    });
+
+    renderTagList();
+    newInput.focus();
+  }
+
+  // ---------------- 指令 tag 管理弹窗（勾选/取消多 tag） ----------------
+
+  /**
+   * 单个指令标签弹窗：列出所有 tag 供勾选，保存后整体替换该指令 tagIds。
+   * @param {string} cmdId 指令 id
+   */
+  function showCommandTagPopup(cmdId) {
+    const cmd = commandLib.listCommands()[cmdId];
+    if (!cmd) return;
+    const current = new Set(cmd.tagIds || []);
+    const overlay = document.createElement("div");
+    overlay.className = "novel-ss-edit-popup-overlay";
+    overlay.innerHTML = `
+      <div class="novel-ss-edit-popup novel-ss-cmd-tag-popup">
+        <div class="novel-ss-edit-popup-title">设置标签：${escapeHtml(cmd.name || cmd.text)}</div>
+        <div class="novel-ss-cmd-tag-list"></div>
+        <div class="novel-ss-edit-popup-actions">
+          <button class="novel-ss-edit-popup-cancel">取消</button>
+          <button class="novel-ss-edit-popup-confirm">保存</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const listEl = overlay.querySelector(".novel-ss-cmd-tag-list");
+    const tags = Object.values(commandLib.listTags()).sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
+    );
+    if (!tags.length) {
+      listEl.innerHTML =
+        '<div class="novel-ss-empty">暂无标签，请先在「管理标签」中创建</div>';
+    }
+    tags.forEach((tag) => {
+      const row = document.createElement("div");
+      const on = current.has(tag.id);
+      row.className =
+        "novel-ss-cmd-tag-row" + (on ? " novel-ss-cmd-tag-on" : "");
+      row.innerHTML = `
+        <i class="${on ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-tag-check"></i>
+        <span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>`;
+      row.addEventListener("click", () => {
+        if (current.has(tag.id)) current.delete(tag.id);
+        else current.add(tag.id);
+        listEl.querySelectorAll(".novel-ss-cmd-tag-row").forEach((el, i) => {
+          const t = tags[i];
+          const on2 = current.has(t.id);
+          el.classList.toggle("novel-ss-cmd-tag-on", on2);
+          el.querySelector(".novel-ss-cmd-tag-check").className = on2
+            ? "fa-solid fa-square-check novel-ss-cmd-tag-check"
+            : "fa-regular fa-square novel-ss-cmd-tag-check";
+        });
+      });
+      listEl.appendChild(row);
+    });
+
+    const finish = (value) => {
+      overlay.remove();
+      if (value) {
+        commandLib.updateCommand(cmdId, { tagIds: Array.from(value) });
+        toast("已更新标签");
+        render();
+      }
+    };
+    overlay
+      .querySelector(".novel-ss-edit-popup-cancel")
+      .addEventListener("click", () => finish(null));
+    overlay
+      .querySelector(".novel-ss-edit-popup-confirm")
+      .addEventListener("click", () => finish(current));
+    overlay.addEventListener("click", (e) => {
+      if (e.target.classList.contains("novel-ss-edit-popup-overlay"))
+        finish(null);
+    });
+  }
+
+  // ---------------- 批量设置标签弹窗 ----------------
+
+  /**
+   * 批量设置标签：为选中 N 条指令统一添加/移除某 tag。
+   */
+  function showBatchTagPopup() {
+    const cmds = commandLib.listCommands();
+    const ids = Array.from(batchSelected).filter((id) => cmds[id]);
+    if (!ids.length) {
+      toast("请先选择指令");
+      return;
+    }
+    const tags = Object.values(commandLib.listTags()).sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
+    );
+    const overlay = document.createElement("div");
+    overlay.className = "novel-ss-edit-popup-overlay";
+    overlay.innerHTML = `
+      <div class="novel-ss-edit-popup novel-ss-batch-tag-popup">
+        <div class="novel-ss-edit-popup-title">批量设置标签：${ids.length} 条指令</div>
+        <div class="novel-ss-edit-popup-field">
+          <label>操作类型</label>
+          <select class="novel-ss-edit-input novel-ss-batch-tag-action">
+            <option value="add">添加标签</option>
+            <option value="remove">移除标签</option>
+          </select>
+        </div>
+        <div class="novel-ss-batch-tag-list"></div>
+        <div class="novel-ss-edit-popup-actions">
+          <button class="novel-ss-edit-popup-cancel">取消</button>
+          <button class="novel-ss-edit-popup-confirm">确认</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const listEl = overlay.querySelector(".novel-ss-batch-tag-list");
+    let picked = null; // 选中的单个 tag id
+    if (!tags.length) {
+      listEl.innerHTML =
+        '<div class="novel-ss-empty">暂无标签，请先在「管理标签」中创建</div>';
+    }
+    tags.forEach((tag) => {
+      const row = document.createElement("div");
+      row.className = "novel-ss-batch-tag-row";
+      row.dataset.tagId = tag.id;
+      row.innerHTML = `<span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>`;
+      row.addEventListener("click", () => {
+        picked = tag.id;
+        listEl
+          .querySelectorAll(".novel-ss-batch-tag-row")
+          .forEach((el) =>
+            el.classList.toggle(
+              "novel-ss-batch-tag-on",
+              el.dataset.tagId === tag.id,
+            ),
+          );
+      });
+      listEl.appendChild(row);
+    });
+
+    const finish = (value) => {
+      if (!value) {
+        overlay.remove();
+        return;
+      }
+      const action = overlay.querySelector(".novel-ss-batch-tag-action").value;
+      if (!picked) {
+        toast("请先选择一个标签");
+        return;
+      }
+      overlay.remove();
+      let changed = 0;
+      for (const id of ids) {
+        const cmd = cmds[id];
+        if (!cmd) continue;
+        const cur = new Set(cmd.tagIds || []);
+        if (action === "add") {
+          if (!cur.has(picked)) {
+            cur.add(picked);
+            commandLib.updateCommand(id, { tagIds: Array.from(cur) });
+            changed++;
+          }
+        } else {
+          if (cur.has(picked)) {
+            cur.delete(picked);
+            commandLib.updateCommand(id, { tagIds: Array.from(cur) });
+            changed++;
+          }
+        }
+      }
+      toast(
+        `已${action === "add" ? "添加" : "移除"}标签：${changed} 条指令受影响`,
+      );
+      render();
+    };
+    overlay
+      .querySelector(".novel-ss-edit-popup-cancel")
+      .addEventListener("click", () => finish(null));
+    overlay
+      .querySelector(".novel-ss-edit-popup-confirm")
+      .addEventListener("click", () => finish(true));
+    overlay.addEventListener("click", (e) => {
+      if (e.target.classList.contains("novel-ss-edit-popup-overlay"))
+        finish(null);
+    });
+  }
+
+  // ---------------- 渲染：指令列表 ----------------
+
   function renderCommands(container) {
     container.innerHTML = "";
 
     const cmds = getVisibleCommands();
+    const tags = commandLib.listTags();
 
     if (!cmds.length) {
       container.innerHTML = `<div class="novel-ss-empty">暂无指令</div>`;
@@ -726,7 +840,6 @@ export function createSideStoryPanel(deps) {
         "novel-ss-cmd-row" +
         (batchMode && selected ? " novel-ss-cmd-selected" : "");
       row.dataset.cmdId = cmd.id;
-      row.draggable = true;
       row.innerHTML = `
         ${batchMode ? `<i class="${selected ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-check" title="选择"></i>` : ""}
         <div class="novel-ss-cmd-main">
@@ -734,8 +847,16 @@ export function createSideStoryPanel(deps) {
           <div class="novel-ss-cmd-meta">
             ${cmd.name ? `<span class="novel-ss-cmd-text">${escapeHtml(cmd.text)}</span>` : ""}
           </div>
+          ${
+            (cmd.tagIds || []).length
+              ? `<div class="novel-ss-cmd-tags">${(cmd.tagIds || [])
+                  .map((tid) => (tags[tid] ? tagChipHtml(tags[tid]) : ""))
+                  .join("")}</div>`
+              : ""
+          }
         </div>
         <span class="novel-ss-cmd-actions">
+          <i class="fa-solid fa-tags novel-ss-cmd-tags-btn" title="设置标签"></i>
           <i class="${cmd.favorite ? "fa-solid" : "fa-regular"} fa-star novel-ss-cmd-star${cmd.favorite ? " novel-ss-cmd-star-on" : ""}" title="${cmd.favorite ? "取消收藏" : "收藏"}"></i>
           <i class="fa-solid fa-pen novel-ss-cmd-rename" title="重命名"></i>
           <i class="fa-solid fa-trash novel-ss-cmd-del" title="删除"></i>
@@ -743,6 +864,7 @@ export function createSideStoryPanel(deps) {
       // 批量模式下，点击行切换选中；否则追加到输入框
       row.addEventListener("click", (e) => {
         if (e.target.closest(".novel-ss-cmd-actions")) return;
+        if (e.target.closest(".novel-ss-cmd-tags")) return;
         if (batchMode) {
           toggleBatchItem(cmd.id, e.shiftKey);
           renderCommands(container);
@@ -759,42 +881,35 @@ export function createSideStoryPanel(deps) {
           toggleBatchItem(cmd.id, e.shiftKey);
           renderCommands(container);
         });
-      // 拖拽指令：非批量单拖 → 单指令；批量选中包含该指令 → 批量拖
-      row.addEventListener("dragstart", (e) => {
-        if (batchMode && batchSelected.has(cmd.id) && batchSelected.size > 1) {
-          dragCmdId = null;
-          dragCmdIds = Array.from(batchSelected);
-          setMultiDragGhost(e, dragCmdIds.length);
-        } else {
-          dragCmdId = cmd.id;
-          dragCmdIds = null;
-        }
-        e.dataTransfer.setData("text/plain", cmd.id);
-        e.dataTransfer.effectAllowed = "move";
-        row.classList.add("novel-ss-dragging");
-      });
-      row.addEventListener("dragend", () => {
-        dragCmdId = null;
-        dragCmdIds = null;
-        row.classList.remove("novel-ss-dragging");
-        clearDropIndicators();
-      });
-      // 收藏星标：切换收藏 → 三处同步（自身图标 + 左栏收藏计数 + 若在收藏视图则重渲染）
+      // tag 胶囊点击：跳转该 tag 筛选
       row
-        .querySelector(".novel-ss-cmd-star")
+        .querySelectorAll(".novel-ss-cmd-tags .novel-ss-tag-chip")
+        .forEach((chip) => {
+          chip.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const tagId = chip.dataset.tagId;
+            selectedFilter = tagId;
+            searchQuery = "";
+            const searchInput = panelEl.querySelector(".novel-ss-search");
+            if (searchInput) searchInput.value = "";
+            render();
+          });
+        });
+      // 设置标签按钮
+      row
+        .querySelector(".novel-ss-cmd-tags-btn")
         .addEventListener("click", (e) => {
           e.stopPropagation();
-          const on = commandLib.toggleFavorite(cmd.id);
-          toast(on ? "已收藏" : "已取消收藏");
-          if (selectedCategoryId === "__favorites__") {
-            render();
-          } else {
-            renderCommands(container);
-            const tree = panelEl.querySelector(".novel-ss-tree");
-            if (tree) renderTree(tree);
-            refreshBatchBar();
-          }
+          showCommandTagPopup(cmd.id);
         });
+      // 收藏星标
+      row.querySelector(".novel-ss-cmd-star").addEventListener("click", (e) => {
+        e.stopPropagation();
+        const on = commandLib.toggleFavorite(cmd.id);
+        toast(on ? "已收藏" : "已取消收藏");
+        renderCommands(container);
+        refreshBatchBar();
+      });
       // 操作：重命名 / 删除
       row
         .querySelector(".novel-ss-cmd-rename")
@@ -821,6 +936,11 @@ export function createSideStoryPanel(deps) {
     });
   }
 
+  /** 渲染单条 tag 胶囊（点击 → 跳转该 tag 筛选） */
+  function tagChipHtml(tag) {
+    return `<span class="novel-ss-tag-chip" data-tag-id="${escapeHtml(tag.id)}" title="点击筛选该标签">${escapeHtml(tag.name)}</span>`;
+  }
+
   // ---------------- 输入框填充 ----------------
 
   /** 将指令文本追加到输入框末尾（已有内容则先补换行） */
@@ -840,48 +960,11 @@ export function createSideStoryPanel(deps) {
 
   // ---------------- 操作对话框（window.prompt / confirm，轻量） ----------------
 
-  function promptNewCategory(parentId) {
-    const name = window.prompt("分类名称：");
-    if (!name) return;
-    const cat = commandLib.createCategory(parentId, name);
-    if (cat) {
-      if (parentId) expandedSet.add(parentId);
-      selectedCategoryId = cat.id;
-      toast("已创建分类");
-      render();
-    } else {
-      toast("分类名不能为空");
-    }
-  }
-
-  function promptRenameCategory(catId) {
-    const cat = commandLib.listCategories()[catId];
-    if (!cat) return;
-    const name = window.prompt("重命名分类：", cat.name);
-    if (!name) return;
-    if (commandLib.renameCategory(catId, name)) render();
-  }
-
-  function promptDeleteCategory(catId) {
-    if (
-      !window.confirm(
-        "删除该分类？其下所有子分类一并删除，其中的指令将归入「未分类」。",
-      )
-    )
-      return;
-    commandLib.deleteCategory(catId);
-    if (selectedCategoryId === catId) selectedCategoryId = null;
-    toast("已删除分类");
-    render();
-  }
-
   function promptNewCommand() {
     const text = window.prompt("输入指令文本：");
     if (!text) return;
-    // 收藏视图下新建 → 归入未分类（收藏是属性，不是容器）
-    const catId =
-      selectedCategoryId === "__favorites__" ? null : selectedCategoryId;
-    const cmd = commandLib.createCommand(text, { categoryId: catId });
+    // 新指令默认无 tag（无论当前筛选）
+    const cmd = commandLib.createCommand(text, {});
     if (cmd) {
       toast("已创建指令");
       render();
@@ -913,9 +996,7 @@ export function createSideStoryPanel(deps) {
           .filter(Boolean);
         let added = 0;
         for (const line of lines) {
-          const cmd = commandLib.createCommand(line, {
-            categoryId: selectedCategoryId,
-          });
+          const cmd = commandLib.createCommand(line, {});
           if (cmd) added += 1;
         }
         toast(`导入完成：新增 ${added} 条（重复已跳过）`);
@@ -949,27 +1030,48 @@ export function createSideStoryPanel(deps) {
       rangeBtn.classList.toggle("novel-ss-batch-active", batchRangeMode);
   }
 
+  /** 刷新 tag 下拉筛选框选项（保留当前选中值） */
+  function refreshTagFilter() {
+    if (!mounted || !panelEl) return;
+    const select = panelEl.querySelector(".novel-ss-tag-filter");
+    if (!select) return;
+    const cur = selectedFilter;
+    const tags = Object.values(commandLib.listTags()).sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
+    );
+    select.innerHTML = `
+      <option value="">全部标签</option>
+      <option value="__untagged__">未标记</option>
+      <option value="__favorites__">⭐ 收藏</option>
+      ${tags
+        .map(
+          (t) =>
+            `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`,
+        )
+        .join("")}`;
+    select.value = cur || "";
+    const clearBtn = panelEl.querySelector(".novel-ss-tag-filter-clear");
+    if (clearBtn) clearBtn.style.display = cur ? "inline-flex" : "none";
+  }
+
   function render() {
     if (!mounted || !panelEl) return;
-    // 清理批量选中集中已不存在的指令 id（防止残留脏 id 干扰计数/弹窗）
+    // 清理批量选中集中已不存在的指令 id
     const cmds = commandLib.listCommands();
     for (const id of Array.from(batchSelected)) {
       if (!cmds[id]) batchSelected.delete(id);
     }
-    // 右栏标题：显示当前文件夹名（搜索 / 收藏 / 未分类 / 分类名）
-    const titleEl = panelEl.querySelector(".novel-ss-list-title-label");
-    if (titleEl) {
-      if (searchQuery) titleEl.textContent = "搜索结果";
-      else if (selectedCategoryId === "__favorites__") titleEl.textContent = "收藏";
-      else if (selectedCategoryId === null) titleEl.textContent = "未分类";
-      else
-        titleEl.textContent =
-          commandLib.listCategories()[selectedCategoryId]?.name || "指令";
+    // 若当前筛选的 tag 已被删除，回退到全部
+    if (
+      selectedFilter &&
+      selectedFilter.startsWith("tag_") &&
+      !commandLib.listTags()[selectedFilter]
+    ) {
+      selectedFilter = null;
     }
-    const tree = panelEl.querySelector(".novel-ss-tree");
     const list = panelEl.querySelector(".novel-ss-list");
-    if (tree) renderTree(tree);
     if (list) renderCommands(list);
+    refreshTagFilter();
     refreshBatchBar();
   }
 
@@ -980,44 +1082,33 @@ export function createSideStoryPanel(deps) {
       <div class="novel-ss-toolbar">
         <span class="novel-ss-toolbar-title"><i class="fa-solid fa-book-bookmark"></i> 番外指令库</span>
         <span class="novel-ss-toolbar-actions">
+          <i class="fa-solid fa-tags novel-ss-manage-tag" title="管理标签"></i>
           <i class="fa-solid fa-xmark novel-ss-close" title="关闭"></i>
         </span>
       </div>
       <div class="novel-ss-search-row">
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" class="novel-ss-search" placeholder="搜索指令…" autocomplete="off" />
+        <input type="text" class="novel-ss-search" placeholder="搜索指令或标签…" autocomplete="off" />
+        <select class="novel-ss-tag-filter" title="按标签筛选"></select>
+        <i class="fa-solid fa-xmark novel-ss-tag-filter-clear" style="display:none" title="清除标签筛选"></i>
       </div>
-      <div class="novel-ss-body">
-        <div class="novel-ss-tree-col">
-          <div class="novel-ss-col-title">
-            <span>分类</span>
-            <span class="novel-ss-cat-title-actions">
-              <i class="fa-solid fa-angles-down novel-ss-expand-all" title="展开全部分类"></i>
-              <i class="fa-solid fa-angles-up novel-ss-collapse-all" title="收起全部分类"></i>
-              <i class="fa-solid fa-plus novel-ss-new-cat" title="新建顶层分类"></i>
-            </span>
-          </div>
-          <div class="novel-ss-tree"></div>
-        </div>
-        <div class="novel-ss-list-col">
-          <div class="novel-ss-col-title">
-            <span class="novel-ss-list-title-label">指令</span>
-            <span class="novel-ss-list-actions">
-              <i class="fa-solid fa-file-import novel-ss-import" title="从 txt 导入"></i>
-              <i class="fa-solid fa-plus novel-ss-new-cmd" title="新建指令"></i>
-              <i class="fa-solid fa-list-check novel-ss-batch-toggle" title="批量操作"></i>
-            </span>
-          </div>
-          <div class="novel-ss-batch-bar" style="display:none">
-            <button class="novel-ss-batch-btn novel-ss-batch-selall"><i class="fa-solid fa-square-check"></i> 全选</button>
-            <button class="novel-ss-batch-btn novel-ss-batch-range"><i class="fa-solid fa-arrow-down-short-wide"></i> 框选</button>
-            <span class="novel-ss-batch-count"></span>
-            <button class="novel-ss-batch-btn novel-ss-batch-rename"><i class="fa-solid fa-pen"></i> 重命名</button>
-            <button class="novel-ss-batch-btn novel-ss-batch-del"><i class="fa-solid fa-trash"></i> 删除</button>
-          </div>
-          <div class="novel-ss-list"></div>
-        </div>
-      </div>`;
+      <div class="novel-ss-list-toolbar">
+        <span class="novel-ss-list-title-label">全部指令</span>
+        <span class="novel-ss-list-actions">
+          <i class="fa-solid fa-file-import novel-ss-import" title="从 txt 导入"></i>
+          <i class="fa-solid fa-plus novel-ss-new-cmd" title="新建指令"></i>
+          <i class="fa-solid fa-list-check novel-ss-batch-toggle" title="批量操作"></i>
+        </span>
+      </div>
+      <div class="novel-ss-batch-bar" style="display:none">
+        <button class="novel-ss-batch-btn novel-ss-batch-selall"><i class="fa-solid fa-square-check"></i> 全选</button>
+        <button class="novel-ss-batch-btn novel-ss-batch-range"><i class="fa-solid fa-arrow-down-short-wide"></i> 框选</button>
+        <span class="novel-ss-batch-count"></span>
+        <button class="novel-ss-batch-btn novel-ss-batch-tag"><i class="fa-solid fa-tags"></i> 设置标签</button>
+        <button class="novel-ss-batch-btn novel-ss-batch-rename"><i class="fa-solid fa-pen"></i> 重命名</button>
+        <button class="novel-ss-batch-btn novel-ss-batch-del"><i class="fa-solid fa-trash"></i> 删除</button>
+      </div>
+      <div class="novel-ss-list"></div>`;
     return panel;
   }
 
@@ -1035,21 +1126,11 @@ export function createSideStoryPanel(deps) {
     if (!panelEl) return;
     // 关闭
     panelEl.querySelector(".novel-ss-close").addEventListener("click", close);
-    // 展开/收起全部
+    // 管理标签
     panelEl
-      .querySelector(".novel-ss-expand-all")
-      .addEventListener("click", () => {
-        const cats = commandLib.listCategories();
-        for (const id of Object.keys(cats)) expandedSet.add(id);
-        render();
-      });
-    panelEl
-      .querySelector(".novel-ss-collapse-all")
-      .addEventListener("click", () => {
-        expandedSet.clear();
-        render();
-      });
-    // 搜索
+      .querySelector(".novel-ss-manage-tag")
+      .addEventListener("click", () => showTagManagePopup());
+    // 搜索（含手动输入 tag 名筛选）
     const searchInput = panelEl.querySelector(".novel-ss-search");
     searchInput.addEventListener("input", () => {
       searchQuery = String(searchInput.value || "")
@@ -1057,10 +1138,19 @@ export function createSideStoryPanel(deps) {
         .toLowerCase();
       renderCommands(panelEl.querySelector(".novel-ss-list"));
     });
-    // 新建顶层分类
+    // tag 下拉筛选
+    const tagFilter = panelEl.querySelector(".novel-ss-tag-filter");
+    tagFilter.addEventListener("change", () => {
+      selectedFilter = tagFilter.value || null;
+      render();
+    });
+    // 清除 tag 筛选
     panelEl
-      .querySelector(".novel-ss-new-cat")
-      .addEventListener("click", () => promptNewCategory(null));
+      .querySelector(".novel-ss-tag-filter-clear")
+      .addEventListener("click", () => {
+        selectedFilter = null;
+        render();
+      });
     // 新建指令
     panelEl
       .querySelector(".novel-ss-new-cmd")
@@ -1096,6 +1186,10 @@ export function createSideStoryPanel(deps) {
         batchRangeMode = !batchRangeMode;
         refreshBatchBar();
       });
+    // 批量设置标签
+    panelEl
+      .querySelector(".novel-ss-batch-tag")
+      .addEventListener("click", showBatchTagPopup);
     // 批量重命名
     panelEl
       .querySelector(".novel-ss-batch-rename")
@@ -1104,14 +1198,14 @@ export function createSideStoryPanel(deps) {
     panelEl
       .querySelector(".novel-ss-batch-del")
       .addEventListener("click", batchDeleteSelected);
-    // 点击面板外部关闭（批量重命名弹窗打开时跳过，避免弹窗期间误关面板）
+    // 点击面板外部关闭（批量重命名/tag 弹窗打开时跳过）
     document.addEventListener("mousedown", function onClickOutside(e) {
       if (!panelEl || !mounted || panelEl.contains(e.target)) return;
       if (document.querySelector(".novel-ss-edit-popup-overlay")) return;
       close();
       document.removeEventListener("mousedown", onClickOutside);
     });
-    // Esc 关闭（批量重命名弹窗打开时由弹窗自己处理 Esc）
+    // Esc 关闭（批量重命名/tag 弹窗打开时由弹窗自己处理 Esc）
     document.addEventListener("keydown", function onEsc(e) {
       if (!panelEl || !mounted) return;
       if (
@@ -1131,7 +1225,6 @@ export function createSideStoryPanel(deps) {
   function open() {
     if (!getEnabled?.()) return;
     if (!mounted) {
-      ensureDragHighlightStyle();
       panelEl = buildPanel();
       document.body.appendChild(panelEl);
       mounted = true;
