@@ -3677,6 +3677,29 @@
   );
 }
 
+/* 统一模式：操作行（添加/移除下拉）与列表间的间距 */
+.novel-ss-batch-tag-uniform .novel-ss-edit-popup-field {
+  margin-top: 8px;
+}
+
+/* 逐个模式：tag 列表（每行 = 胶囊 + 操作下拉） */
+.novel-ss-batch-tag-individual-list {
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+}
+.novel-ss-batch-tag-row-indiv {
+  cursor: default;
+  justify-content: space-between;
+}
+.novel-ss-batch-tag-row-indiv .novel-ss-batch-tag-indiv-action {
+  width: 110px;
+  flex-shrink: 0;
+}
+
 /* ---------- 番外指令库：批量重命名弹窗（Promise 模式，参照 CFM） ---------- */
 .novel-ss-edit-popup-overlay {
   position: fixed;
