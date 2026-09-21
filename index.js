@@ -1304,8 +1304,8 @@ jQuery(async () => {
     const list = toc.querySelector(".novel-toc-list");
     pageChapters.forEach((ch) => {
       const item = document.createElement("div");
-      item.className =
-        "novel-toc-item" + (ch.isSideStory ? " novel-toc-item-side" : "");
+      // 番外条目样式与普通章节一致（不区分配色）
+      item.className = "novel-toc-item";
       // 番外章：显示「番外（标题）」；主线章显示「第N章」（displayIndex = 连续主线编号，番外不计入）
       const tagTitle = ch.titleSource === "tag" ? ch.title : "";
       const titleText = ch.isSideStory

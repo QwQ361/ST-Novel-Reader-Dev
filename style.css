@@ -2906,22 +2906,7 @@
   opacity: 1;
 }
 
-/* ---------- 目录：番外条目 ---------- */
-.novel-toc-item-side {
-  border-left: 3px solid
-    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
-  border-radius: 8px 8px 8px 8px;
-  background: color-mix(
-    in srgb,
-    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 8%,
-    transparent
-  );
-}
-
-.novel-toc-item-side .novel-toc-item-title {
-  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
-  font-weight: 600;
-}
+/* ---------- 目录：番外条目（样式与普通章节一致，不区分配色） ---------- */
 
 /* ---------- 楼层：番外标注按钮（.mes_button 样式跟随 ST） ---------- */
 .novel-side-story-btn {
