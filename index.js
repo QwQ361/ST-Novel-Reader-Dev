@@ -184,8 +184,6 @@ jQuery(async () => {
       bookshelf.getChatMessages(avatar, fileName),
     // 正则过滤：渲染正文前先应用用户勾选的酒馆正则
     regexFilter: (text, avatar) => regexCore.runRegexOnText(text, { avatar }),
-    // 番外功能开关（懒取，避免 reader 创建时序早于设置初始化）
-    getSideStoryEnabled: () => getGlobalSettings().sideStoryEnabled === true,
   });
 
   const progress = createProgressCore({ ...deps });
@@ -2111,12 +2109,6 @@ jQuery(async () => {
       // 显示/隐藏番外子设置
       if (sideStorySub) {
         sideStorySub.style.display = g.sideStoryEnabled ? "" : "none";
-      }
-      // 关闭番外功能时重置目录筛选为「都看」：分章已把标注楼按主线处理，
-      // 若停留在「只看番外」会显示空目录（无番外章）
-      if (!g.sideStoryEnabled) {
-        state.tocFilter = "all";
-        state.tocPage = 0;
       }
       // 刷新楼层番外按钮（inject 模块已挂载时）
       sideStoryRefresh?.();

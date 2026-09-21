@@ -57,18 +57,13 @@ export function createReaderCore(deps) {
     const stripPrefix = deps.getStripChapterPrefix
       ? deps.getStripChapterPrefix()
       : true;
-    // 番外功能是否启用（由外层设置注入；关闭时标注楼层按主线处理，显示「第N章」）
-    const sideStoryEnabled = deps.getSideStoryEnabled
-      ? deps.getSideStoryEnabled()
-      : false;
     // 主线章显示编号计数器（番外不计入章节数，主线章编号连续）
     let mainDisplayIndex = 0;
     const chapters = splitChapters(messages, { showUserReplies }).map((ch) => {
-      // 番外检测：仅当番外功能启用时，章内任一消息带有番外标记（mes.extra.novelExtra.fw）才视为番外章；
-      // 关闭番外功能后一律按主线处理（isSideStory=false，编号连续，显示「第N章」）
-      const isSideStory =
-        sideStoryEnabled &&
-        ch.messages.some((m) => m?.extra?.novelExtra?.fw === true);
+      // 番外检测：章内任一消息带有番外标记（mes.extra.novelExtra.fw）即视为番外章
+      const isSideStory = ch.messages.some(
+        (m) => m?.extra?.novelExtra?.fw === true,
+      );
       // 番外章不计入章节数：主线章 displayIndex 连续编号，番外章为 null
       const displayIndex = isSideStory ? null : ++mainDisplayIndex;
       // 标签识别开启时，若章节标题来自标签（而非说话人），标记 titleSource="tag"
