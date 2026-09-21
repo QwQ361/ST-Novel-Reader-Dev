@@ -243,16 +243,141 @@ export function createSideStoryPanel(deps) {
     else visible.forEach((id) => batchSelected.add(id));
   }
 
+  // ---------------- 批量重命名弹窗（Promise 模式，参照 CFM rename.js） ----------------
+
+  /** 求公共前缀（传入名称数组） */
+  function findCommonPrefix(names) {
+    if (!names.length) return "";
+    let p = names[0];
+    for (const n of names) {
+      while (n.indexOf(p) !== 0 && p) p = p.slice(0, -1);
+      if (!p) break;
+    }
+    return p;
+  }
+
+  /** 求公共后缀（先反转再求前缀） */
+  function findCommonSuffix(names) {
+    const rev = names.map((n) => [...n].reverse().join(""));
+    const p = findCommonPrefix(rev);
+    return [...p].reverse().join("");
+  }
+
+  /** 名称预览 HTML：≤5 个全列，>5 个列前 5 + “...等共 N 个” */
+  function nameListHtml(names) {
+    const shown = names.slice(0, 5);
+    let html = shown
+      .map(
+        (n) => `<span class="novel-ss-edit-name-item">${escapeHtml(n)}</span>`,
+      )
+      .join("");
+    if (names.length > 5) {
+      html += `<span class="novel-ss-edit-name-item novel-ss-edit-name-more">…等共 ${names.length} 个</span>`;
+    }
+    return html;
+  }
+
+  /**
+   * 批量重命名弹窗（Promise 模式）。
+   * @param {string[]} labels 选中指令的显示名（用于预览与前后缀检测）
+   * @returns {Promise<string|null>} 确认返回新名称（留空 = "" 表示清除），取消返回 null
+   */
+  function showBatchRenamePopup(labels) {
+    const overlay = document.createElement("div");
+    overlay.className = "novel-ss-edit-popup-overlay";
+    overlay.innerHTML = `
+      <div class="novel-ss-edit-popup">
+        <div class="novel-ss-edit-popup-title">批量重命名 ${labels.length} 条指令</div>
+        <div class="novel-ss-edit-popup-names">${nameListHtml(labels)}</div>
+        <div class="novel-ss-edit-popup-detect">
+          <span class="novel-ss-edit-detect-label">公共部分：</span>
+          <span class="novel-ss-edit-detect-none">（无）</span>
+        </div>
+        <div class="novel-ss-edit-popup-field">
+          <label>新名称</label>
+          <input type="text" class="novel-ss-edit-input" placeholder="输入新名称（留空则清除名称）" autocomplete="off" />
+        </div>
+        <div class="novel-ss-edit-popup-actions">
+          <button class="novel-ss-edit-popup-cancel">取消</button>
+          <button class="novel-ss-edit-popup-confirm">确认</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector(".novel-ss-edit-input");
+    input.focus();
+    input.select();
+
+    // 公共前/后缀检测：点击胶囊直接填入输入框
+    const prefix = findCommonPrefix(labels);
+    const suffix = findCommonSuffix(labels);
+    if (prefix || suffix) {
+      const detectBox = overlay.querySelector(".novel-ss-edit-popup-detect");
+      detectBox.innerHTML =
+        '<span class="novel-ss-edit-detect-label">公共部分：</span>';
+      if (prefix) {
+        const cap = document.createElement("span");
+        cap.className = "novel-ss-edit-detect-item";
+        cap.textContent = `前缀「${prefix}」`;
+        cap.title = "点击填入";
+        cap.addEventListener("click", () => {
+          input.value = prefix;
+          input.focus();
+        });
+        detectBox.appendChild(cap);
+      }
+      if (suffix) {
+        const cap = document.createElement("span");
+        cap.className = "novel-ss-edit-detect-item";
+        cap.textContent = `后缀「${suffix}」`;
+        cap.title = "点击填入";
+        cap.addEventListener("click", () => {
+          input.value = suffix;
+          input.focus();
+        });
+        detectBox.appendChild(cap);
+      }
+    }
+
+    return new Promise((resolve) => {
+      const finish = (value) => {
+        overlay.remove();
+        resolve(value);
+      };
+      // 取消
+      overlay
+        .querySelector(".novel-ss-edit-popup-cancel")
+        .addEventListener("click", () => finish(null));
+      // 遮罩点击关闭：校验目标类名，避免点卡片内部误关
+      overlay.addEventListener("click", (e) => {
+        if (e.target.classList.contains("novel-ss-edit-popup-overlay"))
+          finish(null);
+      });
+      // 确认：留空也返回 ""（表示清除名称），仅取消返回 null
+      overlay
+        .querySelector(".novel-ss-edit-popup-confirm")
+        .addEventListener("click", () => finish(input.value.trim()));
+      // 键盘：Enter 确认 / Escape 取消
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          overlay.querySelector(".novel-ss-edit-popup-confirm").click();
+        } else if (e.key === "Escape") {
+          overlay.querySelector(".novel-ss-edit-popup-cancel").click();
+        }
+      });
+    });
+  }
+
   /** 批量重命名：给所有选中的指令设置名称 */
-  function batchRenameSelected() {
-    const ids = Array.from(batchSelected);
+  async function batchRenameSelected() {
+    const cmds = commandLib.listCommands();
+    const ids = Array.from(batchSelected).filter((id) => cmds[id]);
     if (!ids.length) {
       toast("请先选择指令");
       return;
     }
-    const name = window.prompt(
-      `批量重命名 ${ids.length} 条指令的名称（可留空清除）：`,
-    );
+    const labels = ids.map((id) => cmds[id]?.name || cmds[id]?.text || "");
+    const name = await showBatchRenamePopup(labels);
     if (name === null) return;
     let n = 0;
     for (const id of ids) {
@@ -265,7 +390,8 @@ export function createSideStoryPanel(deps) {
 
   /** 批量删除：确认后删除所有选中的指令 */
   function batchDeleteSelected() {
-    const ids = Array.from(batchSelected);
+    const cmds = commandLib.listCommands();
+    const ids = Array.from(batchSelected).filter((id) => cmds[id]);
     if (!ids.length) {
       toast("请先选择指令");
       return;
@@ -508,6 +634,11 @@ export function createSideStoryPanel(deps) {
 
   function render() {
     if (!mounted || !panelEl) return;
+    // 清理批量选中集中已不存在的指令 id（防止残留脏 id 干扰计数/弹窗）
+    const cmds = commandLib.listCommands();
+    for (const id of Array.from(batchSelected)) {
+      if (!cmds[id]) batchSelected.delete(id);
+    }
     const tree = panelEl.querySelector(".novel-ss-tree");
     const list = panelEl.querySelector(".novel-ss-list");
     if (tree) renderTree(tree);
@@ -646,16 +777,20 @@ export function createSideStoryPanel(deps) {
     panelEl
       .querySelector(".novel-ss-batch-del")
       .addEventListener("click", batchDeleteSelected);
-    // 点击面板外部关闭
+    // 点击面板外部关闭（批量重命名弹窗打开时跳过，避免弹窗期间误关面板）
     document.addEventListener("mousedown", function onClickOutside(e) {
       if (!panelEl || !mounted || panelEl.contains(e.target)) return;
+      if (document.querySelector(".novel-ss-edit-popup-overlay")) return;
       close();
       document.removeEventListener("mousedown", onClickOutside);
     });
-    // Esc 关闭
+    // Esc 关闭（批量重命名弹窗打开时由弹窗自己处理 Esc）
     document.addEventListener("keydown", function onEsc(e) {
       if (!panelEl || !mounted) return;
-      if (e.key === "Escape") {
+      if (
+        e.key === "Escape" &&
+        !document.querySelector(".novel-ss-edit-popup-overlay")
+      ) {
         close();
         document.removeEventListener("keydown", onEsc);
       }
@@ -675,7 +810,7 @@ export function createSideStoryPanel(deps) {
       bindEvents();
     }
     positionPanel();
-    panelEl.style.display = "block";
+    panelEl.style.display = "flex";
     render();
   }
 
