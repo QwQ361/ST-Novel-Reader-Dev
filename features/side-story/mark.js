@@ -151,13 +151,16 @@ export function createMarkCore(deps) {
       writeMark(p.userId, { fw: true, linked: p.charId });
     }
 
-    // 2) 隐藏：char 楼层 + （存在时）user 楼层，分别 hide（可由设置「隐藏配对楼层」关闭）
+    // 2) 隐藏：char 楼层 + （存在时）user 楼层。
+    //    配对楼层间只可能有 is_system 消息（resolvePair 跳过系统消息、遇同类 break），
+    //    故合并为一次区间 hide，DOM 同步更新、仅一次保存，避免两次调用产生的时间差。
     const hidePair = typeof getHidePair === "function" ? getHidePair() : true;
     if (hidePair) {
       const hideRange = getHideRange();
       if (typeof hideRange === "function") {
-        await hideRange(p.charId, p.charId, false);
-        if (p.userId != null) await hideRange(p.userId, p.userId, false);
+        const ids = [p.charId];
+        if (p.userId != null) ids.push(p.userId);
+        await hideRange(Math.min(...ids), Math.max(...ids), false);
       }
     }
 
@@ -233,11 +236,17 @@ export function createMarkCore(deps) {
       writeMark(mesId, null);
     }
 
-    // 2) 撤隐藏：unhide
+    // 2) 撤隐藏：unhide。不能像标记那样合并区间（配对楼之间可能夹有
+    //    真正的系统消息，区间 unhide 会误把它们恢复显示），改为并行两次
+    //    单楼 unhide —— 内部 DOM 属性同步设置、同一宏任务完成，两楼视觉
+    //    同时恢复，无时间差。
     const hideRange = getHideRange();
     if (typeof hideRange === "function") {
-      if (charId != null) await hideRange(charId, charId, true);
-      if (userId != null) await hideRange(userId, userId, true);
+      await Promise.all(
+        [charId, userId]
+          .filter((id) => id != null)
+          .map((id) => hideRange(id, id, true)),
+      );
     }
 
     // 3) 移出指令库（仅当确认移除且存在对应 user 文本）
