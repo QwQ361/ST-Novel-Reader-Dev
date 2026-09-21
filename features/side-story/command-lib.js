@@ -4,8 +4,8 @@
 // 存储结构：
 //   novelSideStory = {
 //     categories: {                       // 分类树（文件夹式，参考 CFM）
-//       "cat_123": { id, parentId: null, name: "日常番外", sortOrder: 0 },
-//       "cat_456": { id, parentId: "cat_123", name: "恋爱", sortOrder: 0 }
+//       "cat_123": { id, parentId: null, name: "日常番外", sortOrder: 0, pinned: false },
+//       "cat_456": { id, parentId: "cat_123", name: "恋爱", sortOrder: 0, pinned: false }
 //     },
 //     commands: {                         // 指令库（全局，跨聊天汇总）
 //       "cmd_789": {
@@ -13,6 +13,7 @@
 //         text: "（user 指令原文）",
 //         name: "可选名称",                 // 用户给指令取的名字
 //         categoryId: "cat_123" | null,   // null = 未分类
+//         favorite: false,                 // 收藏（指令行星标，置顶显示）
 //         createdAt: 1234567890
 //       }
 //     }
@@ -141,7 +142,47 @@ export function createCommandLibCore(deps) {
   }
 
   /**
-   * 取某分类的全部直接子分类 id（按 sortOrder 稳定排序）。
+   * 同级重排：把分类 id 移到目标分类 targetId 的前/后（同一父分类下）。
+   * 仅允许在 pinned 状态一致的分类之间排序（置顶分类 / 普通分类各自成组）。
+   * 防环：targetId 不能是 id 自身或其子孙。
+   * @param {string} id 要移动的分类 id
+   * @param {string} targetId 目标分类 id
+   * @param {"before"|"after"} position 插入到目标前/后
+   * @returns {boolean} 是否成功
+   */
+  function reorderCategory(id, targetId, position) {
+    const t = table();
+    const cat = t.categories[id];
+    const target = t.categories[targetId];
+    if (!cat || !target) return false;
+    if (id === targetId) return false;
+    // 防环：targetId 是 id 的子孙则拒绝
+    let cursor = targetId;
+    while (cursor) {
+      if (cursor === id) return false;
+      cursor = t.categories[cursor]?.parentId ?? null;
+    }
+    // pinned 分组必须一致（置顶分类只能在置顶分类间排序）
+    if (Boolean(cat.pinned) !== Boolean(target.pinned)) return false;
+    const parentId = target.parentId ?? null;
+    cat.parentId = parentId;
+    // 收集同级（排除自身），按当前 sortOrder 稳定排序
+    const siblings = Object.values(t.categories)
+      .filter((c) => (c.parentId ?? null) === parentId && c.id !== id)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const idx = siblings.findIndex((c) => c.id === targetId);
+    if (idx < 0) return false;
+    const insertAt = position === "before" ? idx : idx + 1;
+    siblings.splice(insertAt, 0, cat);
+    siblings.forEach((c, i) => {
+      c.sortOrder = i;
+    });
+    saveSettings();
+    return true;
+  }
+
+  /**
+   * 取某分类的全部直接子分类 id（置顶 pinned 排前；同级按 sortOrder 稳定排序）。
    * @param {string|null} parentId 父分类 id（null = 顶层）
    * @returns {Array<string>} 子分类 id 列表
    */
@@ -149,8 +190,27 @@ export function createCommandLibCore(deps) {
     const t = table();
     return Object.values(t.categories)
       .filter((c) => (c.parentId ?? null) === (parentId ?? null))
-      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .sort((a, b) => {
+        const pa = a.pinned ? 0 : 1;
+        const pb = b.pinned ? 0 : 1;
+        if (pa !== pb) return pa - pb;
+        return a.sortOrder - b.sortOrder;
+      })
       .map((c) => c.id);
+  }
+
+  /**
+   * 切换分类置顶（pinned）。置顶分类在树中排最前。
+   * @param {string} id 分类 id
+   * @returns {boolean} 切换后是否为置顶
+   */
+  function toggleCategoryPin(id) {
+    const t = table();
+    const cat = t.categories[id];
+    if (!cat) return false;
+    cat.pinned = !cat.pinned;
+    saveSettings();
+    return cat.pinned;
   }
 
   /**
@@ -213,6 +273,7 @@ export function createCommandLibCore(deps) {
       text: txt,
       name: String(options.name || "").trim(),
       categoryId,
+      favorite: Boolean(options.favorite),
       createdAt: Date.now(),
     };
     t.commands[cmd.id] = cmd;
@@ -283,6 +344,7 @@ export function createCommandLibCore(deps) {
       cmd.text = txt;
     }
     if (patch.name !== undefined) cmd.name = String(patch.name || "").trim();
+    if (patch.favorite !== undefined) cmd.favorite = Boolean(patch.favorite);
     if (patch.categoryId !== undefined) {
       const cid = patch.categoryId ?? null;
       if (cid && !t.categories[cid]) return false;
@@ -290,6 +352,36 @@ export function createCommandLibCore(deps) {
     }
     saveSettings();
     return true;
+  }
+
+  /**
+   * 切换指令收藏，返回切换后是否为已收藏。
+   * @param {string} id 指令 id
+   * @returns {boolean} 切换后是否为已收藏（失败返回 false）
+   */
+  function toggleFavorite(id) {
+    const t = table();
+    const cmd = t.commands[id];
+    if (!cmd) return false;
+    cmd.favorite = !cmd.favorite;
+    saveSettings();
+    return cmd.favorite;
+  }
+
+  /**
+   * 收藏指令列表（按收藏时间倒序）。
+   * @returns {Array<object>} 收藏的指令对象数组
+   */
+  function listFavoriteCommands() {
+    const t = table();
+    return Object.values(t.commands)
+      .filter((cmd) => cmd.favorite)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+
+  /** 收藏指令数量 */
+  function listFavoriteCount() {
+    return Object.values(table().commands).filter((cmd) => cmd.favorite).length;
   }
 
   /** 删除指令 */
@@ -313,6 +405,8 @@ export function createCommandLibCore(deps) {
     renameCategory,
     deleteCategory,
     moveCategory,
+    reorderCategory,
+    toggleCategoryPin,
     getChildCategoryIds,
     getDescendantCategoryIds,
     listCommands,
@@ -322,6 +416,9 @@ export function createCommandLibCore(deps) {
     existsByName,
     addFromMessage,
     updateCommand,
+    toggleFavorite,
+    listFavoriteCommands,
+    listFavoriteCount,
     deleteCommand,
     clearCommands,
   };

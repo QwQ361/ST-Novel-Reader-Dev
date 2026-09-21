@@ -3428,6 +3428,131 @@
   color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
 }
 
+/* ---------- 收藏置顶节点（左栏顶部 ⭐ 收藏） ---------- */
+.novel-ss-cat-fav {
+  border: 1px dashed
+    color-mix(
+      in srgb,
+      var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 40%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 8%,
+    transparent
+  );
+  margin-bottom: 4px;
+}
+
+.novel-ss-cat-fav .novel-ss-fav-star {
+  color: #f6c453;
+  opacity: 1;
+}
+
+/* 分类置顶（pinned）图钉图标 */
+.novel-ss-cat-pin {
+  color: #f6c453;
+  opacity: 1;
+}
+
+/* 分类置顶切换按钮（悬停操作区，置顶时金色高亮） */
+.novel-ss-cat-pin-toggle.novel-ss-cat-pin-on {
+  color: #f6c453;
+  opacity: 1;
+}
+
+/* 未分类固定底部节点（弱化 + 顶部细分隔线） */
+.novel-ss-cat-uncat {
+  margin-top: 4px;
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+      transparent
+    );
+  border-radius: 0 0 6px 6px;
+  opacity: 0.85;
+}
+
+/* ---------- 指令行收藏星标 ---------- */
+.novel-ss-cmd-star {
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease;
+}
+
+.novel-ss-cmd-star:hover {
+  transform: scale(1.25);
+  color: #f6c453;
+}
+
+.novel-ss-cmd-star-on {
+  color: #f6c453;
+  opacity: 1;
+}
+
+/* ---------- 拖拽视觉（参照 CFM：源半透明 / 三区域指示 / 禁止态 / ghost） ---------- */
+
+/* 源元素半透明：被拖拽的分类/指令行 */
+.novel-ss-dragging {
+  opacity: 0.4;
+}
+
+/* 多选拖拽 ghost：跟随鼠标的「📦 共 N 项」 */
+.novel-ss-drag-ghost {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  z-index: 2147483647;
+  pointer-events: none;
+  background: var(--novel-bg, var(--SmartThemeBlurTintColor, #1a1d23));
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 55%,
+      transparent
+    );
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* 落点指示：分类行 / 指令行作为放置目标时 */
+.novel-ss-cat-row.novel-ss-drop-target,
+.novel-ss-cmd-row.novel-ss-drop-target {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 22%,
+    transparent
+  );
+  outline: 1px solid var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
+/* 插入指示：before（上方蓝线）/ after（下方蓝线） */
+.novel-ss-cat-row.novel-ss-drop-before {
+  box-shadow: 0 -2px 0 0 var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
+.novel-ss-cat-row.novel-ss-drop-after {
+  box-shadow: 0 2px 0 0 var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
+/* 禁止态：分类拖到自身/子孙下（红叉 + 红描边） */
+.novel-ss-cat-row.novel-ss-drop-forbidden {
+  background: color-mix(in srgb, #e5484d 18%, transparent);
+  outline: 1px dashed #e5484d;
+  box-shadow: none;
+}
+
+/* 落点闪烁：金色方框脉冲动画（动画定义由 panel.js 全局注入） */
+.novel-ss-drag-highlighted {
+  animation: novelSsDragHighlightPulse 0.9s ease-out;
+}
+
 /* 移动端：指令库面板全屏化 */
 @media (max-width: 600px) {
   .novel-ss-panel {
