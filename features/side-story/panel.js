@@ -1598,7 +1598,16 @@ export function createSideStoryPanel(deps) {
       else openTagFilterDropdown();
     });
     // 滚动 / 点击面板外关闭下拉（捕获阶段，覆盖所有滚动源）
-    const closeDd = () => closeTagFilterDropdown();
+    const closeDd = (e) => {
+      // 下拉自身内部滚动（标签多时内滚）不关闭
+      if (
+        e &&
+        e.target instanceof Node &&
+        tagFilterDropdown?.contains(e.target)
+      )
+        return;
+      closeTagFilterDropdown();
+    };
     panelEl.addEventListener("scroll", closeDd, true);
     window.addEventListener("scroll", closeDd, true);
     document.addEventListener("click", closeDd);
