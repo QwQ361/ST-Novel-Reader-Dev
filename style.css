@@ -3008,6 +3008,7 @@
 
 .novel-ss-search-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
@@ -3337,10 +3338,12 @@
 }
 
 /* ---------- 搜索栏：tag 多选筛选按钮 + 已选胶囊 + 下拉面板 + ✕ 清除 ---------- */
+/* wrap 独占一行：搜索框一行，标签按钮/已选胶囊/清除按钮换行到下一行，互不挤压 */
 .novel-ss-tag-filter-wrap {
   position: relative;
-  flex: none;
+  flex: 1 1 100%;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   min-width: 0;
@@ -3384,8 +3387,9 @@
   );
 }
 
-/* 已选筛选胶囊区（按钮下方，可换行） */
+/* 已选筛选胶囊区（按钮下方，独占一行，可换行） */
 .novel-ss-tag-filter-chips {
+  flex: 1 1 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;

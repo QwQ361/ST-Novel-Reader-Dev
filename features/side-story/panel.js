@@ -21,10 +21,9 @@ export function createSideStoryPanel(deps) {
 
   let panelEl = null;
   let mounted = false;
-  // 当前 tag 筛选：Set，可含 "__untagged__"=未标记 / "__favorites__"=收藏 / "tag_xxx"=某 tag；空=全部
-  let selectedTagFilters = new Set();
   // 搜索栏 tag 筛选下拉面板状态
   let tagFilterDropdown = null;
+  // 搜索框文本是唯一事实来源：tag 筛选 / 模糊词均从文本解析得出（"，"或","分隔）
   let searchQuery = "";
   // 批量操作状态
   let batchMode = false;
@@ -40,57 +39,66 @@ export function createSideStoryPanel(deps) {
     return el.innerHTML;
   }
 
-  /** 当前可见指令列表（与渲染一致的筛选逻辑：tag 筛选 AND 搜索） */
+  /**
+   * 解析搜索框文本 → 筛选条件（所有条件 AND）：
+   * - 精确匹配 tag 名的词 → tag 条件（指令需同时具备这些 tag）
+   * - 「未标记」「收藏」等特殊词 → 特殊条件
+   * - 其余词 → 标题/内容模糊条件（大小写不敏感包含）
+   * 分隔符：中文逗号「，」或英文逗号「,」，支持混合与连续分隔。
+   */
+  function parseSearchQuery() {
+    const tags = commandLib.listTags();
+    const nameToId = {};
+    for (const tag of Object.values(tags)) nameToId[tag.name.trim()] = tag.id;
+    const tagIds = new Set();
+    const specials = new Set();
+    const words = [];
+    for (const raw of searchQuery.split(/[，,]/)) {
+      const seg = String(raw || "").trim();
+      if (!seg) continue;
+      const lower = seg.toLowerCase();
+      if (lower === "未标记") {
+        specials.add("__untagged__");
+      } else if (lower === "收藏" || lower === "⭐收藏" || lower === "star") {
+        specials.add("__favorites__");
+      } else if (nameToId[seg]) {
+        tagIds.add(nameToId[seg]);
+      } else {
+        words.push(lower);
+      }
+    }
+    return { tagIds, specials, words };
+  }
+
+  /** 当前可见指令列表：解析搜索文本 → 所有条件 AND 过滤 */
   function getVisibleCommands() {
     let list = Object.values(commandLib.listCommands());
-
-    // 1. tag 多选筛选（与搜索 AND 叠加；多个筛选条件之间 OR，命中任一即保留）
-    if (selectedTagFilters.size) {
-      const wantUntagged = selectedTagFilters.has("__untagged__");
-      const wantFavorites = selectedTagFilters.has("__favorites__");
-      const tagIds = Array.from(selectedTagFilters).filter((f) =>
-        f.startsWith("tag_"),
-      );
+    const cond = parseSearchQuery();
+    if (cond.tagIds.size || cond.specials.size || cond.words.length) {
       list = list.filter((c) => {
-        if (wantUntagged && (!c.tagIds || c.tagIds.length === 0)) return true;
-        if (wantFavorites && c.favorite) return true;
-        if (
-          tagIds.length &&
-          Array.isArray(c.tagIds) &&
-          c.tagIds.some((tid) => tagIds.includes(tid))
-        ) {
-          return true;
+        const cmdTags = Array.isArray(c.tagIds) ? c.tagIds : [];
+        // tag 条件：全部命中（AND）
+        for (const tid of cond.tagIds) {
+          if (!cmdTags.includes(tid)) return false;
         }
-        return false;
-      });
-    }
-
-    // 2. 搜索：文本（text/name）模糊 或 tag 名包含（大小写不敏感），取并集
-    if (searchQuery) {
-      const q = searchQuery;
-      const matchTagIds = new Set(
-        Object.values(commandLib.listTags())
-          .filter((tag) =>
-            String(tag.name || "")
+        // 特殊条件：未标记 / 收藏
+        if (cond.specials.has("__untagged__") && cmdTags.length !== 0)
+          return false;
+        if (cond.specials.has("__favorites__") && !c.favorite) return false;
+        // 模糊词：标题(name)/内容(text) 任一包含（AND 全部词）
+        for (const w of cond.words) {
+          const hit =
+            String(c.text || "")
               .toLowerCase()
-              .includes(q),
-          )
-          .map((tag) => tag.id),
-      );
-      list = list.filter((c) => {
-        const textHit =
-          String(c.text || "")
-            .toLowerCase()
-            .includes(q) ||
-          String(c.name || "")
-            .toLowerCase()
-            .includes(q);
-        const tagHit =
-          Array.isArray(c.tagIds) && c.tagIds.some((id) => matchTagIds.has(id));
-        return textHit || tagHit;
+              .includes(w) ||
+            String(c.name || "")
+              .toLowerCase()
+              .includes(w);
+          if (!hit) return false;
+        }
+        return true;
       });
     }
-
     return list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
 
@@ -1218,21 +1226,26 @@ export function createSideStoryPanel(deps) {
           toggleBatchItem(cmd.id, e.shiftKey);
           renderCommands(container);
         });
-      // tag 胶囊点击：切换该 tag 筛选（若已在筛选中则取消，否则只保留该 tag）
+      // tag 胶囊点击：切换该 tag 筛选（若已筛选该 tag 则移除，否则仅筛选该 tag）
       row
         .querySelectorAll(".novel-ss-cmd-tags .novel-ss-tag-chip")
         .forEach((chip) => {
           chip.addEventListener("click", (e) => {
             e.stopPropagation();
             const tagId = chip.dataset.tagId;
-            if (selectedTagFilters.has(tagId)) selectedTagFilters.delete(tagId);
-            else {
-              selectedTagFilters.clear();
-              selectedTagFilters.add(tagId);
+            const tag = commandLib.listTags()[tagId];
+            if (!tag) return;
+            const already = parseSearchQuery().tagIds.has(tagId);
+            const parts = searchQuery.split(/[，,]/).map((s) => s.trim());
+            if (already) {
+              // 移除该 tag 词
+              searchQuery = parts.filter((p) => p && p !== tag.name).join("，");
+            } else {
+              // 仅保留该 tag 词（清空其他筛选/搜索）
+              searchQuery = tag.name;
             }
-            searchQuery = "";
             const searchInput = panelEl.querySelector(".novel-ss-search");
-            if (searchInput) searchInput.value = "";
+            if (searchInput) searchInput.value = searchQuery;
             render();
           });
         });
@@ -1371,58 +1384,66 @@ export function createSideStoryPanel(deps) {
       rangeBtn.classList.toggle("novel-ss-batch-active", batchRangeMode);
   }
 
-  /** 刷新 tag 多选筛选按钮外观（按钮文本 + 已选胶囊区） */
+  /** 从搜索文本中移除指定词（用于胶囊点击/删除 tag 时改写文本） */
+  function removeWordFromSearch(word) {
+    const parts = searchQuery.split(/[，,]/).map((s) => s.trim());
+    const kept = parts.filter((p) => p && p !== word);
+    searchQuery = kept.join("，");
+    const searchInput = panelEl.querySelector(".novel-ss-search");
+    if (searchInput) searchInput.value = searchQuery;
+  }
+
+  /** 刷新 tag 筛选按钮外观 + 已选胶囊区（从解析结果渲染，同步搜索文本） */
   function refreshTagFilter() {
     if (!mounted || !panelEl) return;
     const btn = panelEl.querySelector(".novel-ss-tag-filter-btn");
     if (!btn) return;
+    const cond = parseSearchQuery();
     const tags = commandLib.listTags();
-    const tagIds = Array.from(selectedTagFilters).filter((f) =>
-      f.startsWith("tag_"),
-    );
-    const hasSpecial =
-      selectedTagFilters.has("__untagged__") ||
-      selectedTagFilters.has("__favorites__");
-    const total = selectedTagFilters.size;
+    const total = cond.tagIds.size + cond.specials.size;
     btn.classList.toggle("novel-ss-tag-filter-active", total > 0);
     const btnLabel = btn.querySelector(".novel-ss-tag-filter-btn-label");
-    if (btnLabel) {
-      btnLabel.textContent = total > 0 ? `标签(${total})` : "标签";
-    }
-    // 已选胶囊区（点 ✕ 移除单项）；无筛选时隐藏
+    if (btnLabel) btnLabel.textContent = total > 0 ? `标签(${total})` : "标签";
+    // 已选胶囊区（点 ✕ 移除单项 = 从搜索文本删除该词）；无筛选时隐藏
     const chipsEl = panelEl.querySelector(".novel-ss-tag-filter-chips");
     if (!chipsEl) return;
     chipsEl.innerHTML = "";
-    const names = [];
-    for (const f of selectedTagFilters) {
-      if (f === "__untagged__") names.push("未标记");
-      else if (f === "__favorites__") names.push("⭐ 收藏");
-      else if (tags[f]) names.push(tags[f].name);
+    // 特殊词在文本中的实际写法（支持「未标记」「⭐收藏」「收藏」「star」），用于精确移除
+    const specialWordByVal = {};
+    for (const raw of searchQuery.split(/[，,]/)) {
+      const seg = String(raw || "").trim();
+      const lower = seg.toLowerCase();
+      if (lower === "未标记") specialWordByVal.__untagged__ = seg;
+      else if (lower === "收藏" || lower === "⭐收藏" || lower === "star")
+        specialWordByVal.__favorites__ = seg;
     }
-    chipsEl.style.display = names.length ? "flex" : "none";
-    names.forEach((name) => {
+    const entries = [];
+    for (const f of cond.specials)
+      entries.push({
+        val: f,
+        name: f === "__untagged__" ? "未标记" : "⭐ 收藏",
+        word: specialWordByVal[f] || (f === "__untagged__" ? "未标记" : "收藏"),
+      });
+    for (const tid of cond.tagIds)
+      if (tags[tid])
+        entries.push({ val: tid, name: tags[tid].name, word: tags[tid].name });
+    chipsEl.style.display = entries.length ? "flex" : "none";
+    entries.forEach((entry) => {
       const chip = document.createElement("span");
       chip.className = "novel-ss-tag-chip novel-ss-tag-filter-chip";
-      chip.textContent = name;
+      chip.textContent = entry.name;
       chip.title = "点击移除该筛选";
       chip.addEventListener("click", (e) => {
         e.stopPropagation();
-        const f =
-          name === "未标记"
-            ? "__untagged__"
-            : name === "⭐ 收藏"
-              ? "__favorites__"
-              : Object.values(tags).find((t) => t.name === name)?.id;
-        if (f) {
-          selectedTagFilters.delete(f);
-          render();
-        }
+        removeWordFromSearch(entry.word);
+        render();
       });
       chipsEl.appendChild(chip);
     });
     const clearBtn = panelEl.querySelector(".novel-ss-tag-filter-clear");
     if (clearBtn)
-      clearBtn.style.display = selectedTagFilters.size ? "inline-flex" : "none";
+      clearBtn.style.display =
+        cond.tagIds.size || cond.specials.size ? "inline-flex" : "none";
   }
 
   /** 关闭 tag 多选筛选下拉面板 */
@@ -1433,6 +1454,59 @@ export function createSideStoryPanel(deps) {
     }
   }
 
+  /**
+   * 在下拉勾选/取消时改写搜索文本（搜索框是唯一状态源）。
+   * @param {string} word 该选项对应的词（tag 名 / "未标记" / "收藏"）
+   * @param {boolean} on 勾选为 true，取消为 false
+   */
+  function setSearchWord(word, on) {
+    const parts = searchQuery.split(/[，,]/).map((s) => s.trim());
+    let idx = parts.indexOf(word);
+    // 取消时若精确词未命中，尝试匹配特殊词变体（未标记/收藏/⭐收藏/star）
+    if (!on && idx === -1) {
+      const lower = word.toLowerCase();
+      if (lower === "收藏") {
+        idx = parts.findIndex(
+          (p) =>
+            p.toLowerCase() === "收藏" ||
+            p.toLowerCase() === "⭐收藏" ||
+            p.toLowerCase() === "star",
+        );
+      } else if (lower === "未标记") {
+        idx = parts.findIndex((p) => p.toLowerCase() === "未标记");
+      }
+    }
+    if (on) {
+      if (idx === -1) {
+        parts.push(word);
+        searchQuery = parts.filter(Boolean).join("，");
+      }
+    } else if (idx !== -1) {
+      parts.splice(idx, 1);
+      searchQuery = parts.filter(Boolean).join("，");
+    }
+    const searchInput = panelEl.querySelector(".novel-ss-search");
+    if (searchInput) searchInput.value = searchQuery;
+  }
+
+  /** 渲染 tag 筛选下拉面板选项（勾选态实时来自解析结果） */
+  function renderTagFilterDropdownOptions() {
+    if (!tagFilterDropdown) return;
+    const cond = parseSearchQuery();
+    tagFilterDropdown
+      .querySelectorAll(".novel-ss-tag-filter-opt")
+      .forEach((opt) => {
+        const val = opt.dataset.val;
+        const on = cond.tagIds.has(val) || cond.specials.has(val);
+        opt.classList.toggle("novel-ss-tag-filter-opt-on", on);
+        const icon = opt.querySelector("i");
+        if (icon)
+          icon.className = on
+            ? "fa-solid fa-square-check"
+            : "fa-regular fa-square";
+      });
+  }
+
   /** 渲染并定位 tag 多选筛选下拉面板（挂 panel 内、fixed 定位、防裁剪翻转） */
   function openTagFilterDropdown() {
     closeTagFilterDropdown();
@@ -1441,6 +1515,7 @@ export function createSideStoryPanel(deps) {
     const tags = Object.values(commandLib.listTags()).sort((a, b) =>
       String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
     );
+    const cond = parseSearchQuery();
     const dd = document.createElement("div");
     dd.className = "novel-ss-tag-filter-dropdown";
     const optHtml = (val, label, checked) => `
@@ -1449,16 +1524,14 @@ export function createSideStoryPanel(deps) {
         <span>${label}</span>
       </div>`;
     let inner = `
-      ${optHtml("__untagged__", "未标记", selectedTagFilters.has("__untagged__"))}
-      ${optHtml("__favorites__", "⭐ 收藏", selectedTagFilters.has("__favorites__"))}
+      ${optHtml("__untagged__", "未标记", cond.specials.has("__untagged__"))}
+      ${optHtml("__favorites__", "⭐ 收藏", cond.specials.has("__favorites__"))}
       <div class="novel-ss-tag-filter-sep"></div>`;
     if (!tags.length) {
       inner += `<div class="novel-ss-tag-filter-empty">暂无标签，请先在「管理标签」中创建</div>`;
     } else {
       inner += tags
-        .map((t) =>
-          optHtml(t.id, escapeHtml(t.name), selectedTagFilters.has(t.id)),
-        )
+        .map((t) => optHtml(t.id, escapeHtml(t.name), cond.tagIds.has(t.id)))
         .join("");
     }
     dd.innerHTML = inner;
@@ -1468,22 +1541,28 @@ export function createSideStoryPanel(deps) {
       const opt = e.target.closest(".novel-ss-tag-filter-opt");
       if (!opt) return;
       const val = opt.dataset.val;
-      if (selectedTagFilters.has(val)) {
-        selectedTagFilters.delete(val);
-      } else {
-        selectedTagFilters.add(val);
+      const tagsMap = commandLib.listTags();
+      let word =
+        val === "__untagged__"
+          ? "未标记"
+          : val === "__favorites__"
+            ? "收藏"
+            : tagsMap[val]?.name;
+      if (!word) return;
+      // 取消勾选时优先匹配文本中的实际写法（如手打的「⭐收藏」「star」）
+      const cond = parseSearchQuery();
+      const isOn = cond.tagIds.has(val) || cond.specials.has(val);
+      if (isOn && val !== "__untagged__" && val !== "__favorites__") {
+        // tag 名可能大小写不同，按 id 从文本中找实际分段
+        for (const raw of searchQuery.split(/[，,]/)) {
+          const seg = String(raw || "").trim();
+          if (tagsMap[val] && seg === tagsMap[val].name) {
+            word = seg;
+            break;
+          }
+        }
       }
-      // 手动更新该项勾选样式（render 不重建下拉）
-      opt.classList.toggle(
-        "novel-ss-tag-filter-opt-on",
-        selectedTagFilters.has(val),
-      );
-      const icon = opt.querySelector("i");
-      if (icon) {
-        icon.className = selectedTagFilters.has(val)
-          ? "fa-solid fa-square-check"
-          : "fa-regular fa-square";
-      }
+      setSearchWord(word, !isOn);
       render();
     });
     panelEl.appendChild(dd);
@@ -1509,14 +1588,10 @@ export function createSideStoryPanel(deps) {
     for (const id of Array.from(batchSelected)) {
       if (!cmds[id]) batchSelected.delete(id);
     }
-    // 若当前筛选的 tag 已被删除，移出筛选集
-    const tags = commandLib.listTags();
-    for (const f of Array.from(selectedTagFilters)) {
-      if (f.startsWith("tag_") && !tags[f]) selectedTagFilters.delete(f);
-    }
     const list = panelEl.querySelector(".novel-ss-list");
     if (list) renderCommands(list);
     refreshTagFilter();
+    renderTagFilterDropdownOptions();
     refreshBatchBar();
   }
 
@@ -1533,7 +1608,7 @@ export function createSideStoryPanel(deps) {
       </div>
       <div class="novel-ss-search-row">
         <i class="fa-solid fa-magnifying-glass"></i>
-        <input type="text" class="novel-ss-search" placeholder="搜索指令或标签…" autocomplete="off" />
+        <input type="text" class="novel-ss-search" placeholder="搜索指令或标签，用「，」分隔多个（全部满足）…" autocomplete="off" />
         <div class="novel-ss-tag-filter-wrap">
           <button type="button" class="novel-ss-tag-filter-btn" title="按标签筛选（可多选）">
             <i class="fa-solid fa-tags"></i>
@@ -1541,8 +1616,8 @@ export function createSideStoryPanel(deps) {
             <i class="fa-solid fa-caret-down"></i>
           </button>
           <div class="novel-ss-tag-filter-chips" style="display:none"></div>
+          <i class="fa-solid fa-xmark novel-ss-tag-filter-clear" style="display:none" title="清除标签筛选"></i>
         </div>
-        <i class="fa-solid fa-xmark novel-ss-tag-filter-clear" style="display:none" title="清除标签筛选"></i>
       </div>
       <div class="novel-ss-list-toolbar">
         <span class="novel-ss-list-title-label">全部指令</span>
@@ -1582,13 +1657,11 @@ export function createSideStoryPanel(deps) {
     panelEl
       .querySelector(".novel-ss-manage-tag")
       .addEventListener("click", () => showTagManagePopup());
-    // 搜索（含手动输入 tag 名筛选）
+    // 搜索（含手动输入 tag 名筛选）：文本为唯一状态源，实时解析刷新筛选/下拉勾选态
     const searchInput = panelEl.querySelector(".novel-ss-search");
     searchInput.addEventListener("input", () => {
-      searchQuery = String(searchInput.value || "")
-        .trim()
-        .toLowerCase();
-      renderCommands(panelEl.querySelector(".novel-ss-list"));
+      searchQuery = String(searchInput.value || "").trim();
+      render();
     });
     // tag 多选筛选：点击按钮开合下拉面板
     const tagFilterBtn = panelEl.querySelector(".novel-ss-tag-filter-btn");
@@ -1611,12 +1684,14 @@ export function createSideStoryPanel(deps) {
     panelEl.addEventListener("scroll", closeDd, true);
     window.addEventListener("scroll", closeDd, true);
     document.addEventListener("click", closeDd);
-    // 清除全部 tag 筛选
+    // 清除全部 tag 筛选（清空搜索文本）
     panelEl
       .querySelector(".novel-ss-tag-filter-clear")
       .addEventListener("click", (e) => {
         e.stopPropagation();
-        selectedTagFilters.clear();
+        searchQuery = "";
+        const searchInput = panelEl.querySelector(".novel-ss-search");
+        if (searchInput) searchInput.value = "";
         render();
       });
     // 新建指令
