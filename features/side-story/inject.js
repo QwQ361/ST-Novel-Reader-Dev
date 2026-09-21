@@ -65,9 +65,8 @@ export function createInjectCore(deps) {
     if (btn.dataset.mode === mode) return;
     btn.dataset.mode = mode;
     btn.title = marked ? "取消番外标注" : "标注为番外";
-    btn.innerHTML = marked
-      ? '<i class="fa-solid fa-bookmark"></i>'
-      : '<i class="fa-solid fa-book"></i>';
+    // 图标保持「书」不变（只通过 .novel-side-story-active 变蓝），不切换为书签
+    btn.innerHTML = '<i class="fa-solid fa-book"></i>';
     btn.classList.toggle("novel-side-story-active", marked);
   }
 

@@ -291,9 +291,17 @@ jQuery(async () => {
     onMarkClick: async (mesId, btnEl) => {
       const res = await markCore.mark(mesId);
       if (res.ok) {
+        // DOM 已同步更新：立即刷新按钮图标 + toast（不等保存完成）
         injectCore.refreshByMesId(mesId);
         toast(`已标注为番外${res.msg.includes("已是") ? "（已是番外）" : ""}`);
-        // 重载阅读器：目录/正文中的番外显示与章节结构随之更新
+        // 保存完成后重载阅读器（保证读到的分章数据包含最新标注）
+        if (res.saved) {
+          try {
+            await res.saved;
+          } catch (err) {
+            console.warn("[NovelReader] 标注保存失败:", err);
+          }
+        }
         try {
           await reloadChatForSideStory();
         } catch (err) {
@@ -306,9 +314,31 @@ jQuery(async () => {
     onUnmarkClick: async (mesId, btnEl) => {
       const res = await markCore.unmark(mesId);
       if (res.ok) {
+        // DOM 已同步更新：立即刷新按钮图标 + toast（不等保存/确认框）
         injectCore.refreshByMesId(mesId);
         toast("已取消番外标注");
-        // 重载阅读器：目录/正文中的番外显示与章节结构随之更新
+        // 若有匹配的指令库指令，询问是否同时移出（确认=移出，取消=保留）。
+        // 确认框不阻塞楼层恢复与 toast：在此（按钮已刷新后）再弹出。
+        if (res.commandMatch) {
+          const label = res.commandMatch.name
+            ? `「${res.commandMatch.name}」`
+            : "";
+          if (
+            window.confirm(
+              `是否同时移出番外指令库中的指令${label}？\n选择「确定」移出指令库，选择「取消」保留。`,
+            )
+          ) {
+            commandLib.deleteCommand(res.commandMatch.id);
+          }
+        }
+        // 保存完成后重载阅读器（保证读到的分章数据包含最新标注）
+        if (res.saved) {
+          try {
+            await res.saved;
+          } catch (err) {
+            console.warn("[NovelReader] 取消标注保存失败:", err);
+          }
+        }
         try {
           await reloadChatForSideStory();
         } catch (err) {

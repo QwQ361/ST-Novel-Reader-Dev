@@ -154,13 +154,16 @@ export function createMarkCore(deps) {
     // 2) 隐藏：char 楼层 + （存在时）user 楼层。
     //    配对楼层间只可能有 is_system 消息（resolvePair 跳过系统消息、遇同类 break），
     //    故合并为一次区间 hide，DOM 同步更新、仅一次保存，避免两次调用产生的时间差。
+    //    不 await：hideRange 循环内 DOM 属性同步设置，只有末尾 await saveChatConditional()
+    //    是异步的。不等待可让图标/toast 立即刷新，保存完成后才重载阅读器。
     const hidePair = typeof getHidePair === "function" ? getHidePair() : true;
+    let hidePromise = null;
     if (hidePair) {
       const hideRange = getHideRange();
       if (typeof hideRange === "function") {
         const ids = [p.charId];
         if (p.userId != null) ids.push(p.userId);
-        await hideRange(Math.min(...ids), Math.max(...ids), false);
+        hidePromise = hideRange(Math.min(...ids), Math.max(...ids), false);
       }
     }
 
@@ -171,28 +174,34 @@ export function createMarkCore(deps) {
       commandLib.addFromMessage(p.userText, { name: "" });
     }
 
-    // 保存聊天
-    const saveChat = getSaveChat();
-    if (typeof saveChat === "function") {
-      try {
-        await saveChat();
-      } catch (err) {
-        console.warn("[NovelReader] saveChatConditional 失败:", err);
+    // 保存聊天：hideRange 内部已保存；未走隐藏路径时显式保存。
+    // 不阻塞 UI：返回 saved Promise，调用方在重载阅读器前等待即可。
+    let saved = null;
+    if (hidePromise) {
+      saved = hidePromise.catch((err) =>
+        console.warn("[NovelReader] hideChatMessageRange 失败:", err),
+      );
+    } else {
+      const saveChat = getSaveChat();
+      if (typeof saveChat === "function") {
+        saved = saveChat().catch((err) =>
+          console.warn("[NovelReader] saveChatConditional 失败:", err),
+        );
       }
     }
 
-    return { ok: true, msg: "已标注为番外" };
+    return { ok: true, msg: "已标注为番外", saved };
   }
 
   /**
-   * 取消楼层番外标注（撤标记 + 撤隐藏；确认后移出指令库）。
+   * 取消楼层番外标注（撤标记 + 撤隐藏）。
+   * 指令库移除不在此处理：返回 commandMatch 供调用方（index.js）在确认后删除，
+   * 避免确认框阻塞楼层恢复与图标/toast 刷新（造成延迟）。
    * @param {number} mesId 被点击楼层索引
-   * @param {object} [options]
-   * @param {boolean} [options.removeFromLib=true] 是否同时移出指令库
-   * @returns {Promise<{ok:boolean, msg:string}>}
+   * @returns {Promise<{ok:boolean, msg:string, saved:Promise|null, commandMatch:object|null}>}
+   *   commandMatch：匹配到的指令库指令（{id, name}），供调用方确认是否移除
    */
-  async function unmark(mesId, options = {}) {
-    const { removeFromLib = true } = options;
+  async function unmark(mesId) {
     const chat = getChat();
     if (!Array.isArray(chat) || !chat[mesId]) {
       return { ok: false, msg: "楼层不存在" };
@@ -240,31 +249,45 @@ export function createMarkCore(deps) {
     //    真正的系统消息，区间 unhide 会误把它们恢复显示），改为并行两次
     //    单楼 unhide —— 内部 DOM 属性同步设置、同一宏任务完成，两楼视觉
     //    同时恢复，无时间差。
+    //    不 await：DOM 属性同步设置已生效，保存由 saved 交给调用方等待。
     const hideRange = getHideRange();
+    let hidePromise = null;
     if (typeof hideRange === "function") {
-      await Promise.all(
+      hidePromise = Promise.all(
         [charId, userId]
           .filter((id) => id != null)
           .map((id) => hideRange(id, id, true)),
       );
     }
 
-    // 3) 移出指令库（仅当确认移除且存在对应 user 文本）
-    if (removeFromLib && userId != null && userText.trim()) {
+    // 3) 匹配指令库指令（不删除：由调用方确认后决定）
+    //    返回 commandMatch 让 index.js 在 toast/图标刷新之后再弹确认框，
+    //    避免确认框阻塞楼层恢复与按钮刷新。
+    let commandMatch = null;
+    if (userId != null && userText.trim()) {
       const cmd = findCommandByText(commandLib, userText);
-      if (cmd) commandLib.deleteCommand(cmd.id);
-    }
-
-    const saveChat = getSaveChat();
-    if (typeof saveChat === "function") {
-      try {
-        await saveChat();
-      } catch (err) {
-        console.warn("[NovelReader] saveChatConditional 失败:", err);
+      if (cmd) {
+        commandMatch = { id: cmd.id, name: cmd.name || "" };
       }
     }
 
-    return { ok: true, msg: "已取消番外标注" };
+    // 保存聊天：撤隐藏内部已保存；未走隐藏路径时显式保存。
+    // 不阻塞 UI：返回 saved Promise，调用方在重载阅读器前等待即可。
+    let saved = null;
+    if (hidePromise) {
+      saved = hidePromise.catch((err) =>
+        console.warn("[NovelReader] hideChatMessageRange 失败:", err),
+      );
+    } else {
+      const saveChat = getSaveChat();
+      if (typeof saveChat === "function") {
+        saved = saveChat().catch((err) =>
+          console.warn("[NovelReader] saveChatConditional 失败:", err),
+        );
+      }
+    }
+
+    return { ok: true, msg: "已取消番外标注", saved, commandMatch };
   }
 
   return {
