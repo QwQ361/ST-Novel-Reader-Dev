@@ -1312,17 +1312,171 @@ export function createSideStoryPanel(deps) {
     }
   }
 
-  // ---------------- 操作对话框（window.prompt / confirm，轻量） ----------------
+  // ---------------- 新建指令弹窗（支持连续新建 / 草稿保留） ----------------
 
-  function promptNewCommand() {
-    const text = window.prompt("输入指令文本：");
-    if (!text) return;
-    // 新指令默认无 tag（无论当前筛选）
-    const cmd = commandLib.createCommand(text, {});
-    if (cmd) {
-      toast("已创建指令");
-      render();
+  /** 新建指令弹窗草稿（关闭弹窗后保留，下次打开继续编辑） */
+  let newCmdDraft = { name: "", text: "", tagIds: [] };
+
+  /**
+   * 打开新建指令弹窗：从上到下「名称 / 内容 / 标签」。
+   * - 名称留空 → 创建时自动命名「未命名-N」（N 自增不重复）
+   * - 「确认并新建下一个」：创建并清空弹窗，弹窗保留以便连续新建
+   * - 「确认并退出」：创建并清空草稿后关闭弹窗
+   * - 「取消」：不创建、不清空、不关闭（弹窗保持原样）
+   * - 「清空弹窗」：清空名称 / 内容 / 标签勾选
+   * - 关闭弹窗（✕ / 点击遮罩）：草稿保留，下次打开恢复
+   */
+  function openNewCommandPopup() {
+    const tags = Object.values(commandLib.listTags()).sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
+    );
+    const overlay = document.createElement("div");
+    overlay.className = "novel-ss-edit-popup-overlay";
+    overlay.innerHTML = `
+      <div class="novel-ss-edit-popup novel-ss-new-cmd-popup">
+        <div class="novel-ss-edit-popup-title novel-ss-new-cmd-title">
+          <span>新建指令</span>
+          <i class="fa-solid fa-xmark novel-ss-new-cmd-close" title="关闭（保留内容）"></i>
+        </div>
+        <div class="novel-ss-edit-popup-field">
+          <label>名称（留空自动命名「未命名-N」）</label>
+          <input type="text" class="novel-ss-edit-input novel-ss-new-cmd-name" placeholder="可选" autocomplete="off" />
+        </div>
+        <div class="novel-ss-edit-popup-field">
+          <label>内容</label>
+          <textarea class="novel-ss-edit-input novel-ss-new-cmd-text" rows="6" placeholder="指令内容（必填）"></textarea>
+        </div>
+        <div class="novel-ss-edit-popup-field">
+          <label>标签</label>
+          <div class="novel-ss-cmd-tag-list novel-ss-new-cmd-tags"></div>
+        </div>
+        <div class="novel-ss-edit-popup-actions">
+          <button type="button" class="novel-ss-new-cmd-clear">清空弹窗</button>
+          <button type="button" class="novel-ss-edit-popup-cancel novel-ss-new-cmd-cancel">取消</button>
+          <button type="button" class="novel-ss-new-cmd-next">确认并新建下一个</button>
+          <button type="button" class="novel-ss-edit-popup-confirm novel-ss-new-cmd-save">确认并退出</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const nameInput = overlay.querySelector(".novel-ss-new-cmd-name");
+    const textInput = overlay.querySelector(".novel-ss-new-cmd-text");
+    const tagList = overlay.querySelector(".novel-ss-new-cmd-tags");
+
+    // 用草稿填充输入框
+    nameInput.value = newCmdDraft.name || "";
+    textInput.value = newCmdDraft.text || "";
+
+    /** 渲染标签多选列表（勾选态来自草稿） */
+    function renderTagRows() {
+      tagList.innerHTML = "";
+      if (!tags.length) {
+        tagList.innerHTML =
+          '<div class="novel-ss-empty">暂无标签，可稍后在「管理标签」中创建</div>';
+        return;
+      }
+      tags.forEach((tag) => {
+        const row = document.createElement("div");
+        const on = newCmdDraft.tagIds.includes(tag.id);
+        row.className =
+          "novel-ss-cmd-tag-row" + (on ? " novel-ss-cmd-tag-on" : "");
+        row.innerHTML = `
+          <i class="${on ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-tag-check"></i>
+          <span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>`;
+        row.addEventListener("click", () => {
+          const idx = newCmdDraft.tagIds.indexOf(tag.id);
+          if (idx >= 0) newCmdDraft.tagIds.splice(idx, 1);
+          else newCmdDraft.tagIds.push(tag.id);
+          renderTagRows();
+        });
+        tagList.appendChild(row);
+      });
     }
+    renderTagRows();
+
+    // 输入实时同步草稿
+    nameInput.addEventListener("input", () => {
+      newCmdDraft.name = nameInput.value;
+    });
+    textInput.addEventListener("input", () => {
+      newCmdDraft.text = textInput.value;
+    });
+
+    /** 校验并创建指令（名称留空自动「未命名-N」），成功返回 true */
+    function tryCreate() {
+      const text = String(textInput.value || "").trim();
+      if (!text) {
+        toast("请输入指令内容");
+        textInput.focus();
+        return false;
+      }
+      let name = String(nameInput.value || "").trim();
+      if (!name) {
+        let n = 1;
+        while (commandLib.existsByName(`未命名-${n}`)) n += 1;
+        name = `未命名-${n}`;
+      }
+      const cmd = commandLib.createCommand(text, {
+        name,
+        tagIds: newCmdDraft.tagIds,
+      });
+      if (!cmd) {
+        toast("创建失败");
+        return false;
+      }
+      return true;
+    }
+
+    /** 清空草稿 + 输入框 + 标签勾选 */
+    function clearAll() {
+      newCmdDraft = { name: "", text: "", tagIds: [] };
+      nameInput.value = "";
+      textInput.value = "";
+      renderTagRows();
+      nameInput.focus();
+    }
+
+    // 确认并新建下一个：创建 → 清空 → 弹窗保留
+    overlay
+      .querySelector(".novel-ss-new-cmd-next")
+      .addEventListener("click", () => {
+        if (!tryCreate()) return;
+        clearAll();
+        toast("已创建指令");
+        render();
+      });
+
+    // 确认并退出：创建 → 清空草稿 → 关闭弹窗
+    overlay
+      .querySelector(".novel-ss-new-cmd-save")
+      .addEventListener("click", () => {
+        if (!tryCreate()) return;
+        clearAll();
+        overlay.remove();
+        toast("已创建指令");
+        render();
+      });
+
+    // 取消：不创建、不清空、不关闭
+    overlay
+      .querySelector(".novel-ss-new-cmd-cancel")
+      .addEventListener("click", () => {});
+
+    // 清空弹窗
+    overlay
+      .querySelector(".novel-ss-new-cmd-clear")
+      .addEventListener("click", clearAll);
+
+    // 关闭（✕ / 遮罩）：草稿保留
+    overlay
+      .querySelector(".novel-ss-new-cmd-close")
+      .addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (e) => {
+      if (e.target.classList.contains("novel-ss-edit-popup-overlay"))
+        overlay.remove();
+    });
+
+    nameInput.focus();
   }
 
   function promptRenameCommand(cmdId) {
@@ -1697,7 +1851,7 @@ export function createSideStoryPanel(deps) {
     // 新建指令
     panelEl
       .querySelector(".novel-ss-new-cmd")
-      .addEventListener("click", promptNewCommand);
+      .addEventListener("click", openNewCommandPopup);
     // 从 txt 导入
     panelEl
       .querySelector(".novel-ss-import")

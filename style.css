@@ -3767,6 +3767,97 @@
   color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
 }
 
+/* ---------- 新建指令弹窗 ---------- */
+.novel-ss-new-cmd-popup {
+  width: min(560px, 92vw);
+}
+.novel-ss-new-cmd-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.novel-ss-new-cmd-title > span {
+  font-size: 16px;
+  font-weight: 600;
+}
+.novel-ss-new-cmd-close {
+  font-size: 1rem;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
+}
+.novel-ss-new-cmd-close:hover {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+    transparent
+  );
+}
+.novel-ss-new-cmd-popup
+  .novel-ss-edit-popup-field
+  + .novel-ss-edit-popup-field {
+  margin-top: 12px;
+}
+.novel-ss-new-cmd-text {
+  resize: vertical;
+  min-height: 120px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+/* 底部按钮：清空弹窗（左侧弱化） / 取消 / 确认并新建下一个 / 确认并退出（主色） */
+.novel-ss-new-cmd-popup .novel-ss-edit-popup-actions {
+  flex-wrap: wrap;
+}
+.novel-ss-new-cmd-clear {
+  background: transparent;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 35%,
+      transparent
+    );
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-right: auto; /* 推向左，其余按钮靠右 */
+}
+.novel-ss-new-cmd-clear:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+}
+.novel-ss-new-cmd-next {
+  background: transparent;
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 60%,
+      transparent
+    );
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.novel-ss-new-cmd-next:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 18%,
+    transparent
+  );
+}
+
 /* ---------- 批量设置标签弹窗 ---------- */
 .novel-ss-batch-tag-popup {
   width: min(560px, 92vw);
