@@ -3414,6 +3414,13 @@
     width: auto !important;
     height: auto !important;
   }
+  /* 逐个标签：窄屏下选择框占满第二行 */
+  .novel-ss-batch-tag-row-indiv {
+    flex-wrap: wrap;
+  }
+  .novel-ss-batch-tag-picker {
+    flex: 1 1 100%;
+  }
 }
 
 /* ---------- tag 管理弹窗（管理标签） ---------- */
@@ -3682,7 +3689,7 @@
   margin-top: 8px;
 }
 
-/* 逐个模式：每条指令一行（指令名 + tag 胶囊勾选区） */
+/* 逐个模式：每条指令一行「指令名 → 选择框」+ 下拉面板 */
 .novel-ss-batch-tag-individual-label {
   font-size: 12px;
   opacity: 0.75;
@@ -3698,14 +3705,16 @@
   margin-top: 8px;
   padding-right: 4px;
 }
+/* 行：指令名(flex 1) + 箭头 + 选择框(固定宽) —— 模仿逐个重命名 */
 .novel-ss-batch-tag-row-indiv {
   cursor: default;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
 }
 .novel-ss-batch-tag-cmd-name {
-  flex: 0 0 100%;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3714,22 +3723,102 @@
   color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
   opacity: 0.9;
 }
-.novel-ss-batch-tag-cmd-chips {
+.novel-ss-batch-tag-arrow {
+  color: #a6adc8;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+/* 选择框：默认显示「点击选择标签」，选中后内部渲染 tag 胶囊（含 ✕ 移除） */
+.novel-ss-batch-tag-picker {
+  flex: 0 0 200px;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-}
-.novel-ss-batch-tag-indiv-chip {
+  gap: 3px;
+  padding: 3px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  border-radius: 6px;
   cursor: pointer;
-  opacity: 0.55;
+  box-sizing: border-box;
+  transition: border-color 0.12s ease;
 }
-.novel-ss-batch-tag-indiv-chip-on {
-  opacity: 1;
+.novel-ss-batch-tag-picker:hover,
+.novel-ss-batch-tag-picker:focus-within {
+  border-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+.novel-ss-batch-tag-picker-placeholder {
+  font-size: 12px;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  opacity: 0.45;
+  line-height: 1.6;
+}
+.novel-ss-batch-tag-picker-chip {
+  cursor: pointer;
+  font-size: 0.68rem;
+  padding: 0 6px;
+  line-height: 1.6;
+}
+/* 下拉面板：挂 overlay 下 fixed 定位，视口边缘自动翻转 */
+.novel-ss-batch-tag-dropdown {
+  position: fixed;
+  z-index: 100001; /* 压过弹窗 overlay */
+  background: var(--novel-bg, var(--SmartThemeBlurTintColor, #1a1d23));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  border-radius: 8px;
+  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.novel-ss-batch-tag-dropdown-empty {
+  font-size: 12px;
+  opacity: 0.6;
+  padding: 6px 8px;
+}
+.novel-ss-batch-tag-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s ease;
+}
+.novel-ss-batch-tag-opt:hover {
   background: color-mix(
     in srgb,
-    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 30%,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
     transparent
   );
+}
+.novel-ss-batch-tag-opt-on {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 18%,
+    transparent
+  );
+}
+.novel-ss-batch-tag-opt-check {
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+  flex-shrink: 0;
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+}
+.novel-ss-batch-tag-opt .novel-ss-tag-chip {
+  cursor: pointer;
 }
 
 /* ---------- 番外指令库：批量重命名弹窗（Promise 模式，参照 CFM） ---------- */
