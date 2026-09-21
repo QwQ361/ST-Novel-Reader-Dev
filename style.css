@@ -3648,6 +3648,24 @@
   width: min(560px, 92vw);
 }
 
+/* 统一模式：全选 / 清空 工具行 */
+.novel-ss-batch-tag-utils {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* 统一模式：tag 多选行 */
+.novel-ss-batch-tag-check {
+  flex: none;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+.novel-ss-batch-tag-row.novel-ss-batch-tag-on .novel-ss-batch-tag-check {
+  opacity: 1;
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+
 .novel-ss-batch-tag-list {
   max-height: 40vh;
   overflow-y: auto;
