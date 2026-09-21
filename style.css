@@ -3152,13 +3152,9 @@
 }
 
 .novel-ss-cmd-actions {
-  display: none;
+  display: inline-flex;
   gap: 6px;
   flex: none;
-}
-
-.novel-ss-cmd-row:hover .novel-ss-cmd-actions {
-  display: inline-flex;
 }
 
 .novel-ss-cmd-actions i {
