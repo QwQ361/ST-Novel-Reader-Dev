@@ -1492,7 +1492,8 @@ export function createSideStoryPanel(deps) {
    * 从 txt 导入指令（弹窗模式）。
    * - 支持一次选择多个 txt 文件
    * - 分隔符支持多页（每页一个分隔符，仅当前激活页生效，可新增/删除页）
-   * - 解析预览分页：一页一条指令，可编辑内容、可删除
+   * - 解析预览分页：一页一条指令，可编辑名称/内容/勾选标签、可删除
+   *   （名称留空导入时自动命名「未命名-N」，标签可选）
    * - 分隔符为模板：必须含「指令」占位符才会解析
    *   （「指令」代表指令内容位置；填「\n指令」按换行切分、填「---\n指令」按「---\n」切分、
    *   填「($指令)」按前后包裹提取；不含「指令」或留空则整段一条指令导入）
@@ -1526,6 +1527,10 @@ export function createSideStoryPanel(deps) {
       /* 忽略 */
     }
 
+    // 全部 tag（预览标签多选复用，按名称排序）
+    const tags = Object.values(commandLib.listTags()).sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
+    );
     const overlay = document.createElement("div");
     overlay.className = "novel-ss-edit-popup-overlay";
     overlay.innerHTML = `
@@ -1542,10 +1547,10 @@ export function createSideStoryPanel(deps) {
           <div class="novel-ss-import-files"></div>
         </div>
         <div class="novel-ss-edit-popup-field">
-          <label>分隔符模板（可多页，一页一个；「指令」表示指令内容的位置，填入「指令」才会解析）</label>
+          <label>分隔符模板（可多页，一页一个；填入「指令」才会解析）</label>
           <div class="novel-ss-import-sep-tabs">
             <div class="novel-ss-import-sep-wrap">
-              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（在分隔符中写入「指令」表示指令内容的位置，填写后才会解析文件；&#10;如填两行「换行+指令」表示按行切分，填「---换行+指令」表示按「---换行」切分）"></textarea>
+              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="($指令)&#10;<指令>&#10;---&#10;指令"></textarea>
               <div class="novel-ss-import-sep-nav">
                 <button type="button" class="novel-ss-import-sep-prev" title="上一页分隔符"><i class="fa-solid fa-chevron-left"></i></button>
                 <span class="novel-ss-import-sep-count">1 / 1</span>
@@ -1586,6 +1591,9 @@ export function createSideStoryPanel(deps) {
     const previewLabel = overlay.querySelector(
       ".novel-ss-import-preview-label",
     );
+    const previewField = overlay.querySelector(
+      ".novel-ss-import-preview-field",
+    );
     const confirmBtn = overlay.querySelector(".novel-ss-import-confirm");
 
     /** 计算切分结果（带缓存：同一份文本 + 同一分隔符只切一次） */
@@ -1604,7 +1612,13 @@ export function createSideStoryPanel(deps) {
           splitCache.set(key, parts);
         }
         parts.forEach((part, idx) =>
-          items.push({ file: f, origIdx: idx, text: part }),
+          items.push({
+            file: f,
+            origIdx: idx,
+            text: part,
+            name: "",
+            tagIds: [],
+          }),
         );
       }
       previewItems = items;
@@ -1664,45 +1678,46 @@ export function createSideStoryPanel(deps) {
       computePreviews();
     });
 
-    /** 渲染文件列表与解析预览（分页：一页一条，可编辑/删除） */
+    /** 渲染文件列表与解析预览（分页：一页一条，可编辑名称/内容/标签） */
     function renderPreview() {
-      // 文件列表
+      // 文件列表：未选择文件时不显示空状态占位（不留空隙），预览区整体隐藏
       filesBox.innerHTML = "";
       if (!files.length) {
-        filesBox.innerHTML = '<div class="novel-ss-empty">尚未选择文件</div>';
-      } else {
-        files.forEach((f, i) => {
-          const row = document.createElement("div");
-          row.className = "novel-ss-import-file-row";
-          row.innerHTML = `
+        previewField.style.display = "none";
+        updateConfirmBtn();
+        return;
+      }
+      previewField.style.display = "";
+      files.forEach((f, i) => {
+        const row = document.createElement("div");
+        row.className = "novel-ss-import-file-row";
+        row.innerHTML = `
             <span class="novel-ss-import-file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
             <span class="novel-ss-import-file-meta">${f.text.length} 字符</span>
             <i class="fa-solid fa-xmark novel-ss-import-file-del" title="移除"></i>`;
-          row
-            .querySelector(".novel-ss-import-file-del")
-            .addEventListener("click", () => {
-              files.splice(i, 1);
-              splitCache.clear();
-              computePreviews();
-            });
-          filesBox.appendChild(row);
-        });
-      }
+        row
+          .querySelector(".novel-ss-import-file-del")
+          .addEventListener("click", () => {
+            files.splice(i, 1);
+            splitCache.clear();
+            computePreviews();
+          });
+        filesBox.appendChild(row);
+      });
       // 预览分页
       const total = previewItems.length;
       previewLabel.textContent = `解析预览（共 ${total} 条指令）`;
       previewBox.innerHTML = "";
-      if (!files.length) {
-        previewBox.innerHTML =
-          '<div class="novel-ss-empty">选择文件后在此预览解析结果</div>';
-      } else if (total === 0) {
+      if (total === 0) {
         previewBox.innerHTML =
           '<div class="novel-ss-empty">未解析出任何指令，请检查分隔符</div>';
-      } else {
-        const item = previewItems[activePreviewPage];
-        const row = document.createElement("div");
-        row.className = "novel-ss-import-preview-row";
-        row.innerHTML = `
+        updateConfirmBtn();
+        return;
+      }
+      const item = previewItems[activePreviewPage];
+      const row = document.createElement("div");
+      row.className = "novel-ss-import-preview-row";
+      row.innerHTML = `
           <div class="novel-ss-import-preview-head">
             <span class="novel-ss-import-preview-idx">${escapeHtml(item.file.name)} #${item.origIdx + 1}</span>
             <span class="novel-ss-import-preview-nav">
@@ -1712,38 +1727,76 @@ export function createSideStoryPanel(deps) {
             </span>
             <i class="fa-solid fa-trash-can novel-ss-import-preview-del" title="删除此条"></i>
           </div>
-          <textarea class="novel-ss-edit-input novel-ss-import-preview-text" rows="6" spellcheck="false"></textarea>`;
-        const ta = row.querySelector(".novel-ss-import-preview-text");
-        ta.value = item.text;
-        ta.addEventListener("input", () => {
-          item.text = ta.value;
-          // 内容改动会改变查重统计，刷新确认按钮
-          updateConfirmBtn();
-        });
-        const navBtns = row.querySelectorAll(
-          ".novel-ss-import-preview-nav-btn",
-        );
-        navBtns[0].addEventListener("click", () => {
-          if (activePreviewPage <= 0) return;
-          activePreviewPage -= 1;
-          renderPreview();
-        });
-        navBtns[1].addEventListener("click", () => {
-          if (activePreviewPage >= previewItems.length - 1) return;
-          activePreviewPage += 1;
-          renderPreview();
-        });
-        row
-          .querySelector(".novel-ss-import-preview-del")
-          .addEventListener("click", () => {
-            previewItems.splice(activePreviewPage, 1);
-            if (activePreviewPage >= previewItems.length) {
-              activePreviewPage = Math.max(0, previewItems.length - 1);
-            }
+          <div class="novel-ss-import-preview-field-row">
+            <label class="novel-ss-import-preview-label2">名称（留空自动命名「未命名-N」）</label>
+            <input type="text" class="novel-ss-edit-input novel-ss-import-preview-name" placeholder="可选" autocomplete="off" />
+          </div>
+          <div class="novel-ss-import-preview-field-row">
+            <label class="novel-ss-import-preview-label2">内容</label>
+            <textarea class="novel-ss-edit-input novel-ss-import-preview-text" rows="6" spellcheck="false"></textarea>
+          </div>
+          <div class="novel-ss-import-preview-field-row">
+            <label class="novel-ss-import-preview-label2">标签</label>
+            <div class="novel-ss-cmd-tag-list novel-ss-import-preview-tags"></div>
+          </div>`;
+      const nameInput = row.querySelector(".novel-ss-import-preview-name");
+      nameInput.value = item.name || "";
+      nameInput.addEventListener("input", () => {
+        item.name = nameInput.value;
+      });
+      const ta = row.querySelector(".novel-ss-import-preview-text");
+      ta.value = item.text;
+      ta.addEventListener("input", () => {
+        item.text = ta.value;
+        // 内容改动会改变查重统计，刷新确认按钮
+        updateConfirmBtn();
+      });
+      // 标签多选行（点击 toggle 当前条目的 tagIds）
+      const tagList = row.querySelector(".novel-ss-import-preview-tags");
+      if (!tags.length) {
+        tagList.innerHTML =
+          '<div class="novel-ss-empty">暂无标签，可稍后在「管理标签」中创建</div>';
+      } else {
+        tags.forEach((tag) => {
+          const trow = document.createElement("div");
+          const on = (item.tagIds || []).includes(tag.id);
+          trow.className =
+            "novel-ss-cmd-tag-row" + (on ? " novel-ss-cmd-tag-on" : "");
+          trow.innerHTML = `
+              <i class="${on ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-tag-check"></i>
+              <span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>`;
+          trow.addEventListener("click", () => {
+            const idx = item.tagIds.indexOf(tag.id);
+            if (idx >= 0) item.tagIds.splice(idx, 1);
+            else item.tagIds.push(tag.id);
             renderPreview();
           });
-        previewBox.appendChild(row);
+          tagList.appendChild(trow);
+        });
       }
+      const navBtns = row.querySelectorAll(
+        ".novel-ss-import-preview-nav-btn",
+      );
+      navBtns[0].addEventListener("click", () => {
+        if (activePreviewPage <= 0) return;
+        activePreviewPage -= 1;
+        renderPreview();
+      });
+      navBtns[1].addEventListener("click", () => {
+        if (activePreviewPage >= previewItems.length - 1) return;
+        activePreviewPage += 1;
+        renderPreview();
+      });
+      row
+        .querySelector(".novel-ss-import-preview-del")
+        .addEventListener("click", () => {
+          previewItems.splice(activePreviewPage, 1);
+          if (activePreviewPage >= previewItems.length) {
+            activePreviewPage = Math.max(0, previewItems.length - 1);
+          }
+          renderPreview();
+        });
+      previewBox.appendChild(row);
       updateConfirmBtn();
     }
 
@@ -1850,9 +1903,17 @@ export function createSideStoryPanel(deps) {
           continue; // 同一批内去重
         }
         addedTexts.add(t);
-        // addFromMessage：自动查重 + 自动命名为「未命名-N」
-        if (commandLib.addFromMessage(t, {})) added += 1;
-        else skipped += 1;
+        // addFromMessage：自动查重；名称留空自动命名「未命名-N」；透传预览页选择的标签
+        if (
+          commandLib.addFromMessage(t, {
+            name: String(item.name || "").trim(),
+            tagIds: item.tagIds || [],
+          })
+        ) {
+          added += 1;
+        } else {
+          skipped += 1;
+        }
       }
       toast(
         `导入完成：新增 ${added} 条${skipped > 0 ? `（重复已跳过 ${skipped} 条）` : ""}`,

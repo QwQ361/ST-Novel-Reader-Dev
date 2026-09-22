@@ -3947,6 +3947,10 @@
   max-height: 96px;
   overflow-y: auto;
 }
+/* 未选择文件时整个列表区不留空隙（下方直接是分隔符模板） */
+.novel-ss-import-files:empty {
+  display: none;
+}
 .novel-ss-import-file-row {
   display: flex;
   align-items: center;
@@ -4247,6 +4251,25 @@
   font-size: 12px;
   font-family: inherit;
   line-height: 1.6;
+}
+/* 预览行内字段（名称 / 内容 / 标签），仿新建指令弹窗布局 */
+.novel-ss-import-preview-field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.novel-ss-import-preview-label2 {
+  font-size: 12px;
+  opacity: 0.75;
+  line-height: 1.4;
+}
+.novel-ss-import-preview-name {
+  width: 100%;
+}
+/* 标签多选列表：预览区自身已滚动，标签列表限高避免挤压底部按钮 */
+.novel-ss-import-preview-tags {
+  max-height: 22vh;
+  margin-bottom: 0;
 }
 /* 导入确认按钮禁用态 */
 .novel-ss-import-confirm:disabled {
@@ -4796,5 +4819,8 @@
   }
   .novel-ss-import-preview-text {
     min-height: 64px; /* 覆盖 96px */
+  }
+  .novel-ss-import-preview-tags {
+    max-height: 14vh; /* 极矮视口：标签列表进一步限高，避免挤压按钮 */
   }
 }
