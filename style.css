@@ -3768,14 +3768,20 @@
 }
 
 /* ---------- 新建指令弹窗 ---------- */
-.novel-ss-new-cmd-popup {
+/* 双类提高特异性：覆盖基础 .novel-ss-edit-popup 的整窗滚动（overflow-y: auto） */
+.novel-ss-edit-popup.novel-ss-new-cmd-popup {
   width: min(560px, 92vw);
+  max-height: 82vh;
+  overflow: hidden; /* 弹窗整体不滚动，仅标签区内部滚动 */
+  display: flex;
+  flex-direction: column;
 }
 .novel-ss-new-cmd-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 14px;
+  flex: none;
 }
 .novel-ss-new-cmd-title > span {
   font-size: 16px;
@@ -3804,14 +3810,35 @@
   + .novel-ss-edit-popup-field {
   margin-top: 12px;
 }
+/* 除标签区外字段不收缩，高度留给标签区弹性伸缩 */
+.novel-ss-new-cmd-popup > .novel-ss-edit-popup-field {
+  flex: none;
+}
+/* 标签字段区：弹性占满剩余空间，内部列表滚动，底部按钮固定可见 */
+/* 特异性需高于「.novel-ss-new-cmd-popup > .novel-ss-edit-popup-field { flex: none }」 */
+.novel-ss-new-cmd-popup > .novel-ss-new-cmd-tags-field {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.novel-ss-new-cmd-tags-field .novel-ss-cmd-tag-list {
+  flex: 1 1 auto;
+  min-height: 60px;
+  max-height: 36vh; /* 标签过多时仅在标签区滚动，不挤压按钮 */
+  margin-bottom: 0;
+}
 .novel-ss-new-cmd-text {
   resize: vertical;
   min-height: 120px;
+  max-height: 32vh;
   font-family: inherit;
   line-height: 1.5;
 }
 /* 底部按钮：清空弹窗（左侧弱化） / 取消 / 确认并新建下一个 / 确认并退出（主色） */
 .novel-ss-new-cmd-popup .novel-ss-edit-popup-actions {
+  flex: none;
   flex-wrap: wrap;
 }
 .novel-ss-new-cmd-clear {

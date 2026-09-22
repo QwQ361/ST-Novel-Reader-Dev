@@ -1346,7 +1346,7 @@ export function createSideStoryPanel(deps) {
           <label>内容</label>
           <textarea class="novel-ss-edit-input novel-ss-new-cmd-text" rows="6" placeholder="指令内容（必填）"></textarea>
         </div>
-        <div class="novel-ss-edit-popup-field">
+        <div class="novel-ss-edit-popup-field novel-ss-new-cmd-tags-field">
           <label>标签</label>
           <div class="novel-ss-cmd-tag-list novel-ss-new-cmd-tags"></div>
         </div>
