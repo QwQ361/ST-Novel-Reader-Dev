@@ -1543,7 +1543,7 @@ export function createSideStoryPanel(deps) {
           <label>分隔符（可多页，一页一个；导入与预览使用当前激活页的分隔符）</label>
           <div class="novel-ss-import-sep-tabs">
             <div class="novel-ss-import-sep-wrap">
-              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n；指令由符号包裹时可填如 ($指令)）"></textarea>
+              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n；指令被符号包裹时填如 ($指令)：前分隔符 ($、后分隔符 )，$ 属于前分隔符）"></textarea>
               <div class="novel-ss-import-sep-nav">
                 <button type="button" class="novel-ss-import-sep-prev" title="上一页分隔符"><i class="fa-solid fa-chevron-left"></i></button>
                 <span class="novel-ss-import-sep-count">1 / 1</span>
@@ -1557,7 +1557,7 @@ export function createSideStoryPanel(deps) {
             <input type="checkbox" class="novel-ss-import-keepsep-input" />
             <span>导入时保留分隔符（勾选后，切分出的每条指令内容中包含分隔符）</span>
           </label>
-          <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」），也可填 \n 按每行切分；指令被符号包裹时可用 $指令 标记前后包裹符（如 ($指令) 会提取每对括号内的内容）；一个文件可包含多条指令</div>
+          <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」），也可填 \n 按每行切分；指令被符号包裹时用 $指令 表示指令内容，如 ($指令) 中前分隔符为 ($、后分隔符为 )，$ 属于前分隔符不会进入指令内容；一个文件可包含多条指令</div>
         </div>
         <div class="novel-ss-edit-popup-field novel-ss-import-preview-field">
           <label class="novel-ss-import-preview-label">解析预览</label>
@@ -1873,7 +1873,7 @@ export function createSideStoryPanel(deps) {
    * - 空段（全空白）自动跳过
    * - keepSep=true：把分隔符补回每段（首段后补、末段前补、中间段前后都补）
    * @param {string} text 文件全文
-   * @param {string} sep 用户填写的分隔符（含 $指令 标记时视为前后包裹模式）
+   * @param {string} sep 用户填写的分隔符（含 $指令 标记时视为前后包裹模式：$ 归入前分隔符）
    * @param {boolean} [keepSep] 是否保留分隔符（默认 false）
    * @returns {string[]} 切分后的指令数组（trim 后）
    */
@@ -1899,13 +1899,16 @@ export function createSideStoryPanel(deps) {
     }
     // 归一化：真实换行 / \r\n / 字面 \n 统一为 \n；不 trim 首尾（避免换行分隔符被吞）
     const normalized = raw.replace(/\r\n/g, "\n").replace(/\\n/g, "\n");
-    // —— 前后包裹模式：分隔符中含 $指令 标记（如「($指令)」= 指令被 ( 与 ) 包裹）——
+    // —— 前后包裹模式：分隔符中含 $指令 标记（如「($指令)」）——
+    // 语义：$ 属于前分隔符。($指令) = 前分隔符 ($、后分隔符 )、「指令」指代指令内容。
     const marker = "$指令";
     const mi = normalized.indexOf(marker);
     if (mi >= 0) {
-      const prefix = normalized.slice(0, mi);
+      // $ 归入前分隔符：前分隔符 = 标记前内容 + "$"，后分隔符 = 标记后内容
+      const prefix = normalized.slice(0, mi) + "$";
       const suffix = normalized.slice(mi + marker.length);
-      if (prefix || suffix) {
+      // 前后包裹符都非空才进入包裹模式（仅填「$指令」无后包裹符时落到普通分隔符逻辑）
+      if (prefix && suffix) {
         const re = new RegExp(
           escapeRegExp(prefix) + "([\\s\\S]*?)" + escapeRegExp(suffix),
           "g",
