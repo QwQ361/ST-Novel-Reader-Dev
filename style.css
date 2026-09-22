@@ -4117,12 +4117,6 @@
     transparent
   );
 }
-/* 分隔符提示 */
-.novel-ss-import-hint {
-  font-size: 11px;
-  opacity: 0.55;
-  line-height: 1.5;
-}
 /* 解析预览区：弹性占满剩余空间，内部滚动 */
 .novel-ss-import-popup > .novel-ss-import-preview-field {
   flex: 1 1 auto;

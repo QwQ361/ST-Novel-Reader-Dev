@@ -1543,7 +1543,7 @@ export function createSideStoryPanel(deps) {
           <label>分隔符（可多页，一页一个；导入与预览使用当前激活页的分隔符）</label>
           <div class="novel-ss-import-sep-tabs">
             <div class="novel-ss-import-sep-wrap">
-              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n；指令被符号包裹时填如 ($指令)：前分隔符 ($、后分隔符 )，$ 属于前分隔符）"></textarea>
+              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（「指令」指代的是解析的小剧场指令，分隔符用于解析文件内容）"></textarea>
               <div class="novel-ss-import-sep-nav">
                 <button type="button" class="novel-ss-import-sep-prev" title="上一页分隔符"><i class="fa-solid fa-chevron-left"></i></button>
                 <span class="novel-ss-import-sep-count">1 / 1</span>
@@ -1557,7 +1557,6 @@ export function createSideStoryPanel(deps) {
             <input type="checkbox" class="novel-ss-import-keepsep-input" />
             <span>导入时保留分隔符（勾选后，切分出的每条指令内容中包含分隔符）</span>
           </label>
-          <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」），也可填 \n 按每行切分；指令被符号包裹时用 $指令 表示指令内容，如 ($指令) 中前分隔符为 ($、后分隔符为 )，$ 属于前分隔符不会进入指令内容；一个文件可包含多条指令</div>
         </div>
         <div class="novel-ss-edit-popup-field novel-ss-import-preview-field">
           <label class="novel-ss-import-preview-label">解析预览</label>
