@@ -1515,13 +1515,13 @@ export function createSideStoryPanel(deps) {
           <button type="button" class="novel-ss-import-pick">选择 txt 文件</button>
         </div>
         <div class="novel-ss-edit-popup-field">
-          <label>分隔符（可选，留空则每行一条指令）</label>
-          <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令）"></textarea>
+          <label>分隔符（可选，留空则整个文件内容作为一条指令导入）</label>
+          <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n）"></textarea>
           <label class="novel-ss-import-keepsep">
             <input type="checkbox" class="novel-ss-import-keepsep-input" />
             <span>导入时保留分隔符（勾选后，切分出的每条指令内容中包含分隔符）</span>
           </label>
-          <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」）；文件内容按此分隔符切分为多条指令，一个文件可包含多条</div>
+          <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」），也可填 \n 按每行切分；文件内容按此分隔符切分为多条指令，一个文件可包含多条</div>
         </div>
         <div class="novel-ss-edit-popup-field novel-ss-import-preview-field">
           <label class="novel-ss-import-preview-label">解析预览</label>
@@ -1689,7 +1689,8 @@ export function createSideStoryPanel(deps) {
         for (const part of p.parts) {
           if (addedTexts.has(part)) continue; // 同一批内去重
           addedTexts.add(part);
-          if (commandLib.createCommand(part, {})) added += 1;
+          // addFromMessage：自动查重 + 自动命名为「未命名-N」
+          if (commandLib.addFromMessage(part, {})) added += 1;
         }
       }
       const skipped = previews.reduce((n, p) => n + p.parts.length, 0) - added;
@@ -1705,7 +1706,8 @@ export function createSideStoryPanel(deps) {
 
   /**
    * 按分隔符切分文本为多条指令。
-   * - 分隔符留空 → 每行一条指令
+   * - 分隔符完全空白（未填写）→ 整个文件内容作为一条指令导入（不自动按行切分）。
+   *   例外：用户显式输入了换行（真实换行或字面 \n）→ 按行切分（用户自可控）
    * - 分隔符可跨多行（如 "---\n指令"，用户输入的真实换行或字面 \n 均可）
    * - 分隔符未命中 → 整段退化为一条指令
    * - 空段（全空白）自动跳过
@@ -1717,22 +1719,22 @@ export function createSideStoryPanel(deps) {
    */
   function splitBySeparator(text, sep, keepSep) {
     const src = String(text || "");
-    const raw = String(sep || "").trim();
-    if (!raw) {
-      // 无分隔符：每行一条指令
-      return src
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .filter(Boolean);
+    const raw = String(sep || "");
+    // 分隔符完全空白（未填写任何有效内容）
+    if (!raw.trim()) {
+      // 用户显式输入了换行（真实换行或字面 \n）→ 按行切分
+      if (/[\r\n]|\\n/.test(raw)) {
+        return src
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      // 否则：整个文件内容作为一条指令导入
+      const t = src.trim();
+      return t ? [t] : [];
     }
-    // 分隔符保留原样（含真实换行）参与切分；同时兼容用户用字面 \n 写换行
-    const normalized = raw.replace(/\r\n/g, "\n").replace(/\\n/g, "\n").trim();
-    if (!normalized) {
-      return src
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
+    // 归一化：真实换行 / \r\n / 字面 \n 统一为 \n；不 trim 首尾（避免换行分隔符被吞）
+    const normalized = raw.replace(/\r\n/g, "\n").replace(/\\n/g, "\n");
     const parts = src.split(normalized);
     if (parts.length === 1) {
       // 分隔符未命中：退化为整段一条指令
