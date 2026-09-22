@@ -2924,6 +2924,8 @@ body.novel-theme-ocean {
 }
 
 /* ---------- 输入框：指令库入口按钮 ---------- */
+/* 注意：该按钮位于 ST 聊天输入框工具行，属酒馆界面而非番外指令库面板，
+   故始终跟随酒馆主题（--SmartThemeBodyColor），不受阅读器内置主题 body class 影响 */
 .novel-side-story-lib-btn {
   display: inline-flex;
   align-items: center;
@@ -2932,7 +2934,7 @@ body.novel-theme-ocean {
   height: 34px;
   border-radius: 8px;
   cursor: pointer;
-  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  color: var(--SmartThemeBodyColor, #ddd);
   opacity: 0.8;
   transition:
     background 0.15s ease,
@@ -2943,7 +2945,7 @@ body.novel-theme-ocean {
   opacity: 1;
   background: color-mix(
     in srgb,
-    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 12%,
+    var(--SmartThemeBodyColor, #ddd) 12%,
     transparent
   );
 }
