@@ -1488,31 +1488,243 @@ export function createSideStoryPanel(deps) {
     render();
   }
 
+  /**
+   * 从 txt 导入指令（弹窗模式）。
+   * - 支持一次选择多个 txt 文件
+   * - 支持填写分隔符：文件内容按分隔符切分为多条指令（每条指令一段，空段自动跳过）
+   * - 分隔符留空 → 按「每行一条指令」导入（兼容原行为）
+   * - 确认后自动跳过重复内容
+   */
   function promptImportTxt() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".txt,text/plain";
-    input.addEventListener("change", () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const text = String(reader.result || "");
-        const lines = text
-          .split(/\r?\n/)
-          .map((s) => s.trim())
-          .filter(Boolean);
-        let added = 0;
-        for (const line of lines) {
-          const cmd = commandLib.createCommand(line, {});
-          if (cmd) added += 1;
+    const files = [];
+    let previews = [];
+    let separators = "";
+
+    const overlay = document.createElement("div");
+    overlay.className = "novel-ss-edit-popup-overlay";
+    overlay.innerHTML = `
+      <div class="novel-ss-edit-popup novel-ss-import-popup">
+        <div class="novel-ss-import-title">
+          <span>从 txt 导入指令</span>
+          <i class="fa-solid fa-xmark novel-ss-import-close" title="关闭"></i>
+        </div>
+        <div class="novel-ss-edit-popup-field">
+          <label>选择文件（可多选）</label>
+          <div class="novel-ss-import-files"></div>
+          <button type="button" class="novel-ss-import-pick">选择 txt 文件</button>
+        </div>
+        <div class="novel-ss-edit-popup-field">
+          <label>分隔符（可选，留空则每行一条指令）</label>
+          <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令）"></textarea>
+          <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」）；文件内容按此分隔符切分为多条指令，一个文件可包含多条</div>
+        </div>
+        <div class="novel-ss-edit-popup-field novel-ss-import-preview-field">
+          <label class="novel-ss-import-preview-label">解析预览</label>
+          <div class="novel-ss-import-preview"></div>
+        </div>
+        <div class="novel-ss-edit-popup-actions">
+          <button class="novel-ss-edit-popup-cancel">取消</button>
+          <button class="novel-ss-edit-popup-confirm novel-ss-import-confirm">导入</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const filesBox = overlay.querySelector(".novel-ss-import-files");
+    const sepInput = overlay.querySelector(".novel-ss-import-sep");
+    const previewBox = overlay.querySelector(".novel-ss-import-preview");
+    const previewLabel = overlay.querySelector(
+      ".novel-ss-import-preview-label",
+    );
+    const confirmBtn = overlay.querySelector(".novel-ss-import-confirm");
+
+    /** 计算切分结果（带缓存：同一份文本 + 同一分隔符只切一次） */
+    const splitCache = new Map();
+    function computePreviews() {
+      separators = sepInput.value;
+      previews = [];
+      for (const f of files) {
+        const key = f.text + "\u0000" + separators;
+        let parts = splitCache.get(key);
+        if (!parts) {
+          parts = splitBySeparator(f.text, separators);
+          splitCache.set(key, parts);
         }
-        toast(`导入完成：新增 ${added} 条（重复已跳过）`);
-        render();
-      };
-      reader.readAsText(file);
+        previews.push({ file: f, parts });
+      }
+      renderPreview();
+    }
+
+    /** 渲染文件列表与解析预览 */
+    function renderPreview() {
+      // 文件列表
+      filesBox.innerHTML = "";
+      if (!files.length) {
+        filesBox.innerHTML = '<div class="novel-ss-empty">尚未选择文件</div>';
+      } else {
+        files.forEach((f, i) => {
+          const row = document.createElement("div");
+          row.className = "novel-ss-import-file-row";
+          row.innerHTML = `
+            <span class="novel-ss-import-file-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+            <span class="novel-ss-import-file-meta">${f.text.length} 字符</span>
+            <i class="fa-solid fa-xmark novel-ss-import-file-del" title="移除"></i>`;
+          row
+            .querySelector(".novel-ss-import-file-del")
+            .addEventListener("click", () => {
+              files.splice(i, 1);
+              splitCache.clear();
+              computePreviews();
+            });
+          filesBox.appendChild(row);
+        });
+      }
+      // 预览
+      const total = previews.reduce((n, p) => n + p.parts.length, 0);
+      previewLabel.textContent = `解析预览（共 ${total} 条指令）`;
+      previewBox.innerHTML = "";
+      if (!files.length) {
+        previewBox.innerHTML =
+          '<div class="novel-ss-empty">选择文件后在此预览解析结果</div>';
+      } else if (total === 0) {
+        previewBox.innerHTML =
+          '<div class="novel-ss-empty">未解析出任何指令，请检查分隔符</div>';
+      } else {
+        previews.forEach(({ file, parts }) => {
+          parts.forEach((part, idx) => {
+            const row = document.createElement("div");
+            row.className = "novel-ss-import-preview-row";
+            row.innerHTML = `
+              <span class="novel-ss-import-preview-idx">${escapeHtml(file.name)} #${idx + 1}</span>
+              <span class="novel-ss-import-preview-text">${escapeHtml(part)}</span>`;
+            previewBox.appendChild(row);
+          });
+        });
+      }
+      // 确认按钮可用态
+      const dup = total - countNewUnique();
+      confirmBtn.disabled = total === 0;
+      confirmBtn.textContent = `导入 ${total} 条${dup > 0 ? `（${dup} 条重复将跳过）` : ""}`;
+    }
+
+    /** 统计最终真正会新增的数量（去除重复后） */
+    function countNewUnique() {
+      const texts = new Set();
+      let n = 0;
+      for (const p of previews) {
+        for (const part of p.parts) {
+          if (!texts.has(part)) {
+            texts.add(part);
+            if (!commandLib.existsByText(part)) n += 1;
+          }
+        }
+      }
+      return n;
+    }
+
+    // 选择文件（多选）
+    overlay
+      .querySelector(".novel-ss-import-pick")
+      .addEventListener("click", () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".txt,text/plain";
+        input.multiple = true;
+        input.addEventListener("change", () => {
+          const picked = Array.from(input.files || []);
+          if (!picked.length) return;
+          let remaining = picked.length;
+          picked.forEach((file) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const text = String(reader.result || "").replace(/^\uFEFF/, "");
+              files.push({ name: file.name, text });
+              remaining -= 1;
+              if (remaining === 0) {
+                splitCache.clear();
+                computePreviews();
+              }
+            };
+            reader.readAsText(file);
+          });
+        });
+        input.click();
+      });
+
+    // 分隔符输入 → 实时重算
+    sepInput.addEventListener("input", () => {
+      splitCache.clear();
+      computePreviews();
     });
-    input.click();
+
+    // 取消 / 关闭
+    const close = () => overlay.remove();
+    overlay
+      .querySelector(".novel-ss-edit-popup-cancel")
+      .addEventListener("click", close);
+    overlay
+      .querySelector(".novel-ss-import-close")
+      .addEventListener("click", close);
+    overlay.addEventListener("click", (e) => {
+      if (e.target.classList.contains("novel-ss-edit-popup-overlay")) close();
+    });
+
+    // 确认导入
+    confirmBtn.addEventListener("click", () => {
+      const addedTexts = new Set();
+      let added = 0;
+      for (const p of previews) {
+        for (const part of p.parts) {
+          if (addedTexts.has(part)) continue; // 同一批内去重
+          addedTexts.add(part);
+          if (commandLib.createCommand(part, {})) added += 1;
+        }
+      }
+      const skipped = previews.reduce((n, p) => n + p.parts.length, 0) - added;
+      toast(
+        `导入完成：新增 ${added} 条${skipped > 0 ? `（重复已跳过 ${skipped} 条）` : ""}`,
+      );
+      overlay.remove();
+      render();
+    });
+
+    sepInput.focus();
+  }
+
+  /**
+   * 按分隔符切分文本为多条指令。
+   * - 分隔符留空 → 每行一条指令
+   * - 分隔符可跨多行（如 "---\n指令"，用户输入的真实换行或字面 \n 均可）
+   * - 分隔符未命中 → 整段退化为一条指令
+   * - 空段（全空白）自动跳过
+   * @param {string} text 文件全文
+   * @param {string} sep 用户填写的分隔符
+   * @returns {string[]} 切分后的指令数组（trim 后）
+   */
+  function splitBySeparator(text, sep) {
+    const src = String(text || "");
+    const raw = String(sep || "").trim();
+    if (!raw) {
+      // 无分隔符：每行一条指令
+      return src
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    // 分隔符保留原样（含真实换行）参与切分；同时兼容用户用字面 \n 写换行
+    const normalized = raw.replace(/\r\n/g, "\n").replace(/\\n/g, "\n").trim();
+    if (!normalized) {
+      return src
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    const parts = src.split(normalized);
+    if (parts.length === 1) {
+      // 分隔符未命中：退化为整段一条指令
+      const t = src.trim();
+      return t ? [t] : [];
+    }
+    return parts.map((s) => s.trim()).filter(Boolean);
   }
 
   // ---------------- 面板整体渲染 ----------------
