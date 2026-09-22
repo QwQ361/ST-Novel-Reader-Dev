@@ -1887,9 +1887,13 @@ export function createSideStoryPanel(deps) {
   }
 
   function splitBySeparator(text, sep, keepSep) {
-    const src = String(text || "");
+    // 归一化文件文本换行（CRLF/CR → LF）：txt 文件常为 Windows CRLF，
+    // 空行是 \r\n\r\n，若直接用 \n\n 切分会匹配不到，导致整段退回一条
+    const src = String(text || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
     const raw = String(sep || "");
-    // 归一化：真实换行 / \r\n / 字面 \n 统一为 \n；不 trim 首尾（避免换行分隔符被吞）
+    // 归一化分隔符：真实换行 / \r\n / 字面 \n 统一为 \n；不 trim 首尾（避免换行分隔符被吞）
     const normalized = raw.replace(/\r\n/g, "\n").replace(/\\n/g, "\n");
     // —— 解析模板：「指令」是占位符，代表指令内容的位置 ——
     const marker = "指令";
