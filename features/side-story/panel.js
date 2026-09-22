@@ -1493,8 +1493,9 @@ export function createSideStoryPanel(deps) {
    * - 支持一次选择多个 txt 文件
    * - 分隔符支持多页（每页一个分隔符，仅当前激活页生效，可新增/删除页）
    * - 解析预览分页：一页一条指令，可编辑内容、可删除
-   * - 分隔符留空 → 整个文件内容作为一条指令导入；分隔符按填写内容字面切分
-   *   （填 \n 按行切分、填 \n\n 按两个连续换行切分、填 "---\n指令" 按该序列切分）
+   * - 分隔符为模板：必须含「指令」占位符才会解析
+   *   （「指令」代表指令内容位置；填「\n指令」按换行切分、填「---\n指令」按「---\n」切分、
+   *   填「($指令)」按前后包裹提取；不含「指令」或留空则整段一条指令导入）
    * - 确认后自动跳过重复内容
    */
   function promptImportTxt() {
@@ -1541,10 +1542,10 @@ export function createSideStoryPanel(deps) {
           <div class="novel-ss-import-files"></div>
         </div>
         <div class="novel-ss-edit-popup-field">
-          <label>分隔符（可多页，一页一个；导入与预览使用当前激活页的分隔符）</label>
+          <label>分隔符模板（可多页，一页一个；「指令」表示指令内容的位置，填入「指令」才会解析）</label>
           <div class="novel-ss-import-sep-tabs">
             <div class="novel-ss-import-sep-wrap">
-              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（「指令」指代的是解析的小剧场指令，分隔符用于解析文件内容）"></textarea>
+              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（在分隔符中写入「指令」表示指令内容的位置，填写后才会解析文件；&#10;如填两行「换行+指令」表示按行切分，填「---换行+指令」表示按「---换行」切分）"></textarea>
               <div class="novel-ss-import-sep-nav">
                 <button type="button" class="novel-ss-import-sep-prev" title="上一页分隔符"><i class="fa-solid fa-chevron-left"></i></button>
                 <span class="novel-ss-import-sep-count">1 / 1</span>
@@ -1865,16 +1866,19 @@ export function createSideStoryPanel(deps) {
   }
 
   /**
-   * 按分隔符切分文本为多条指令。
-   * - 分隔符完全未填写（不含任何字符）→ 整个文件内容作为一条指令导入。
-   * - 分隔符按用户填写内容（归一化后）字面切分：
-   *   填 \n → 按单个换行（即按行）切分；填 \n\n → 按两个连续换行切分；
-   *   填 "---\n指令"（跨多行序列）→ 按该序列切分
-   * - 分隔符未命中 → 整段退化为一条指令
+   * 按「分隔符模板」解析文件为多条指令。
+   * - 「指令」二字是占位符，代表指令内容的位置；只有模板中填入「指令」才会解析。
+   * - 模板为「前缀 + 指令 + 后缀」形式：
+   *   · 前缀与后缀都非空 → 包裹模式：在文件中匹配「前缀…后缀」并取出中间内容作为指令
+   *     （如「($指令)」→ 前缀 "($"、后缀 ")"，$ 属于前缀不会进入指令内容）
+   *   · 前缀为空、后缀非空（如「\n指令」「---\n指令」）→ 普通分隔符模式：实际分隔符即前缀（"\n"、"---\n"）
+   *   · 前缀后缀都为空（如只填「指令」）→ 整个文件内容作为一条指令导入
+   * - 模板中不含「指令」→ 整个文件内容作为一条指令导入（不按字面切分）
+   * - 模板未命中 → 整段退化为一条指令
    * - 空段（全空白）自动跳过
-   * - keepSep=true：把分隔符补回每段（首段后补、末段前补、中间段前后都补）
+   * - keepSep=true：把实际分隔符（模板前缀）补回每段（首段后补、末段前补、中间段前后都补）
    * @param {string} text 文件全文
-   * @param {string} sep 用户填写的分隔符（含 $指令 标记时视为前后包裹模式：$ 归入前分隔符）
+   * @param {string} sep 用户填写的分隔符模板（必须含「指令」占位符才会解析）
    * @param {boolean} [keepSep] 是否保留分隔符（默认 false）
    * @returns {string[]} 切分后的指令数组（trim 后）
    */
@@ -1885,69 +1889,66 @@ export function createSideStoryPanel(deps) {
   function splitBySeparator(text, sep, keepSep) {
     const src = String(text || "");
     const raw = String(sep || "");
-    // 分隔符完全未填写（不含任何字符）→ 整个文件内容作为一条指令导入
-    if (!raw) {
+    // 归一化：真实换行 / \r\n / 字面 \n 统一为 \n；不 trim 首尾（避免换行分隔符被吞）
+    const normalized = raw.replace(/\r\n/g, "\n").replace(/\\n/g, "\n");
+    // —— 解析模板：「指令」是占位符，代表指令内容的位置 ——
+    const marker = "指令";
+    const mi = normalized.indexOf(marker);
+    if (mi < 0) {
+      // 模板中不含「指令」→ 不解析，整个文件内容作为一条指令导入
       const t = src.trim();
       return t ? [t] : [];
     }
-    // 归一化：真实换行 / \r\n / 字面 \n 统一为 \n；不 trim 首尾（避免换行分隔符被吞）
-    const normalized = raw.replace(/\r\n/g, "\n").replace(/\\n/g, "\n");
-    // —— 前后包裹模式：分隔符中含 $指令 标记（如「($指令)」）——
-    // 语义：$ 属于前分隔符。($指令) = 前分隔符 ($、后分隔符 )、「指令」指代指令内容。
-    const marker = "$指令";
-    const mi = normalized.indexOf(marker);
-    if (mi >= 0) {
-      // $ 归入前分隔符：前分隔符 = 标记前内容 + "$"，后分隔符 = 标记后内容
-      const prefix = normalized.slice(0, mi) + "$";
-      const suffix = normalized.slice(mi + marker.length);
-      // 前后包裹符都非空才进入包裹模式（仅填「$指令」无后包裹符时落到普通分隔符逻辑）
-      if (prefix && suffix) {
-        const re = new RegExp(
-          escapeRegExp(prefix) + "([\\s\\S]*?)" + escapeRegExp(suffix),
-          "g",
-        );
-        const out = [];
-        let m;
-        while ((m = re.exec(src)) !== null) {
-          const content = m[1];
-          if (keepSep) {
-            // 保留包裹符：原样补回
-            out.push(prefix + content + suffix);
-          } else {
-            const t = content.trim();
-            if (t) out.push(t);
-          }
-        }
-        if (out.length > 0) return out;
-        // 未匹配到任何包裹对 → 整段一条指令
+    const prefix = normalized.slice(0, mi); // 「指令」之前的内容（实际分隔符 / 包裹前缀）
+    const suffix = normalized.slice(mi + marker.length); // 「指令」之后的内容（包裹后缀）
+    if (!prefix) {
+      // 前缀为空：整段作为一条指令导入（「指令」前没有任何内容可切分）
+      const t = src.trim();
+      return t ? [t] : [];
+    }
+    if (!suffix) {
+      // 后缀为空 → 普通分隔符模式：以「指令」之前的内容（前缀）作为字面分隔符切分
+      const parts = src.split(prefix);
+      if (parts.length === 1) {
+        // 分隔符未命中：退化为整段一条指令
         const t = src.trim();
         return t ? [t] : [];
       }
-      // 前后包裹符都为空（如只填「$指令」）→ 落到普通分隔符逻辑，等同去掉标记
+      if (keepSep) {
+        // 保留分隔符：把分隔符（前缀）补回每段（首段后补、末段前补、中间段前后都补）
+        const out = [];
+        parts.forEach((part, i) => {
+          const seg = part.trim();
+          if (!seg) return;
+          if (i === 0) out.push(seg + "\n" + prefix);
+          else if (i === parts.length - 1) out.push(prefix + "\n" + seg);
+          else out.push(prefix + "\n" + seg + "\n" + prefix);
+        });
+        return out;
+      }
+      return parts.map((s) => s.trim()).filter(Boolean);
     }
-    // 普通分隔符切分：以用户填写的（归一化后）内容字面切分
-    // - 填 \n → 按单个换行（即按行）切分
-    // - 填 \n\n → 按两个连续换行切分（不再被硬编码成按单个换行切分）
-    // - 分隔符为纯空白（如单空格）时同样按字面切分
-    const parts = src.split(normalized);
-    if (parts.length === 1) {
-      // 分隔符未命中：退化为整段一条指令
-      const t = src.trim();
-      return t ? [t] : [];
+    // 前缀与后缀都非空 → 包裹模式：匹配「前缀…后缀」取出中间内容作为指令
+    const re = new RegExp(
+      escapeRegExp(prefix) + "([\\s\\S]*?)" + escapeRegExp(suffix),
+      "g",
+    );
+    const out = [];
+    let m;
+    while ((m = re.exec(src)) !== null) {
+      const content = m[1];
+      if (keepSep) {
+        // 保留包裹符：原样补回
+        out.push(prefix + content + suffix);
+      } else {
+        const t = content.trim();
+        if (t) out.push(t);
+      }
     }
-    if (keepSep) {
-      // 保留分隔符：把分隔符补回每段（首段后补、末段前补、中间段前后都补）
-      const out = [];
-      parts.forEach((part, i) => {
-        const seg = part.trim();
-        if (!seg) return;
-        if (i === 0) out.push(seg + "\n" + normalized);
-        else if (i === parts.length - 1) out.push(normalized + "\n" + seg);
-        else out.push(normalized + "\n" + seg + "\n" + normalized);
-      });
-      return out;
-    }
-    return parts.map((s) => s.trim()).filter(Boolean);
+    if (out.length > 0) return out;
+    // 未匹配到任何包裹对 → 整段一条指令
+    const t = src.trim();
+    return t ? [t] : [];
   }
 
   // ---------------- 面板整体渲染 ----------------
