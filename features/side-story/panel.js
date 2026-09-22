@@ -1500,9 +1500,29 @@ export function createSideStoryPanel(deps) {
     const files = [];
     let previewItems = []; // { file, origIdx, text } 拍平后的预览指令（text 可编辑）
     let activePreviewPage = 0;
-    let sepPages = [{ value: "" }]; // 分隔符分页
+    // 分隔符分页（localStorage 持久化：关闭弹窗后下次打开自动回填）
+    let sepPages = [{ value: "" }];
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem("novel-ss-import-separators") || "null",
+      );
+      if (
+        Array.isArray(saved) &&
+        saved.length > 0 &&
+        saved.every((p) => p && typeof p.value === "string")
+      ) {
+        sepPages = saved.map((p) => ({ value: String(p.value) }));
+      }
+    } catch {
+      /* 忽略损坏数据 */
+    }
     let activeSepPage = 0;
     let keepSep = false;
+    try {
+      keepSep = localStorage.getItem("novel-ss-import-keepsep") === "1";
+    } catch {
+      /* 忽略 */
+    }
 
     const overlay = document.createElement("div");
     overlay.className = "novel-ss-edit-popup-overlay";
@@ -1776,25 +1796,45 @@ export function createSideStoryPanel(deps) {
       computePreviews();
     });
     keepSepInput.addEventListener("change", () => {
+      keepSep = keepSepInput.checked;
+      try {
+        localStorage.setItem("novel-ss-import-keepsep", keepSep ? "1" : "0");
+      } catch {
+        /* 忽略 */
+      }
       splitCache.clear();
       computePreviews();
     });
 
-    // 初始渲染：分隔符 tabs + 预览
+    // 初始渲染：回填持久化的分隔符 / keepSep，再渲染 tabs + 预览
+    sepInput.value = sepPages[activeSepPage].value;
+    keepSepInput.checked = keepSep;
     renderSepTabs();
     computePreviews();
 
-    // 取消 / 关闭
-    const close = () => overlay.remove();
+    // 取消 / 关闭（关闭前持久化分隔符与 keepSep，下次打开自动回填）
+    const persistSeparators = () => {
+      sepPages[activeSepPage] = { value: sepInput.value };
+      try {
+        localStorage.setItem(
+          "novel-ss-import-separators",
+          JSON.stringify(sepPages.map((p) => ({ value: p.value }))),
+        );
+      } catch {
+        /* 忽略 */
+      }
+    };
+    const close = () => {
+      persistSeparators();
+      overlay.remove();
+    };
     overlay
       .querySelector(".novel-ss-edit-popup-cancel")
       .addEventListener("click", close);
     overlay
       .querySelector(".novel-ss-import-close")
       .addEventListener("click", close);
-    overlay.addEventListener("click", (e) => {
-      if (e.target.classList.contains("novel-ss-edit-popup-overlay")) close();
-    });
+    // 点击弹窗以外的遮罩不关闭（用户要求），仅通过取消/关闭按钮或确认导入关闭
 
     // 确认导入（使用编辑后的 previewItems）
     confirmBtn.addEventListener("click", () => {
@@ -1816,6 +1856,7 @@ export function createSideStoryPanel(deps) {
       toast(
         `导入完成：新增 ${added} 条${skipped > 0 ? `（重复已跳过 ${skipped} 条）` : ""}`,
       );
+      persistSeparators();
       overlay.remove();
       render();
     });
