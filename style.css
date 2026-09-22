@@ -4023,92 +4023,84 @@
   line-height: 1.4;
   opacity: 0.85;
 }
-/* 分隔符分页 tabs */
+/* 分隔符分页：编辑框右下角导航条（<1/N> + 新增/删除） */
 .novel-ss-import-sep-tabs {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.novel-ss-import-sep-tabs-list {
+.novel-ss-import-sep-wrap {
+  position: relative;
+}
+.novel-ss-import-sep-wrap .novel-ss-import-sep {
+  padding-right: 84px; /* 为右下角导航条留出空间 */
+}
+.novel-ss-import-sep-nav {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
 }
-.novel-ss-import-sep-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 5px;
-  border: 1px solid
-    color-mix(
-      in srgb,
-      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
-      transparent
-    );
-  background: transparent;
-  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
-  font-size: 11px;
-  cursor: pointer;
-  opacity: 0.65;
-  transition:
-    background 0.12s ease,
-    opacity 0.12s ease,
-    border-color 0.12s ease;
-}
-.novel-ss-import-sep-tab:hover {
-  opacity: 1;
-  background: color-mix(
-    in srgb,
-    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
-    transparent
-  );
-}
-.novel-ss-import-sep-tab.active {
-  opacity: 1;
-  border-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
-  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
-  background: color-mix(
-    in srgb,
-    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 12%,
-    transparent
-  );
-}
-.novel-ss-import-sep-tab-del {
-  font-size: 10px;
-  opacity: 0.65;
-  padding: 1px;
-  border-radius: 3px;
-  cursor: pointer;
-}
-.novel-ss-import-sep-tab-del:hover {
-  opacity: 1;
-  color: var(--novel-danger, #e5484d);
-}
-.novel-ss-import-sep-tab-add {
+.novel-ss-import-sep-nav button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  border: 1px dashed
-    color-mix(
-      in srgb,
-      var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 60%,
-      transparent
-    );
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
   background: transparent;
-  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
-  font-size: 11px;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 10px;
   cursor: pointer;
-  transition: background 0.12s ease;
+  opacity: 0.7;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
 }
-.novel-ss-import-sep-tab-add:hover {
+.novel-ss-import-sep-nav button:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+    transparent
+  );
+}
+.novel-ss-import-sep-nav button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.novel-ss-import-sep-nav .novel-ss-import-sep-count {
+  min-width: 34px;
+  text-align: center;
+  font-size: 10px;
+  font-family: monospace;
+  opacity: 0.75;
+  line-height: 20px;
+}
+.novel-ss-import-sep-nav .novel-ss-import-sep-add {
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+.novel-ss-import-sep-nav .novel-ss-import-sep-del {
+  color: var(--novel-danger, #e5484d);
+}
+.novel-ss-import-sep-nav .novel-ss-import-sep-add:hover:not(:disabled) {
   background: color-mix(
     in srgb,
     var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 18%,
+    transparent
+  );
+}
+.novel-ss-import-sep-nav .novel-ss-import-sep-del:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--novel-danger, #e5484d) 18%,
     transparent
   );
 }
@@ -4778,13 +4770,15 @@
   .novel-ss-import-files {
     max-height: 64px; /* 覆盖 96px，让预览区有更多空间 */
   }
-  .novel-ss-import-sep-tabs-list {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 2px;
+  .novel-ss-import-sep-wrap .novel-ss-import-sep {
+    padding-right: 78px; /* 极矮视口下导航条更紧凑 */
   }
-  .novel-ss-import-sep-tab {
-    flex: none;
+  .novel-ss-import-sep-nav button {
+    width: 18px;
+    height: 18px;
+  }
+  .novel-ss-import-sep-nav .novel-ss-import-sep-count {
+    min-width: 30px;
   }
   .novel-ss-import-preview-text {
     min-height: 64px; /* 覆盖 96px */

@@ -1520,8 +1520,16 @@ export function createSideStoryPanel(deps) {
         <div class="novel-ss-edit-popup-field">
           <label>分隔符（可多页，一页一个；导入与预览使用当前激活页的分隔符）</label>
           <div class="novel-ss-import-sep-tabs">
-            <div class="novel-ss-import-sep-tabs-list"></div>
-            <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n）"></textarea>
+            <div class="novel-ss-import-sep-wrap">
+              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n）"></textarea>
+              <div class="novel-ss-import-sep-nav">
+                <button type="button" class="novel-ss-import-sep-prev" title="上一页分隔符"><i class="fa-solid fa-chevron-left"></i></button>
+                <span class="novel-ss-import-sep-count">1 / 1</span>
+                <button type="button" class="novel-ss-import-sep-next" title="下一页分隔符"><i class="fa-solid fa-chevron-right"></i></button>
+                <button type="button" class="novel-ss-import-sep-add" title="新增分隔符页"><i class="fa-solid fa-plus"></i></button>
+                <button type="button" class="novel-ss-import-sep-del" title="删除此页"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+            </div>
           </div>
           <label class="novel-ss-import-keepsep">
             <input type="checkbox" class="novel-ss-import-keepsep-input" />
@@ -1541,8 +1549,13 @@ export function createSideStoryPanel(deps) {
     document.body.appendChild(overlay);
 
     const filesBox = overlay.querySelector(".novel-ss-import-files");
-    const sepTabsBox = overlay.querySelector(".novel-ss-import-sep-tabs-list");
     const sepInput = overlay.querySelector(".novel-ss-import-sep");
+    const sepNav = overlay.querySelector(".novel-ss-import-sep-nav");
+    const sepPrevBtn = overlay.querySelector(".novel-ss-import-sep-prev");
+    const sepNextBtn = overlay.querySelector(".novel-ss-import-sep-next");
+    const sepCountEl = overlay.querySelector(".novel-ss-import-sep-count");
+    const sepAddBtn = overlay.querySelector(".novel-ss-import-sep-add");
+    const sepDelBtn = overlay.querySelector(".novel-ss-import-sep-del");
     const keepSepInput = overlay.querySelector(
       ".novel-ss-import-keepsep-input",
     );
@@ -1578,62 +1591,55 @@ export function createSideStoryPanel(deps) {
       renderPreview();
     }
 
-    /** 渲染分隔符分页 tabs（每页一个分隔符，仅当前激活页生效） */
+    /** 刷新分隔符分页导航条（<1/N> + 新增/删除/翻页，仅当前激活页生效） */
     function renderSepTabs() {
-      sepTabsBox.innerHTML = "";
-      sepPages.forEach((p, i) => {
-        const tab = document.createElement("button");
-        tab.type = "button";
-        tab.className =
-          "novel-ss-import-sep-tab" + (i === activeSepPage ? " active" : "");
-        tab.title = "分隔符页 " + (i + 1);
-        const span = document.createElement("span");
-        span.textContent = "分隔符 " + (i + 1);
-        tab.appendChild(span);
-        if (sepPages.length > 1) {
-          const del = document.createElement("i");
-          del.className = "fa-solid fa-xmark novel-ss-import-sep-tab-del";
-          del.title = "删除此页";
-          tab.appendChild(del);
-        }
-        tab.addEventListener("click", (e) => {
-          if (e.target.closest(".novel-ss-import-sep-tab-del")) {
-            sepPages.splice(i, 1);
-            if (activeSepPage >= sepPages.length) {
-              activeSepPage = sepPages.length - 1;
-            }
-            renderSepTabs();
-            sepInput.value = sepPages[activeSepPage].value;
-            splitCache.clear();
-            computePreviews();
-            return;
-          }
-          // 切换页：保存当前页 → 激活新页
-          sepPages[activeSepPage] = { value: sepInput.value };
-          activeSepPage = i;
-          renderSepTabs();
-          sepInput.value = sepPages[activeSepPage].value;
-          splitCache.clear();
-          computePreviews();
-        });
-        sepTabsBox.appendChild(tab);
-      });
-      const addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "novel-ss-import-sep-tab-add";
-      addBtn.title = "新增分隔符页";
-      addBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-      addBtn.addEventListener("click", () => {
-        sepPages[activeSepPage] = { value: sepInput.value };
-        sepPages.push({ value: "" });
-        activeSepPage = sepPages.length - 1;
-        renderSepTabs();
-        sepInput.value = "";
-        splitCache.clear();
-        computePreviews();
-      });
-      sepTabsBox.appendChild(addBtn);
+      sepCountEl.textContent = `${activeSepPage + 1} / ${sepPages.length}`;
+      sepPrevBtn.disabled = activeSepPage <= 0;
+      sepNextBtn.disabled = activeSepPage >= sepPages.length - 1;
+      // 仅 1 页时不提供删除
+      sepDelBtn.style.display = sepPages.length > 1 ? "" : "none";
+      sepNav.title = `分隔符页 ${activeSepPage + 1} / ${sepPages.length}`;
     }
+
+    /** 分隔符导航条事件（prev / next / add / del） */
+    sepPrevBtn.addEventListener("click", () => {
+      if (activeSepPage <= 0) return;
+      sepPages[activeSepPage] = { value: sepInput.value };
+      activeSepPage -= 1;
+      renderSepTabs();
+      sepInput.value = sepPages[activeSepPage].value;
+      splitCache.clear();
+      computePreviews();
+    });
+    sepNextBtn.addEventListener("click", () => {
+      if (activeSepPage >= sepPages.length - 1) return;
+      sepPages[activeSepPage] = { value: sepInput.value };
+      activeSepPage += 1;
+      renderSepTabs();
+      sepInput.value = sepPages[activeSepPage].value;
+      splitCache.clear();
+      computePreviews();
+    });
+    sepAddBtn.addEventListener("click", () => {
+      sepPages[activeSepPage] = { value: sepInput.value };
+      sepPages.push({ value: "" });
+      activeSepPage = sepPages.length - 1;
+      renderSepTabs();
+      sepInput.value = "";
+      splitCache.clear();
+      computePreviews();
+    });
+    sepDelBtn.addEventListener("click", () => {
+      if (sepPages.length <= 1) return;
+      sepPages.splice(activeSepPage, 1);
+      if (activeSepPage >= sepPages.length) {
+        activeSepPage = sepPages.length - 1;
+      }
+      renderSepTabs();
+      sepInput.value = sepPages[activeSepPage].value;
+      splitCache.clear();
+      computePreviews();
+    });
 
     /** 渲染文件列表与解析预览（分页：一页一条，可编辑/删除） */
     function renderPreview() {
