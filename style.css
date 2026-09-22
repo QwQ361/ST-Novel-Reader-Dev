@@ -4416,6 +4416,15 @@
   padding: 0 6px;
   line-height: 1.6;
 }
+/* 选择框尾部下拉 caret（指示可展开） */
+.novel-ss-batch-tag-picker-caret {
+  margin-left: auto;
+  font-size: 10px;
+  opacity: 0.5;
+  align-self: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
 /* 下拉面板：挂 overlay 下 fixed 定位，视口边缘自动翻转 */
 .novel-ss-batch-tag-dropdown {
   position: fixed;
@@ -4471,6 +4480,19 @@
 }
 .novel-ss-batch-tag-opt .novel-ss-tag-chip {
   cursor: pointer;
+}
+/* 逐一添加模式：已有标签置灰锁定（自动保留，不可取消） */
+.novel-ss-batch-tag-opt-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: rgba(0, 0, 0, 0.12);
+}
+.novel-ss-batch-tag-opt-locked:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+.novel-ss-batch-tag-opt-locked .novel-ss-batch-tag-opt-check,
+.novel-ss-batch-tag-opt-locked .novel-ss-tag-chip {
+  cursor: not-allowed;
 }
 
 /* ---------- 番外指令库：批量重命名弹窗（Promise 模式，参照 CFM） ---------- */

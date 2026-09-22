@@ -736,10 +736,12 @@ export function createSideStoryPanel(deps) {
 
   /**
    * 批量设置标签：为选中 N 条指令批量设置标签。
-   * 模仿批量重命名弹窗：操作类型支持「统一标签 / 逐个标签」两种模式。
-   * - 统一标签：选一个 tag + 添加/移除 → 全部选中指令生效
-   * - 逐个标签：每条指令一行「指令名 → 选择框」，点击选择框弹出 tag 下拉面板
+   * 模仿批量重命名弹窗：操作类型支持「统一标签 / 逐一替换标签 / 逐一添加标签」。
+   * - 统一标签：选多个 tag + 添加/覆盖/移除/清空 → 全部选中指令生效
+   * - 逐一替换标签：每条指令一行「指令名 → 选择框」，点击选择框弹出 tag 下拉面板
    *   （挂 overlay 定位避免被滚动裁剪），面板内多选勾选；确认后按行整体替换 tagIds
+   * - 逐一添加标签：同样的行式 UI，面板内原有标签置灰锁定（自动保留），
+   *   勾选要追加的标签；确认后并集追加（原有标签 + 新增所选）
    */
   function showBatchTagPopup() {
     const cmds = commandLib.listCommands();
@@ -762,7 +764,8 @@ export function createSideStoryPanel(deps) {
           <label>操作类型</label>
           <select class="novel-ss-edit-input novel-ss-batch-tag-mode">
             <option value="uniform">统一标签</option>
-            <option value="individual">逐个标签</option>
+            <option value="replace">逐一替换标签</option>
+            <option value="add">逐一添加标签</option>
           </select>
         </div>
         <div class="novel-ss-batch-tag-uniform">
@@ -864,133 +867,163 @@ export function createSideStoryPanel(deps) {
     actionSelect.addEventListener("change", updateActionUI);
     updateActionUI();
 
-    // ---- 逐个模式：每条指令一行（指令名 → 选择框 + 下拉面板） ----
+    // ---- 逐一模式：每条指令一行（指令名 → 选择框 + 下拉面板） ----
     // 模仿逐个重命名行布局；点击选择框弹出 tag 下拉面板（挂 overlay 定位，
-    // 避免被弹窗滚动裁剪），面板内多选勾选；确认后按行整体替换 tagIds。
-    const rowStates = []; // { id, cur: Set<tagId> }，供 finish 收集
+    // 避免被弹窗滚动裁剪），面板内多选勾选。
+    // 两种模式：replace 确认后整体替换 tagIds；add 确认后并集追加（保留原有）。
+    const rowStates = []; // { id, base: Set, cur: Set<tagId> }，供 finish 收集
     const closeAllDropdowns = []; // 每行 closeDropdown 收集，统一关闭
+    let currentIndivMode = "replace"; // 当前逐一模式（replace / add）
+    const indivLabel = overlay.querySelector(
+      ".novel-ss-batch-tag-individual-label",
+    );
 
-    if (!tags.length) {
-      indivListEl.innerHTML =
-        '<div class="novel-ss-empty">暂无标签，请先在「管理标签」中创建</div>';
-    }
-    ids.forEach((id) => {
-      const cmd = cmds[id];
-      if (!cmd) return;
-      const cur = new Set(cmd.tagIds || []);
-      const row = document.createElement("div");
-      row.className = "novel-ss-batch-tag-row novel-ss-batch-tag-row-indiv";
-      row.dataset.id = id;
-      // 指令名（左）
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "novel-ss-batch-tag-cmd-name";
-      nameSpan.textContent = cmd.name || cmd.text || "（未命名）";
-      nameSpan.title = cmd.name || cmd.text || "";
-      // 箭头
-      const arrow = document.createElement("span");
-      arrow.className = "novel-ss-batch-tag-arrow";
-      arrow.textContent = "→";
-      // 选择框（点击弹出下拉面板）
-      const picker = document.createElement("div");
-      picker.className = "novel-ss-batch-tag-picker";
-      picker.title = "点击选择标签";
-      /** 将当前已选 tag 渲染为胶囊（含可移除 ✕） */
-      function renderPickerChips() {
-        picker.innerHTML = "";
-        if (!cur.size) {
-          const ph = document.createElement("span");
-          ph.className = "novel-ss-batch-tag-picker-placeholder";
-          ph.textContent = "点击选择标签";
-          picker.appendChild(ph);
-          return;
+    /** 构建逐一模式指令列表（replace：初始已选=原有标签；add：初始仅本次新增） */
+    function renderIndividual(mode) {
+      currentIndivMode = mode;
+      closeAllDropdowns.forEach((fn) => fn());
+      closeAllDropdowns.length = 0; // 清空旧行闭包，避免切换累积
+      rowStates.length = 0;
+      indivListEl.innerHTML = "";
+      const isAdd = mode === "add";
+      indivLabel.textContent = isAdd
+        ? "逐一添加标签：点击右侧框勾选要添加的标签（原有标签自动保留并置灰锁定）"
+        : "逐一替换标签：点击右侧框选择标签，确认后整体替换该指令标签";
+      if (!tags.length) {
+        indivListEl.innerHTML =
+          '<div class="novel-ss-empty">暂无标签，请先在「管理标签」中创建</div>';
+        return;
+      }
+      ids.forEach((id) => {
+        const cmd = cmds[id];
+        if (!cmd) return;
+        const base = new Set(cmd.tagIds || []); // 原有标签（add 模式并集基准）
+        const cur = new Set(isAdd ? [] : base); // 当前勾选
+        const row = document.createElement("div");
+        row.className = "novel-ss-batch-tag-row novel-ss-batch-tag-row-indiv";
+        row.dataset.id = id;
+        // 指令名（左）
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "novel-ss-batch-tag-cmd-name";
+        nameSpan.textContent = cmd.name || cmd.text || "（未命名）";
+        nameSpan.title = cmd.name || cmd.text || "";
+        // 箭头
+        const arrow = document.createElement("span");
+        arrow.className = "novel-ss-batch-tag-arrow";
+        arrow.textContent = "→";
+        // 选择框（点击弹出下拉面板）
+        const picker = document.createElement("div");
+        picker.className = "novel-ss-batch-tag-picker";
+        picker.title = "点击选择标签";
+        /** 将当前已选 tag 渲染为胶囊（含可移除 ✕）+ 尾部下拉 caret */
+        function renderPickerChips() {
+          picker.innerHTML = "";
+          if (!cur.size) {
+            const ph = document.createElement("span");
+            ph.className = "novel-ss-batch-tag-picker-placeholder";
+            ph.textContent = isAdd ? "点击添加标签" : "点击选择标签";
+            picker.appendChild(ph);
+          } else {
+            tags.forEach((tag) => {
+              if (!cur.has(tag.id)) return;
+              const chip = document.createElement("span");
+              chip.className = "novel-ss-tag-chip novel-ss-batch-tag-picker-chip";
+              chip.dataset.tagId = tag.id;
+              chip.textContent = tag.name + " ✕";
+              chip.title = "点击移除";
+              chip.addEventListener("click", (e) => {
+                e.stopPropagation();
+                cur.delete(tag.id);
+                renderPickerChips();
+                if (dropdown) renderDropdown();
+              });
+              picker.appendChild(chip);
+            });
+          }
+          // 尾部 caret（指示可展开）
+          const caret = document.createElement("span");
+          caret.className = "novel-ss-batch-tag-picker-caret";
+          caret.textContent = "▾";
+          picker.appendChild(caret);
         }
-        tags.forEach((tag) => {
-          if (!cur.has(tag.id)) return;
-          const chip = document.createElement("span");
-          chip.className = "novel-ss-tag-chip novel-ss-batch-tag-picker-chip";
-          chip.dataset.tagId = tag.id;
-          chip.textContent = tag.name + " ✕";
-          chip.title = "点击移除";
-          chip.addEventListener("click", (e) => {
-            e.stopPropagation();
-            cur.delete(tag.id);
-            renderPickerChips();
-            if (dropdown) renderDropdown();
+        // 下拉面板（挂 overlay，fixed 定位）
+        let dropdown = null;
+        function closeDropdown() {
+          if (dropdown) {
+            dropdown.remove();
+            dropdown = null;
+          }
+        }
+        function renderDropdown() {
+          if (!dropdown) return;
+          dropdown.innerHTML = "";
+          if (!tags.length) {
+            dropdown.innerHTML =
+              '<div class="novel-ss-batch-tag-dropdown-empty">暂无标签，请先在「管理标签」中创建</div>';
+            return;
+          }
+          tags.forEach((tag) => {
+            // add 模式：原有标签置灰锁定（自动保留，不可取消）
+            const locked = isAdd && base.has(tag.id);
+            const on = cur.has(tag.id);
+            const opt = document.createElement("div");
+            let cls = "novel-ss-batch-tag-opt";
+            if (locked) cls += " novel-ss-batch-tag-opt-locked";
+            else if (on) cls += " novel-ss-batch-tag-opt-on";
+            opt.className = cls;
+            opt.dataset.tagId = tag.id;
+            opt.innerHTML = `<i class="${on || locked ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-batch-tag-opt-check"></i><span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>`;
+            opt.title = locked ? "该指令已有此标签" : "";
+            opt.addEventListener("click", () => {
+              if (locked) return;
+              if (cur.has(tag.id)) cur.delete(tag.id);
+              else cur.add(tag.id);
+              renderDropdown();
+              renderPickerChips();
+            });
+            dropdown.appendChild(opt);
           });
-          picker.appendChild(chip);
-        });
-      }
-      // 下拉面板（挂 overlay，fixed 定位）
-      let dropdown = null;
-      function closeDropdown() {
-        if (dropdown) {
-          dropdown.remove();
-          dropdown = null;
         }
-      }
-      function renderDropdown() {
-        if (!dropdown) return;
-        dropdown.innerHTML = "";
-        if (!tags.length) {
-          dropdown.innerHTML =
-            '<div class="novel-ss-batch-tag-dropdown-empty">暂无标签，请先在「管理标签」中创建</div>';
-          return;
-        }
-        tags.forEach((tag) => {
-          const on = cur.has(tag.id);
-          const opt = document.createElement("div");
-          opt.className =
-            "novel-ss-batch-tag-opt" + (on ? " novel-ss-batch-tag-opt-on" : "");
-          opt.dataset.tagId = tag.id;
-          opt.innerHTML = `<i class="${on ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-batch-tag-opt-check"></i><span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>`;
-          opt.addEventListener("click", () => {
-            if (cur.has(tag.id)) cur.delete(tag.id);
-            else cur.add(tag.id);
-            renderDropdown();
-            renderPickerChips();
-          });
-          dropdown.appendChild(opt);
-        });
-      }
-      function openDropdown() {
-        closeDropdown();
-        dropdown = document.createElement("div");
-        dropdown.className = "novel-ss-batch-tag-dropdown";
-        renderDropdown();
-        overlay.appendChild(dropdown);
-        const r = picker.getBoundingClientRect();
-        dropdown.style.left = r.left + "px";
-        dropdown.style.top = r.bottom + 4 + "px";
-        dropdown.style.minWidth = Math.max(r.width, 160) + "px";
-        // 视口底部翻转
-        const dr = dropdown.getBoundingClientRect();
-        if (dr.bottom > window.innerHeight) {
-          dropdown.style.top = Math.max(8, r.top - dr.height - 4) + "px";
-        }
-      }
-      picker.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (dropdown) {
-          // 本行已打开：toggle 关闭
+        function openDropdown() {
           closeDropdown();
-          return;
+          dropdown = document.createElement("div");
+          dropdown.className = "novel-ss-batch-tag-dropdown";
+          renderDropdown();
+          overlay.appendChild(dropdown);
+          const r = picker.getBoundingClientRect();
+          dropdown.style.left = r.left + "px";
+          dropdown.style.top = r.bottom + 4 + "px";
+          dropdown.style.minWidth = Math.max(r.width, 160) + "px";
+          // 视口底部翻转
+          const dr = dropdown.getBoundingClientRect();
+          if (dr.bottom > window.innerHeight) {
+            dropdown.style.top = Math.max(8, r.top - dr.height - 4) + "px";
+          }
         }
-        closeAllDropdowns.forEach((fn) => fn());
-        openDropdown();
+        picker.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (dropdown) {
+            // 本行已打开：toggle 关闭
+            closeDropdown();
+            return;
+          }
+          closeAllDropdowns.forEach((fn) => fn());
+          openDropdown();
+        });
+        // 点击行内（选择框外）也关闭本行下拉
+        row.addEventListener("click", (e) => {
+          if (e.target.closest(".novel-ss-batch-tag-dropdown")) return;
+          closeDropdown();
+        });
+        closeAllDropdowns.push(closeDropdown);
+        renderPickerChips();
+        rowStates.push({ id, base, cur });
+        row.appendChild(nameSpan);
+        row.appendChild(arrow);
+        row.appendChild(picker);
+        indivListEl.appendChild(row);
       });
-      // 点击行内（选择框外）也关闭本行下拉
-      row.addEventListener("click", (e) => {
-        if (e.target.closest(".novel-ss-batch-tag-dropdown")) return;
-        closeDropdown();
-      });
-      closeAllDropdowns.push(closeDropdown);
-      renderPickerChips();
-      rowStates.push({ id, cur });
-      row.appendChild(nameSpan);
-      row.appendChild(arrow);
-      row.appendChild(picker);
-      indivListEl.appendChild(row);
-    });
+    }
     // 弹窗内滚动 / 遮罩点击时统一关闭下拉，避免位置错位
     overlay.addEventListener(
       "scroll",
@@ -998,14 +1031,16 @@ export function createSideStoryPanel(deps) {
       true,
     );
 
-    // ---- 模式切换：统一 / 逐个 ----
+    // ---- 模式切换：统一 / 逐一替换 / 逐一添加 ----
     function updateModeUI() {
       const mode = modeSelect.value;
       uniformEl.style.display = mode === "uniform" ? "block" : "none";
-      individualEl.style.display = mode === "individual" ? "block" : "none";
+      individualEl.style.display = mode === "uniform" ? "none" : "block";
       // 切换模式时清空统一模式选择，避免残留高亮
       pickedSet.clear();
       renderUniform();
+      // 逐一模式初始勾选不同，切换时重建列表
+      if (mode !== "uniform") renderIndividual(mode);
     }
     modeSelect.addEventListener("change", updateModeUI);
     updateModeUI();
@@ -1020,7 +1055,7 @@ export function createSideStoryPanel(deps) {
 
       // ---- 先完成校验与数据读取（校验失败不关闭弹窗） ----
       let action = null;
-      let rowPlans = null; // 逐个模式：{ id, tagIds: string[] } 列表
+      let rowPlans = null; // 逐一模式：{ id, base: Set, cur: Set } 列表
       if (mode === "uniform") {
         action = overlay
           .querySelector(".novel-ss-batch-tag-action")
@@ -1031,10 +1066,11 @@ export function createSideStoryPanel(deps) {
           return;
         }
       } else {
-        // 逐个模式：从 rowStates 收集每行当前勾选的 tag
+        // 逐一模式：从 rowStates 收集每行数据（base 原有 / cur 本次勾选）
         rowPlans = rowStates.map((s) => ({
           id: s.id,
-          tagIds: Array.from(s.cur),
+          base: s.base,
+          cur: s.cur,
         }));
       }
 
@@ -1123,15 +1159,24 @@ export function createSideStoryPanel(deps) {
           );
         }
       } else {
-        // 逐个模式：按行整体替换 tagIds（按 tag 顺序存储）
+        // 逐一模式：replace 整体替换 / add 并集追加（均按 tag 顺序存储）
+        const indivMode = currentIndivMode;
         rowPlans.forEach((plan) => {
           const cmd = cmds[plan.id];
           if (!cmd) return;
-          const cur = new Set(cmd.tagIds || []);
-          const next = new Set(plan.tagIds);
+          const curSet = new Set(cmd.tagIds || []);
+          let next;
+          if (indivMode === "add") {
+            // 并集追加：原有标签 + 本次勾选
+            next = new Set(plan.base);
+            plan.cur.forEach((x) => next.add(x));
+          } else {
+            // 整体替换：仅保留本次勾选
+            next = new Set(plan.cur);
+          }
           if (
-            cur.size === next.size &&
-            Array.from(cur).every((x) => next.has(x))
+            curSet.size === next.size &&
+            Array.from(curSet).every((x) => next.has(x))
           )
             return; // 未变化
           const ordered = tags.filter((t) => next.has(t.id)).map((t) => t.id);
@@ -1140,7 +1185,7 @@ export function createSideStoryPanel(deps) {
         });
         toast(
           changed
-            ? `已批量设置标签：${changed} 条指令发生变化`
+            ? `已${indivMode === "add" ? "添加" : "替换"}标签：${changed} 条指令发生变化`
             : "无指令发生变化",
         );
       }
