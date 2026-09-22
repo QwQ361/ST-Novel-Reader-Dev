@@ -1684,7 +1684,11 @@ export function createSideStoryPanel(deps) {
         row.innerHTML = `
           <div class="novel-ss-import-preview-head">
             <span class="novel-ss-import-preview-idx">${escapeHtml(item.file.name)} #${item.origIdx + 1}</span>
-            <span class="novel-ss-import-preview-count">${activePreviewPage + 1} / ${total}</span>
+            <span class="novel-ss-import-preview-nav">
+              <button type="button" class="novel-ss-import-preview-nav-btn" title="上一条"${activePreviewPage <= 0 ? " disabled" : ""}><i class="fa-solid fa-chevron-left"></i></button>
+              <span class="novel-ss-import-preview-count">${activePreviewPage + 1}/${total}</span>
+              <button type="button" class="novel-ss-import-preview-nav-btn" title="下一条"${activePreviewPage >= total - 1 ? " disabled" : ""}><i class="fa-solid fa-chevron-right"></i></button>
+            </span>
             <i class="fa-solid fa-trash-can novel-ss-import-preview-del" title="删除此条"></i>
           </div>
           <textarea class="novel-ss-edit-input novel-ss-import-preview-text" rows="6" spellcheck="false"></textarea>`;
@@ -1694,6 +1698,19 @@ export function createSideStoryPanel(deps) {
           item.text = ta.value;
           // 内容改动会改变查重统计，刷新确认按钮
           updateConfirmBtn();
+        });
+        const navBtns = row.querySelectorAll(
+          ".novel-ss-import-preview-nav-btn",
+        );
+        navBtns[0].addEventListener("click", () => {
+          if (activePreviewPage <= 0) return;
+          activePreviewPage -= 1;
+          renderPreview();
+        });
+        navBtns[1].addEventListener("click", () => {
+          if (activePreviewPage >= previewItems.length - 1) return;
+          activePreviewPage += 1;
+          renderPreview();
         });
         row
           .querySelector(".novel-ss-import-preview-del")
@@ -1705,30 +1722,6 @@ export function createSideStoryPanel(deps) {
             renderPreview();
           });
         previewBox.appendChild(row);
-        // 分页导航
-        const nav = document.createElement("div");
-        nav.className = "novel-ss-import-preview-nav";
-        const prevBtn = document.createElement("button");
-        prevBtn.type = "button";
-        prevBtn.className = "novel-ss-import-preview-nav-btn";
-        prevBtn.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
-        prevBtn.disabled = activePreviewPage <= 0;
-        prevBtn.addEventListener("click", () => {
-          activePreviewPage -= 1;
-          renderPreview();
-        });
-        const nextBtn = document.createElement("button");
-        nextBtn.type = "button";
-        nextBtn.className = "novel-ss-import-preview-nav-btn";
-        nextBtn.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
-        nextBtn.disabled = activePreviewPage >= previewItems.length - 1;
-        nextBtn.addEventListener("click", () => {
-          activePreviewPage += 1;
-          renderPreview();
-        });
-        nav.appendChild(prevBtn);
-        nav.appendChild(nextBtn);
-        previewBox.appendChild(nav);
       }
       updateConfirmBtn();
     }
