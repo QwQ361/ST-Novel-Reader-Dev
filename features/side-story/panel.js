@@ -1499,6 +1499,7 @@ export function createSideStoryPanel(deps) {
     const files = [];
     let previews = [];
     let separators = "";
+    let keepSep = false;
 
     const overlay = document.createElement("div");
     overlay.className = "novel-ss-edit-popup-overlay";
@@ -1516,6 +1517,10 @@ export function createSideStoryPanel(deps) {
         <div class="novel-ss-edit-popup-field">
           <label>分隔符（可选，留空则每行一条指令）</label>
           <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令）"></textarea>
+          <label class="novel-ss-import-keepsep">
+            <input type="checkbox" class="novel-ss-import-keepsep-input" />
+            <span>导入时保留分隔符（勾选后，切分出的每条指令内容中包含分隔符）</span>
+          </label>
           <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」）；文件内容按此分隔符切分为多条指令，一个文件可包含多条</div>
         </div>
         <div class="novel-ss-edit-popup-field novel-ss-import-preview-field">
@@ -1531,6 +1536,9 @@ export function createSideStoryPanel(deps) {
 
     const filesBox = overlay.querySelector(".novel-ss-import-files");
     const sepInput = overlay.querySelector(".novel-ss-import-sep");
+    const keepSepInput = overlay.querySelector(
+      ".novel-ss-import-keepsep-input",
+    );
     const previewBox = overlay.querySelector(".novel-ss-import-preview");
     const previewLabel = overlay.querySelector(
       ".novel-ss-import-preview-label",
@@ -1541,12 +1549,13 @@ export function createSideStoryPanel(deps) {
     const splitCache = new Map();
     function computePreviews() {
       separators = sepInput.value;
+      keepSep = keepSepInput.checked;
       previews = [];
       for (const f of files) {
-        const key = f.text + "\u0000" + separators;
+        const key = f.text + "\u0000" + separators + "\u0000" + keepSep;
         let parts = splitCache.get(key);
         if (!parts) {
-          parts = splitBySeparator(f.text, separators);
+          parts = splitBySeparator(f.text, separators, keepSep);
           splitCache.set(key, parts);
         }
         previews.push({ file: f, parts });
@@ -1650,8 +1659,12 @@ export function createSideStoryPanel(deps) {
         input.click();
       });
 
-    // 分隔符输入 → 实时重算
+    // 分隔符输入 / 保留分隔符选项 → 实时重算
     sepInput.addEventListener("input", () => {
+      splitCache.clear();
+      computePreviews();
+    });
+    keepSepInput.addEventListener("change", () => {
       splitCache.clear();
       computePreviews();
     });
@@ -1696,11 +1709,13 @@ export function createSideStoryPanel(deps) {
    * - 分隔符可跨多行（如 "---\n指令"，用户输入的真实换行或字面 \n 均可）
    * - 分隔符未命中 → 整段退化为一条指令
    * - 空段（全空白）自动跳过
+   * - keepSep=true：把分隔符补回每段（首段后补、末段前补、中间段前后都补）
    * @param {string} text 文件全文
    * @param {string} sep 用户填写的分隔符
+   * @param {boolean} [keepSep] 是否保留分隔符（默认 false）
    * @returns {string[]} 切分后的指令数组（trim 后）
    */
-  function splitBySeparator(text, sep) {
+  function splitBySeparator(text, sep, keepSep) {
     const src = String(text || "");
     const raw = String(sep || "").trim();
     if (!raw) {
@@ -1723,6 +1738,18 @@ export function createSideStoryPanel(deps) {
       // 分隔符未命中：退化为整段一条指令
       const t = src.trim();
       return t ? [t] : [];
+    }
+    if (keepSep) {
+      // 保留分隔符：把分隔符补回每段（首段后补、末段前补、中间段前后都补）
+      const out = [];
+      parts.forEach((part, i) => {
+        const seg = part.trim();
+        if (!seg) return;
+        if (i === 0) out.push(seg + "\n" + normalized);
+        else if (i === parts.length - 1) out.push(normalized + "\n" + seg);
+        else out.push(normalized + "\n" + seg + "\n" + normalized);
+      });
+      return out;
     }
     return parts.map((s) => s.trim()).filter(Boolean);
   }

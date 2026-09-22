@@ -4004,6 +4004,25 @@
     transparent
   );
 }
+/* 保留分隔符复选框 */
+.novel-ss-import-keepsep {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.novel-ss-import-keepsep input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+}
+.novel-ss-import-keepsep span {
+  line-height: 1.4;
+  opacity: 0.85;
+}
 /* 分隔符提示 */
 .novel-ss-import-hint {
   font-size: 11px;
