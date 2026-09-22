@@ -1523,7 +1523,7 @@ export function createSideStoryPanel(deps) {
           <label>分隔符（可多页，一页一个；导入与预览使用当前激活页的分隔符）</label>
           <div class="novel-ss-import-sep-tabs">
             <div class="novel-ss-import-sep-wrap">
-              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n）"></textarea>
+              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n；指令由符号包裹时可填如 ($指令)）"></textarea>
               <div class="novel-ss-import-sep-nav">
                 <button type="button" class="novel-ss-import-sep-prev" title="上一页分隔符"><i class="fa-solid fa-chevron-left"></i></button>
                 <span class="novel-ss-import-sep-count">1 / 1</span>
@@ -1537,7 +1537,7 @@ export function createSideStoryPanel(deps) {
             <input type="checkbox" class="novel-ss-import-keepsep-input" />
             <span>导入时保留分隔符（勾选后，切分出的每条指令内容中包含分隔符）</span>
           </label>
-          <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」），也可填 \n 按每行切分；文件内容按此分隔符切分为多条指令，一个文件可包含多条</div>
+          <div class="novel-ss-import-hint">分隔符可跨多行（如「--- 换行 指令」），也可填 \n 按每行切分；指令被符号包裹时可用 $指令 标记前后包裹符（如 ($指令) 会提取每对括号内的内容）；一个文件可包含多条指令</div>
         </div>
         <div class="novel-ss-edit-popup-field novel-ss-import-preview-field">
           <label class="novel-ss-import-preview-label">解析预览</label>
@@ -1832,10 +1832,14 @@ export function createSideStoryPanel(deps) {
    * - 空段（全空白）自动跳过
    * - keepSep=true：把分隔符补回每段（首段后补、末段前补、中间段前后都补）
    * @param {string} text 文件全文
-   * @param {string} sep 用户填写的分隔符
+   * @param {string} sep 用户填写的分隔符（含 $指令 标记时视为前后包裹模式）
    * @param {boolean} [keepSep] 是否保留分隔符（默认 false）
    * @returns {string[]} 切分后的指令数组（trim 后）
    */
+  function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   function splitBySeparator(text, sep, keepSep) {
     const src = String(text || "");
     const raw = String(sep || "");
@@ -1854,6 +1858,36 @@ export function createSideStoryPanel(deps) {
     }
     // 归一化：真实换行 / \r\n / 字面 \n 统一为 \n；不 trim 首尾（避免换行分隔符被吞）
     const normalized = raw.replace(/\r\n/g, "\n").replace(/\\n/g, "\n");
+    // —— 前后包裹模式：分隔符中含 $指令 标记（如「($指令)」= 指令被 ( 与 ) 包裹）——
+    const marker = "$指令";
+    const mi = normalized.indexOf(marker);
+    if (mi >= 0) {
+      const prefix = normalized.slice(0, mi);
+      const suffix = normalized.slice(mi + marker.length);
+      if (prefix || suffix) {
+        const re = new RegExp(
+          escapeRegExp(prefix) + "([\\s\\S]*?)" + escapeRegExp(suffix),
+          "g",
+        );
+        const out = [];
+        let m;
+        while ((m = re.exec(src)) !== null) {
+          const content = m[1];
+          if (keepSep) {
+            // 保留包裹符：原样补回
+            out.push(prefix + content + suffix);
+          } else {
+            const t = content.trim();
+            if (t) out.push(t);
+          }
+        }
+        if (out.length > 0) return out;
+        // 未匹配到任何包裹对 → 整段一条指令
+        const t = src.trim();
+        return t ? [t] : [];
+      }
+      // 前后包裹符都为空（如只填「$指令」）→ 落到普通分隔符逻辑，等同去掉标记
+    }
     const parts = src.split(normalized);
     if (parts.length === 1) {
       // 分隔符未命中：退化为整段一条指令
