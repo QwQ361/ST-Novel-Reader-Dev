@@ -658,65 +658,88 @@ export function createSideStoryPanel(deps) {
     newInput.focus();
   }
 
-  // ---------------- 指令 tag 管理弹窗（勾选/取消多 tag） ----------------
+  // ---------------- 编辑指令弹窗（名称 / 内容 / 标签） ----------------
 
   /**
-   * 单个指令标签弹窗：列出所有 tag 供勾选，保存后整体替换该指令 tagIds。
+   * 编辑指令弹窗：从上到下「名称 / 指令内容 / 标签」，保存后整体更新。
+   * 复用新建弹窗布局（标签区内部滚动、底部按钮固定可见）。
    * @param {string} cmdId 指令 id
    */
-  function showCommandTagPopup(cmdId) {
+  function showEditCommandPopup(cmdId) {
     const cmd = commandLib.listCommands()[cmdId];
     if (!cmd) return;
-    const current = new Set(cmd.tagIds || []);
+    const tags = Object.values(commandLib.listTags()).sort((a, b) =>
+      String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
+    );
     const overlay = document.createElement("div");
     overlay.className = "novel-ss-edit-popup-overlay";
     overlay.innerHTML = `
-      <div class="novel-ss-edit-popup novel-ss-cmd-tag-popup">
-        <div class="novel-ss-edit-popup-title">设置标签：${escapeHtml(cmd.name || cmd.text)}</div>
-        <div class="novel-ss-cmd-tag-list"></div>
+      <div class="novel-ss-edit-popup novel-ss-new-cmd-popup novel-ss-edit-cmd-popup">
+        <div class="novel-ss-edit-popup-title novel-ss-new-cmd-title">
+          <span>编辑指令</span>
+          <i class="fa-solid fa-xmark novel-ss-new-cmd-close" title="关闭"></i>
+        </div>
+        <div class="novel-ss-edit-popup-field">
+          <label>名称</label>
+          <input type="text" class="novel-ss-edit-input novel-ss-edit-cmd-name" placeholder="可选" autocomplete="off" />
+        </div>
+        <div class="novel-ss-edit-popup-field">
+          <label>指令内容</label>
+          <textarea class="novel-ss-edit-input novel-ss-new-cmd-text novel-ss-edit-cmd-text" rows="6" placeholder="指令内容（必填）"></textarea>
+        </div>
+        <div class="novel-ss-edit-popup-field novel-ss-new-cmd-tags-field">
+          <label>标签</label>
+          <div class="novel-ss-cmd-tag-list novel-ss-edit-cmd-tags"></div>
+        </div>
         <div class="novel-ss-edit-popup-actions">
-          <button class="novel-ss-edit-popup-cancel">取消</button>
-          <button class="novel-ss-edit-popup-confirm">保存</button>
+          <button type="button" class="novel-ss-edit-popup-cancel">取消</button>
+          <button type="button" class="novel-ss-edit-popup-confirm novel-ss-edit-cmd-save">保存</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
 
-    const listEl = overlay.querySelector(".novel-ss-cmd-tag-list");
-    const tags = Object.values(commandLib.listTags()).sort((a, b) =>
-      String(a.name).localeCompare(String(b.name), "zh-Hans-CN"),
-    );
-    if (!tags.length) {
-      listEl.innerHTML =
-        '<div class="novel-ss-empty">暂无标签，请先在「管理标签」中创建</div>';
-    }
-    tags.forEach((tag) => {
-      const row = document.createElement("div");
-      const on = current.has(tag.id);
-      row.className =
-        "novel-ss-cmd-tag-row" + (on ? " novel-ss-cmd-tag-on" : "");
-      row.innerHTML = `
-        <i class="${on ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-tag-check"></i>
-        <span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>`;
-      row.addEventListener("click", () => {
-        if (current.has(tag.id)) current.delete(tag.id);
-        else current.add(tag.id);
-        listEl.querySelectorAll(".novel-ss-cmd-tag-row").forEach((el, i) => {
-          const t = tags[i];
-          const on2 = current.has(t.id);
-          el.classList.toggle("novel-ss-cmd-tag-on", on2);
-          el.querySelector(".novel-ss-cmd-tag-check").className = on2
-            ? "fa-solid fa-square-check novel-ss-cmd-tag-check"
-            : "fa-regular fa-square novel-ss-cmd-tag-check";
+    const nameInput = overlay.querySelector(".novel-ss-edit-cmd-name");
+    const textInput = overlay.querySelector(".novel-ss-edit-cmd-text");
+    const tagList = overlay.querySelector(".novel-ss-edit-cmd-tags");
+
+    // 用当前指令数据填充
+    nameInput.value = cmd.name || "";
+    textInput.value = cmd.text || "";
+
+    /** 当前勾选的 tagIds（可变，保存时整体替换） */
+    const picked = new Set(cmd.tagIds || []);
+
+    /** 渲染标签多选列表 */
+    function renderTagRows() {
+      tagList.innerHTML = "";
+      if (!tags.length) {
+        tagList.innerHTML =
+          '<div class="novel-ss-empty">暂无标签，可先在「管理标签」中创建</div>';
+        return;
+      }
+      tags.forEach((tag) => {
+        const row = document.createElement("div");
+        const on = picked.has(tag.id);
+        row.className =
+          "novel-ss-cmd-tag-row" + (on ? " novel-ss-cmd-tag-on" : "");
+        row.innerHTML = `
+          <i class="${on ? "fa-solid fa-square-check" : "fa-regular fa-square"} novel-ss-cmd-tag-check"></i>
+          <span class="novel-ss-tag-chip">${escapeHtml(tag.name)}</span>`;
+        row.addEventListener("click", () => {
+          if (picked.has(tag.id)) picked.delete(tag.id);
+          else picked.add(tag.id);
+          renderTagRows();
         });
+        tagList.appendChild(row);
       });
-      listEl.appendChild(row);
-    });
+    }
+    renderTagRows();
 
     const finish = (value) => {
       overlay.remove();
       if (value) {
-        commandLib.updateCommand(cmdId, { tagIds: Array.from(value) });
-        toast("已更新标签");
+        commandLib.updateCommand(cmdId, value);
+        toast("已保存修改");
         render();
       }
     };
@@ -724,12 +747,29 @@ export function createSideStoryPanel(deps) {
       .querySelector(".novel-ss-edit-popup-cancel")
       .addEventListener("click", () => finish(null));
     overlay
-      .querySelector(".novel-ss-edit-popup-confirm")
-      .addEventListener("click", () => finish(current));
+      .querySelector(".novel-ss-edit-cmd-save")
+      .addEventListener("click", () => {
+        const text = String(textInput.value || "").trim();
+        if (!text) {
+          toast("请输入指令内容");
+          textInput.focus();
+          return;
+        }
+        finish({
+          name: String(nameInput.value || "").trim(),
+          text,
+          tagIds: Array.from(picked),
+        });
+      });
+    overlay
+      .querySelector(".novel-ss-new-cmd-close")
+      .addEventListener("click", () => finish(null));
     overlay.addEventListener("click", (e) => {
       if (e.target.classList.contains("novel-ss-edit-popup-overlay"))
         finish(null);
     });
+
+    nameInput.focus();
   }
 
   // ---------------- 批量设置标签弹窗 ----------------
@@ -1246,9 +1286,8 @@ export function createSideStoryPanel(deps) {
           }
         </div>
         <span class="novel-ss-cmd-actions">
-          <i class="fa-solid fa-tags novel-ss-cmd-tags-btn" title="设置标签"></i>
           <i class="${cmd.favorite ? "fa-solid" : "fa-regular"} fa-star novel-ss-cmd-star${cmd.favorite ? " novel-ss-cmd-star-on" : ""}" title="${cmd.favorite ? "取消收藏" : "收藏"}"></i>
-          <i class="fa-solid fa-pen novel-ss-cmd-rename" title="重命名"></i>
+          <i class="fa-solid fa-pen novel-ss-cmd-rename" title="编辑"></i>
           <i class="fa-solid fa-trash novel-ss-cmd-del" title="删除"></i>
         </span>`;
       // 批量模式下，点击行切换选中；否则追加到输入框
@@ -1294,13 +1333,6 @@ export function createSideStoryPanel(deps) {
             render();
           });
         });
-      // 设置标签按钮
-      row
-        .querySelector(".novel-ss-cmd-tags-btn")
-        .addEventListener("click", (e) => {
-          e.stopPropagation();
-          showCommandTagPopup(cmd.id);
-        });
       // 收藏星标
       row.querySelector(".novel-ss-cmd-star").addEventListener("click", (e) => {
         e.stopPropagation();
@@ -1309,7 +1341,7 @@ export function createSideStoryPanel(deps) {
         renderCommands(container);
         refreshBatchBar();
       });
-      // 操作：重命名 / 删除
+      // 操作：编辑 / 删除
       row
         .querySelector(".novel-ss-cmd-rename")
         .addEventListener("click", (e) => {
@@ -1317,7 +1349,7 @@ export function createSideStoryPanel(deps) {
           if (batchMode && batchSelected.has(cmd.id)) {
             batchRenameSelected();
           } else {
-            promptRenameCommand(cmd.id);
+            showEditCommandPopup(cmd.id);
           }
         });
       row.querySelector(".novel-ss-cmd-del").addEventListener("click", (e) => {
@@ -1522,15 +1554,6 @@ export function createSideStoryPanel(deps) {
     });
 
     nameInput.focus();
-  }
-
-  function promptRenameCommand(cmdId) {
-    const cmd = commandLib.listCommands()[cmdId];
-    if (!cmd) return;
-    const name = window.prompt("指令名称（可留空）：", cmd.name || "");
-    if (name === null) return;
-    commandLib.updateCommand(cmdId, { name: name.trim() });
-    render();
   }
 
   /**
