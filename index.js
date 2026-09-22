@@ -467,6 +467,10 @@ jQuery(async () => {
       saveLastView(); // 记住关闭前的页面（角色/聊天/章节）
       charFolderPanel?.close(); // 关闭可能打开的角色文件夹过滤面板（独立挂 body）
       reader.abort();
+      // 清理 body 上的阅读器主题 class（番外指令库面板等挂 body 下，随阅读器关闭恢复跟随酒馆）
+      READER_THEMES.forEach((t) => {
+        if (t.id) document.body.classList.remove(`novel-theme-${t.id}`);
+      });
       dialogRef = null;
     };
 
@@ -2840,15 +2844,19 @@ jQuery(async () => {
     const isBuiltin = READER_THEMES.some((t) => t.id && t.id === themeId);
     const overlayEl = dialogRef.overlay;
 
-    // 清除旧主题 class，再加当前主题 class（dialog + overlay 同步）
+    // 清除旧主题 class，再加当前主题 class（dialog + overlay + body 同步）
+    // body 同步：番外指令库面板/弹窗（挂 document.body 下）通过继承
+    // --novel-bg/--novel-fg/--novel-accent 等变量获得与阅读器一致的配色
     READER_THEMES.forEach((t) => {
       if (!t.id) return;
       dialogEl.classList.remove(`novel-theme-${t.id}`);
       overlayEl?.classList.remove(`novel-theme-${t.id}`);
+      document.body.classList.remove(`novel-theme-${t.id}`);
     });
     if (isBuiltin) {
       dialogEl.classList.add(`novel-theme-${themeId}`);
       overlayEl?.classList.add(`novel-theme-${themeId}`);
+      document.body.classList.add(`novel-theme-${themeId}`);
       // 清除采样内联变量（内置主题 class 自带 --novel-bg/--novel-fg 定义）
       dialogEl.style.removeProperty("--novel-bg");
       dialogEl.style.removeProperty("--novel-fg");
