@@ -3926,6 +3926,18 @@
     transparent
   );
 }
+/* 选择文件区头部：描述文字与「选择 txt 文件」按钮同行 */
+.novel-ss-import-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.novel-ss-import-files-header label {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 /* 已选文件列表 */
 .novel-ss-import-files {
   display: flex;
@@ -3994,7 +4006,8 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
-  align-self: flex-start;
+  flex: none;
+  white-space: nowrap;
   transition: background 0.12s ease;
 }
 .novel-ss-import-pick:hover {
@@ -4772,6 +4785,7 @@
   }
   .novel-ss-import-sep-wrap .novel-ss-import-sep {
     padding-right: 78px; /* 极矮视口下导航条更紧凑 */
+    min-height: 64px; /* 覆盖 rows=4 的初始高度，软键盘弹出时节省空间 */
   }
   .novel-ss-import-sep-nav button {
     width: 18px;

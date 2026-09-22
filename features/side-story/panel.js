@@ -1513,15 +1513,17 @@ export function createSideStoryPanel(deps) {
           <i class="fa-solid fa-xmark novel-ss-import-close" title="关闭"></i>
         </div>
         <div class="novel-ss-edit-popup-field">
-          <label>选择文件（可多选）</label>
+          <div class="novel-ss-import-files-header">
+            <label>选择文件（可多选）</label>
+            <button type="button" class="novel-ss-import-pick">选择 txt 文件</button>
+          </div>
           <div class="novel-ss-import-files"></div>
-          <button type="button" class="novel-ss-import-pick">选择 txt 文件</button>
         </div>
         <div class="novel-ss-edit-popup-field">
           <label>分隔符（可多页，一页一个；导入与预览使用当前激活页的分隔符）</label>
           <div class="novel-ss-import-sep-tabs">
             <div class="novel-ss-import-sep-wrap">
-              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n）"></textarea>
+              <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="4" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n）"></textarea>
               <div class="novel-ss-import-sep-nav">
                 <button type="button" class="novel-ss-import-sep-prev" title="上一页分隔符"><i class="fa-solid fa-chevron-left"></i></button>
                 <span class="novel-ss-import-sep-count">1 / 1</span>
