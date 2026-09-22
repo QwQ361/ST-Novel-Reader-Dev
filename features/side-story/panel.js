@@ -1491,14 +1491,17 @@ export function createSideStoryPanel(deps) {
   /**
    * 从 txt 导入指令（弹窗模式）。
    * - 支持一次选择多个 txt 文件
-   * - 支持填写分隔符：文件内容按分隔符切分为多条指令（每条指令一段，空段自动跳过）
-   * - 分隔符留空 → 按「每行一条指令」导入（兼容原行为）
+   * - 分隔符支持多页（每页一个分隔符，仅当前激活页生效，可新增/删除页）
+   * - 解析预览分页：一页一条指令，可编辑内容、可删除
+   * - 分隔符留空 → 整个文件内容作为一条指令导入；填 \n 或真实换行则按行切分
    * - 确认后自动跳过重复内容
    */
   function promptImportTxt() {
     const files = [];
-    let previews = [];
-    let separators = "";
+    let previewItems = []; // { file, origIdx, text } 拍平后的预览指令（text 可编辑）
+    let activePreviewPage = 0;
+    let sepPages = [{ value: "" }]; // 分隔符分页
+    let activeSepPage = 0;
     let keepSep = false;
 
     const overlay = document.createElement("div");
@@ -1515,8 +1518,11 @@ export function createSideStoryPanel(deps) {
           <button type="button" class="novel-ss-import-pick">选择 txt 文件</button>
         </div>
         <div class="novel-ss-edit-popup-field">
-          <label>分隔符（可选，留空则整个文件内容作为一条指令导入）</label>
-          <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n）"></textarea>
+          <label>分隔符（可多页，一页一个；导入与预览使用当前激活页的分隔符）</label>
+          <div class="novel-ss-import-sep-tabs">
+            <div class="novel-ss-import-sep-tabs-list"></div>
+            <textarea class="novel-ss-edit-input novel-ss-import-sep" rows="2" placeholder="例：填两行&#10;---&#10;指令&#10;（文件内容按这两行切分为多条指令；想按行切分可填 \n）"></textarea>
+          </div>
           <label class="novel-ss-import-keepsep">
             <input type="checkbox" class="novel-ss-import-keepsep-input" />
             <span>导入时保留分隔符（勾选后，切分出的每条指令内容中包含分隔符）</span>
@@ -1535,6 +1541,7 @@ export function createSideStoryPanel(deps) {
     document.body.appendChild(overlay);
 
     const filesBox = overlay.querySelector(".novel-ss-import-files");
+    const sepTabsBox = overlay.querySelector(".novel-ss-import-sep-tabs-list");
     const sepInput = overlay.querySelector(".novel-ss-import-sep");
     const keepSepInput = overlay.querySelector(
       ".novel-ss-import-keepsep-input",
@@ -1548,9 +1555,11 @@ export function createSideStoryPanel(deps) {
     /** 计算切分结果（带缓存：同一份文本 + 同一分隔符只切一次） */
     const splitCache = new Map();
     function computePreviews() {
-      separators = sepInput.value;
+      // 保存当前激活分隔符页的输入
+      sepPages[activeSepPage] = { value: sepInput.value };
+      const separators = sepPages[activeSepPage].value;
       keepSep = keepSepInput.checked;
-      previews = [];
+      const items = [];
       for (const f of files) {
         const key = f.text + "\u0000" + separators + "\u0000" + keepSep;
         let parts = splitCache.get(key);
@@ -1558,12 +1567,75 @@ export function createSideStoryPanel(deps) {
           parts = splitBySeparator(f.text, separators, keepSep);
           splitCache.set(key, parts);
         }
-        previews.push({ file: f, parts });
+        parts.forEach((part, idx) =>
+          items.push({ file: f, origIdx: idx, text: part }),
+        );
+      }
+      previewItems = items;
+      if (activePreviewPage >= previewItems.length) {
+        activePreviewPage = Math.max(0, previewItems.length - 1);
       }
       renderPreview();
     }
 
-    /** 渲染文件列表与解析预览 */
+    /** 渲染分隔符分页 tabs（每页一个分隔符，仅当前激活页生效） */
+    function renderSepTabs() {
+      sepTabsBox.innerHTML = "";
+      sepPages.forEach((p, i) => {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className =
+          "novel-ss-import-sep-tab" + (i === activeSepPage ? " active" : "");
+        tab.title = "分隔符页 " + (i + 1);
+        const span = document.createElement("span");
+        span.textContent = "分隔符 " + (i + 1);
+        tab.appendChild(span);
+        if (sepPages.length > 1) {
+          const del = document.createElement("i");
+          del.className = "fa-solid fa-xmark novel-ss-import-sep-tab-del";
+          del.title = "删除此页";
+          tab.appendChild(del);
+        }
+        tab.addEventListener("click", (e) => {
+          if (e.target.closest(".novel-ss-import-sep-tab-del")) {
+            sepPages.splice(i, 1);
+            if (activeSepPage >= sepPages.length) {
+              activeSepPage = sepPages.length - 1;
+            }
+            renderSepTabs();
+            sepInput.value = sepPages[activeSepPage].value;
+            splitCache.clear();
+            computePreviews();
+            return;
+          }
+          // 切换页：保存当前页 → 激活新页
+          sepPages[activeSepPage] = { value: sepInput.value };
+          activeSepPage = i;
+          renderSepTabs();
+          sepInput.value = sepPages[activeSepPage].value;
+          splitCache.clear();
+          computePreviews();
+        });
+        sepTabsBox.appendChild(tab);
+      });
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "novel-ss-import-sep-tab-add";
+      addBtn.title = "新增分隔符页";
+      addBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+      addBtn.addEventListener("click", () => {
+        sepPages[activeSepPage] = { value: sepInput.value };
+        sepPages.push({ value: "" });
+        activeSepPage = sepPages.length - 1;
+        renderSepTabs();
+        sepInput.value = "";
+        splitCache.clear();
+        computePreviews();
+      });
+      sepTabsBox.appendChild(addBtn);
+    }
+
+    /** 渲染文件列表与解析预览（分页：一页一条，可编辑/删除） */
     function renderPreview() {
       // 文件列表
       filesBox.innerHTML = "";
@@ -1587,8 +1659,8 @@ export function createSideStoryPanel(deps) {
           filesBox.appendChild(row);
         });
       }
-      // 预览
-      const total = previews.reduce((n, p) => n + p.parts.length, 0);
+      // 预览分页
+      const total = previewItems.length;
       previewLabel.textContent = `解析预览（共 ${total} 条指令）`;
       previewBox.innerHTML = "";
       if (!files.length) {
@@ -1598,36 +1670,74 @@ export function createSideStoryPanel(deps) {
         previewBox.innerHTML =
           '<div class="novel-ss-empty">未解析出任何指令，请检查分隔符</div>';
       } else {
-        previews.forEach(({ file, parts }) => {
-          parts.forEach((part, idx) => {
-            const row = document.createElement("div");
-            row.className = "novel-ss-import-preview-row";
-            row.innerHTML = `
-              <span class="novel-ss-import-preview-idx">${escapeHtml(file.name)} #${idx + 1}</span>
-              <span class="novel-ss-import-preview-text">${escapeHtml(part)}</span>`;
-            previewBox.appendChild(row);
-          });
+        const item = previewItems[activePreviewPage];
+        const row = document.createElement("div");
+        row.className = "novel-ss-import-preview-row";
+        row.innerHTML = `
+          <div class="novel-ss-import-preview-head">
+            <span class="novel-ss-import-preview-idx">${escapeHtml(item.file.name)} #${item.origIdx + 1}</span>
+            <span class="novel-ss-import-preview-count">${activePreviewPage + 1} / ${total}</span>
+            <i class="fa-solid fa-trash-can novel-ss-import-preview-del" title="删除此条"></i>
+          </div>
+          <textarea class="novel-ss-edit-input novel-ss-import-preview-text" rows="6" spellcheck="false"></textarea>`;
+        const ta = row.querySelector(".novel-ss-import-preview-text");
+        ta.value = item.text;
+        ta.addEventListener("input", () => {
+          item.text = ta.value;
+          // 内容改动会改变查重统计，刷新确认按钮
+          updateConfirmBtn();
         });
+        row
+          .querySelector(".novel-ss-import-preview-del")
+          .addEventListener("click", () => {
+            previewItems.splice(activePreviewPage, 1);
+            if (activePreviewPage >= previewItems.length) {
+              activePreviewPage = Math.max(0, previewItems.length - 1);
+            }
+            renderPreview();
+          });
+        previewBox.appendChild(row);
+        // 分页导航
+        const nav = document.createElement("div");
+        nav.className = "novel-ss-import-preview-nav";
+        const prevBtn = document.createElement("button");
+        prevBtn.type = "button";
+        prevBtn.className = "novel-ss-import-preview-nav-btn";
+        prevBtn.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
+        prevBtn.disabled = activePreviewPage <= 0;
+        prevBtn.addEventListener("click", () => {
+          activePreviewPage -= 1;
+          renderPreview();
+        });
+        const nextBtn = document.createElement("button");
+        nextBtn.type = "button";
+        nextBtn.className = "novel-ss-import-preview-nav-btn";
+        nextBtn.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+        nextBtn.disabled = activePreviewPage >= previewItems.length - 1;
+        nextBtn.addEventListener("click", () => {
+          activePreviewPage += 1;
+          renderPreview();
+        });
+        nav.appendChild(prevBtn);
+        nav.appendChild(nextBtn);
+        previewBox.appendChild(nav);
       }
-      // 确认按钮可用态
-      const dup = total - countNewUnique();
-      confirmBtn.disabled = total === 0;
-      confirmBtn.textContent = `导入 ${total} 条${dup > 0 ? `（${dup} 条重复将跳过）` : ""}`;
+      updateConfirmBtn();
     }
 
-    /** 统计最终真正会新增的数量（去除重复后） */
-    function countNewUnique() {
+    /** 更新确认按钮：可用态 / 文案（含重复统计） */
+    function updateConfirmBtn() {
+      const total = previewItems.length;
+      let dup = 0;
       const texts = new Set();
-      let n = 0;
-      for (const p of previews) {
-        for (const part of p.parts) {
-          if (!texts.has(part)) {
-            texts.add(part);
-            if (!commandLib.existsByText(part)) n += 1;
-          }
-        }
+      for (const item of previewItems) {
+        const t = item.text.trim();
+        if (!t) continue;
+        if (texts.has(t) || commandLib.existsByText(t)) dup += 1;
+        texts.add(t);
       }
-      return n;
+      confirmBtn.disabled = total === 0;
+      confirmBtn.textContent = `导入 ${total} 条${dup > 0 ? `（${dup} 条重复将跳过）` : ""}`;
     }
 
     // 选择文件（多选）
@@ -1669,6 +1779,10 @@ export function createSideStoryPanel(deps) {
       computePreviews();
     });
 
+    // 初始渲染：分隔符 tabs + 预览
+    renderSepTabs();
+    computePreviews();
+
     // 取消 / 关闭
     const close = () => overlay.remove();
     overlay
@@ -1681,19 +1795,23 @@ export function createSideStoryPanel(deps) {
       if (e.target.classList.contains("novel-ss-edit-popup-overlay")) close();
     });
 
-    // 确认导入
+    // 确认导入（使用编辑后的 previewItems）
     confirmBtn.addEventListener("click", () => {
       const addedTexts = new Set();
       let added = 0;
-      for (const p of previews) {
-        for (const part of p.parts) {
-          if (addedTexts.has(part)) continue; // 同一批内去重
-          addedTexts.add(part);
-          // addFromMessage：自动查重 + 自动命名为「未命名-N」
-          if (commandLib.addFromMessage(part, {})) added += 1;
+      let skipped = 0;
+      for (const item of previewItems) {
+        const t = item.text.trim();
+        if (!t) continue;
+        if (addedTexts.has(t)) {
+          skipped += 1;
+          continue; // 同一批内去重
         }
+        addedTexts.add(t);
+        // addFromMessage：自动查重 + 自动命名为「未命名-N」
+        if (commandLib.addFromMessage(t, {})) added += 1;
+        else skipped += 1;
       }
-      const skipped = previews.reduce((n, p) => n + p.parts.length, 0) - added;
       toast(
         `导入完成：新增 ${added} 条${skipped > 0 ? `（重复已跳过 ${skipped} 条）` : ""}`,
       );

@@ -4023,6 +4023,95 @@
   line-height: 1.4;
   opacity: 0.85;
 }
+/* 分隔符分页 tabs */
+.novel-ss-import-sep-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.novel-ss-import-sep-tabs-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.novel-ss-import-sep-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: transparent;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.65;
+  transition:
+    background 0.12s ease,
+    opacity 0.12s ease,
+    border-color 0.12s ease;
+}
+.novel-ss-import-sep-tab:hover {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+}
+.novel-ss-import-sep-tab.active {
+  opacity: 1;
+  border-color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 12%,
+    transparent
+  );
+}
+.novel-ss-import-sep-tab-del {
+  font-size: 10px;
+  opacity: 0.65;
+  padding: 1px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.novel-ss-import-sep-tab-del:hover {
+  opacity: 1;
+  color: var(--novel-danger, #e5484d);
+}
+.novel-ss-import-sep-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px dashed
+    color-mix(
+      in srgb,
+      var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 60%,
+      transparent
+    );
+  background: transparent;
+  color: var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9));
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.novel-ss-import-sep-tab-add:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeGlowColor, #4f9cf9)) 18%,
+    transparent
+  );
+}
 /* 分隔符提示 */
 .novel-ss-import-hint {
   font-size: 11px;
@@ -4055,28 +4144,111 @@
 }
 .novel-ss-import-preview-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 4px 6px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
   border-radius: 4px;
   font-size: 12px;
   line-height: 1.5;
 }
-.novel-ss-import-preview-row:nth-child(odd) {
-  background: rgba(0, 0, 0, 0.15);
+.novel-ss-import-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .novel-ss-import-preview-idx {
   flex: none;
   font-size: 11px;
   opacity: 0.55;
   font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.novel-ss-import-preview-count {
+  flex: none;
+  font-size: 11px;
+  opacity: 0.55;
+  font-family: monospace;
+}
+.novel-ss-import-preview-del {
+  flex: none;
+  margin-left: auto;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 2px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.novel-ss-import-preview-del:hover {
+  opacity: 1;
+  color: var(--novel-danger, #e5484d);
+  background: color-mix(in srgb, var(--novel-danger, #e5484d) 15%, transparent);
 }
 .novel-ss-import-preview-text {
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+      transparent
+    );
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.6;
+}
+.novel-ss-import-preview-nav {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 6px;
+  flex: none;
+}
+.novel-ss-import-preview-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: transparent;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
+}
+.novel-ss-import-preview-nav-btn:hover:not(:disabled) {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
+    transparent
+  );
+}
+.novel-ss-import-preview-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 /* 导入确认按钮禁用态 */
 .novel-ss-import-confirm:disabled {
@@ -4605,5 +4777,16 @@
   }
   .novel-ss-import-files {
     max-height: 64px; /* 覆盖 96px，让预览区有更多空间 */
+  }
+  .novel-ss-import-sep-tabs-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .novel-ss-import-sep-tab {
+    flex: none;
+  }
+  .novel-ss-import-preview-text {
+    min-height: 64px; /* 覆盖 96px */
   }
 }
