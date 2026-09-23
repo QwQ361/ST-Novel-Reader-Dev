@@ -17,6 +17,7 @@ import {
 import { createChatlogsCore } from "./features/chatlogs/index.js";
 import { createProgressCore } from "./features/progress/index.js";
 import { createReaderCore } from "./features/reader/index.js";
+import { createScrollReader } from "./features/reader/scroll.js";
 import { createRegexCore } from "./features/regex/index.js";
 import { createCommandLibCore } from "./features/side-story/command-lib.js";
 import { createInjectCore } from "./features/side-story/inject.js";
