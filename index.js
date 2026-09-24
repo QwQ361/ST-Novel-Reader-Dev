@@ -2205,11 +2205,22 @@ jQuery(async () => {
       deps.saveSettings();
     });
 
-    // ---- 阅读窗口模式：切换后保存设置（下次打开阅读器时生效） ----
+    // ---- 阅读窗口模式：切换后保存设置 + 立即生效 ----
+    // 用户选择"全屏 / 悬浮窗"后：直接关闭设置弹窗并重开阅读器，以新模式显示。
+    // 重开走 restoreLastView 恢复到关闭前页面，体验为"原地切换窗口形态"。
     const windowModeInput = content.querySelector(".novel-window-mode-select");
     windowModeInput?.addEventListener("change", () => {
-      g.windowMode = windowModeInput.value;
+      const newMode = windowModeInput.value;
+      if (newMode === g.windowMode) {
+        // 选择与当前一致（一般不会触发 change）：仅关闭设置弹窗
+        dlg.close();
+        return;
+      }
+      g.windowMode = newMode;
       deps.saveSettings();
+      dlg.close(); // 关闭设置弹窗
+      closeReaderDialog(); // 关闭当前阅读器（onClose 同步置 dialogRef=null + saveLastView 记住页面）
+      openReaderDialog(); // 以新模式重开阅读器（restoreLastView 恢复到关闭前页面）
     });
 
     // ---- 显示用户回复：切换后保存设置 + 若在目录/正文页则重新加载当前聊天 ----
