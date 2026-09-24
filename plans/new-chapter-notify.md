@@ -183,13 +183,17 @@ export function createGenNotifyCore(deps) {
 
 2. **气泡挂载节点**：规划中建议挂 `dlg.dialog` 或 `dlg.overlay`。实测 `.novel-dialog` 无 `transform`，但为了稳妥将气泡挂到 **`dlg.overlay`**（fixed 定位层，z-index 100010），气泡自身 `z-index: 100020`，高于遮罩但低于其他顶层浮层，全屏/悬浮窗均正常。
 
-3. **订阅时机**：规划是 `subscribeEvents()` 中常驻订阅 + 回调内判断弹窗状态。实际改为 **`bindGenNotifyUi(dlg)`（打开阅读器时）才 `subscribe()`，`dlg.onClose` 时 `unsubscribe()`** —— 阅读器关闭时完全无监听、不打扰（需求"阅读器未打开时不打扰"由生命周期天然保证，而非回调内判断）。
+3. **订阅时机（v2 修复）**：
+   - v1：`bindGenNotifyUi(dlg)`（打开阅读器时）才 `subscribe()`，`dlg.onClose` 时 `unsubscribe()`。
+   - **发现 Bug**：用户"先发送消息再打开弹窗"时，生成事件发生在未订阅期间被全部错过 → 无红点/气泡。
+   - **v2 修复**：改为**插件启动时（"启动"区，`initButton()` 之后）常驻订阅**（`genNotify.subscribe()`），弹窗关闭期间后台持续累计未读计数（`genNotifyUi` 为 null，`onNotify` 无副作用）；`bindGenNotifyUi` 不再 `subscribe`，改为打开时检查 `genNotify.getPending() > 0` 则立即显示红点+气泡；`dlg.onClose` 不再 `unsubscribe`（只清 UI 引用/定时器/计数）。
+   - **验证幂等**：`subscribe()` 内部先 `unsubscribe()` 再订阅，多次 open/close 周期监听器数量不变（实测 `GENERATION_STARTED` 监听器 open/close 前后 `delta: 0`）。
 
 4. **开关与 DOM 解耦**：`bindGenNotifyUi` **始终创建红点 + 气泡 DOM**（与 `genNotifyEnabled` 开关解耦），开关只控制 `subscribe/unsubscribe`。避免"关闭开关 → 再打开"时气泡 DOM 缺失。
 
 5. **计数文案**：气泡文本按 `pending` 显示"有新楼层生成" / "有 N 次新楼层生成"（`pending > 1` 时）。
 
-6. **清理时机**：`dlg.onClose` 中一并 `unsubscribe()` + `genNotify.clear()` + 清除气泡定时器 + 置空 `genNotifyUi`/`genToastEl` 引用。
+6. **清理时机**：`dlg.onClose` 中 `genNotify.clear()`（清零未读计数）+ 清除气泡定时器 + 置空 `genNotifyUi`/`genToastEl` 引用；**不再 `unsubscribe`**（订阅常驻，见第 3 点 v2 修复）。
 
 ### 8.2 浏览器回归测试结果（全部通过）
 
@@ -202,11 +206,15 @@ export function createGenNotifyCore(deps) {
 | 设置面板开关关闭                 | ✅ 红点/气泡隐藏、订阅取消                      |
 | 开关关闭后生成结束               | ✅ 不触发                                       |
 | 重新打开开关                     | ✅ 订阅恢复、触发正常                           |
-| 阅读器关闭期间生成               | ✅ 完全不打扰（DOM 已清理、无监听）             |
-| 重新打开阅读器                   | ✅ 红点保持隐藏（关闭期间未污染计数）、订阅重建 |
+| 阅读器关闭期间生成               | ✅ 完全不打扰（无气泡 DOM、UI 引用为 null）     |
+| 重新打开阅读器                   | ✅ 红点保持隐藏（关闭时已清零）、订阅常驻不重建 |
 | 重开后生成结束                   | ✅ 正常触发                                     |
 | 点击气泡                         | ✅ 关闭阅读器弹窗（等同右上角关闭按钮）         |
 | `events.off` 修复后弹窗反复开关  | ✅ 控制台无错误                                 |
+| **先发送再打开弹窗（时序 Bug）** | ✅ **后台累计未读 → 打开弹窗立即显示红点+气泡** |
+| **弹窗关闭期间累计多次生成**     | ✅ 计数累计，打开后显示"有 N 次新楼层生成"      |
+| **开关关闭时后台生成**           | ✅ 不累计（零订阅）；重开开关后恢复订阅         |
+| **订阅幂等性**                   | ✅ open/close 周期监听器数量不变（delta 0）     |
 
 ### 8.3 遗留可选项（本次未做）
 

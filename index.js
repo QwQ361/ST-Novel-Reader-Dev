@@ -2278,7 +2278,7 @@ jQuery(async () => {
       g.genNotifyEnabled = genNotifyInput.checked;
       deps.saveSettings();
       if (g.genNotifyEnabled) {
-        // 重新打开：恢复订阅（bindGenNotifyUi 只在打开弹窗时订阅一次）
+        // 重新打开：恢复常驻订阅（订阅在插件启动时建立，见"启动"区）
         genNotify.subscribe();
       } else {
         // 关闭时：取消订阅 + 隐藏红点与气泡 + 清零
