@@ -125,9 +125,12 @@ export function createGenNotifyCore(deps) {
   50% { opacity: .25; }
 }
 
-/* 角落气泡：固定在弹窗右下角，置于遮罩之上 */
+/* 角落气泡：absolute 定位到最近定位祖先（dialog）右下角，置于弹窗内容之上。
+   - 全屏：.novel-dialog 无 position → 相对 .novel-overlay(fixed, 全屏) → 视口右下角
+   - 悬浮窗：.novel-dialog-floating 是 fixed 定位上下文 → 悬浮窗内右下角，随窗口跟随
+   - 置顶：气泡在 dialog 内随 .novel-dialog-floating 一起恢复 pointer-events:auto → 可点击 */
 .novel-gen-toast {
-  position: fixed; right: 24px; bottom: 24px; z-index: 100020;
+  position: absolute; right: 24px; bottom: 24px; z-index: 100020;
   background: var(--novel-panel-bg, #1e2430); color: #eee;
   border: 1px solid rgba(229,57,53,.6); border-radius: 10px;
   padding: 12px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.4);
@@ -137,7 +140,7 @@ export function createGenNotifyCore(deps) {
 @keyframes novel-gen-toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 ```
 
-**注意**：气泡用 `position: fixed` 挂到 `dlg.dialog` 下，需要确认 `.novel-dialog` 不设置 `transform`（否则 fixed 会退化为绝对定位到弹窗内）。若弹窗有 transform（缩放/动画），应改挂到 `dlg.overlay` 或 `document.body` 并使用更高 z-index。**实施时需验证**：气泡挂载节点与 `position: fixed` 的兼容性；若弹窗有 `transform`，改为挂 `body` + `z-index: 100100`。
+**注意（最终实现）**：气泡用 `position: absolute` 挂到 **`dlg.dialog`**（见 8.1 第 2 点的 v2 修复）。初版 `position: fixed` 挂 `dlg.overlay` 在悬浮窗下有两个 Bug：① 定位视口右下角而非悬浮窗内；② 置顶时 overlay `pointer-events:none` 导致无法点击。改为 absolute 挂 dialog 后：全屏相对 overlay 定位到视口右下角（表现不变）、悬浮窗定位到窗内右下角并随窗口跟随、置顶时随 dialog 恢复交互。**实施时已验证**：全屏/悬浮窗/置顶三种场景均正常（见 8.2）。
 
 ## 5. 实施步骤
 
@@ -181,7 +184,13 @@ export function createGenNotifyCore(deps) {
 
 1. **事件移除 API**：ST 的 `eventSource` 是 **EventEmitter 风格**，原型链方法为 `["constructor","on","makeLast","makeFirst","removeListener","emit","emitAndWait","once"]`，**没有 `off` 方法**。初始实现调用 `events.off(...)` 导致 `Uncaught TypeError: events.off is not a function`，会使 `dlg.onClose` 中断、`dialogRef = null` 未执行，弹窗无法再次打开。修复为 `const remove = events.removeListener || events.off;`（见 `features/gen-notify/index.js` 的 `unsubscribe`）。
 
-2. **气泡挂载节点**：规划中建议挂 `dlg.dialog` 或 `dlg.overlay`。实测 `.novel-dialog` 无 `transform`，但为了稳妥将气泡挂到 **`dlg.overlay`**（fixed 定位层，z-index 100010），气泡自身 `z-index: 100020`，高于遮罩但低于其他顶层浮层，全屏/悬浮窗均正常。
+2. **气泡挂载节点（v2 修复）**：规划中建议挂 `dlg.dialog` 或 `dlg.overlay`。初版挂 **`dlg.overlay`** + `position: fixed`（视口右下角），全屏正常。
+   - **发现 Bug（悬浮窗）**：① 气泡 `fixed` 定位到**视口右下角**，悬浮窗是居中小窗口，气泡在窗外；② 悬浮窗**置顶**时 `.novel-overlay-floating.novel-overlay-pinned { pointer-events: none }`（点击穿透，只给 `.novel-dialog-floating` 恢复 `auto`），气泡挂在 overlay 上被点击穿透 → 无法点击。
+   - **v2 修复**：改为挂 **`dlg.dialog`** + `position: absolute`（`right:24px; bottom:calc(24px + safe-area)`，`z-index:100020`）。定位到最近定位祖先：
+     - 全屏：`.novel-dialog` 无 `position`（static）→ 向上到 `.novel-overlay`（fixed，铺满视口）→ **视口右下角**（表现与 fixed 一致）；
+     - 悬浮窗：`.novel-dialog-floating` 是 `position: fixed`（定位上下文）→ 气泡固定在**悬浮窗内右下角**，随窗口拖动/缩放跟随；
+     - 置顶：气泡在 dialog 内，随 `.novel-dialog-floating { pointer-events: auto }` 一起恢复交互 → **可点击**。
+   - 已验证：全屏 `toastNearBottomRight: true`；悬浮窗 `toastInsideDialog: true`；置顶时 `toastPointerEvents: "auto"`。
 
 3. **订阅时机（v2 修复）**：
    - v1：`bindGenNotifyUi(dlg)`（打开阅读器时）才 `subscribe()`，`dlg.onClose` 时 `unsubscribe()`。
@@ -197,24 +206,29 @@ export function createGenNotifyCore(deps) {
 
 ### 8.2 浏览器回归测试结果（全部通过）
 
-| 场景                             | 结果                                           |
-| -------------------------------- | ---------------------------------------------- |
-| 正常 `GENERATION_ENDED`          | ✅ 红点闪烁 + 气泡"有新楼层生成"                |
-| `GENERATION_STOPPED`（手动停止） | ✅ 触发，计数累计（"有 2 次新楼层生成"）        |
-| `dryRun`（提示词查看器预览）     | ✅ 不触发                                       |
-| 孤立 ENDED（无前置 STARTED）     | ✅ 不触发（`generating` 标记过滤）              |
-| 设置面板开关关闭                 | ✅ 红点/气泡隐藏、订阅取消                      |
-| 开关关闭后生成结束               | ✅ 不触发                                       |
-| 重新打开开关                     | ✅ 订阅恢复、触发正常                           |
-| 阅读器关闭期间生成               | ✅ 完全不打扰（无气泡 DOM、UI 引用为 null）     |
-| 重新打开阅读器                   | ✅ 红点保持隐藏（关闭时已清零）、订阅常驻不重建 |
-| 重开后生成结束                   | ✅ 正常触发                                     |
-| 点击气泡                         | ✅ 关闭阅读器弹窗（等同右上角关闭按钮）         |
-| `events.off` 修复后弹窗反复开关  | ✅ 控制台无错误                                 |
-| **先发送再打开弹窗（时序 Bug）** | ✅ **后台累计未读 → 打开弹窗立即显示红点+气泡** |
-| **弹窗关闭期间累计多次生成**     | ✅ 计数累计，打开后显示"有 N 次新楼层生成"      |
-| **开关关闭时后台生成**           | ✅ 不累计（零订阅）；重开开关后恢复订阅         |
-| **订阅幂等性**                   | ✅ open/close 周期监听器数量不变（delta 0）     |
+| 场景                             | 结果                                                                                                                                                             |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 正常 `GENERATION_ENDED`          | ✅ 红点闪烁 + 气泡"有新楼层生成"                                                                                                                                  |
+| `GENERATION_STOPPED`（手动停止） | ✅ 触发，计数累计（"有 2 次新楼层生成"）                                                                                                                          |
+| `dryRun`（提示词查看器预览）     | ✅ 不触发                                                                                                                                                         |
+| 孤立 ENDED（无前置 STARTED）     | ✅ 不触发（`generating` 标记过滤）                                                                                                                                |
+| 设置面板开关关闭                 | ✅ 红点/气泡隐藏、订阅取消                                                                                                                                        |
+| 开关关闭后生成结束               | ✅ 不触发                                                                                                                                                         |
+| 重新打开开关                     | ✅ 订阅恢复、触发正常                                                                                                                                             |
+| 阅读器关闭期间生成               | ✅ 完全不打扰（无气泡 DOM、UI 引用为 null）                                                                                                                       |
+| 重新打开阅读器                   | ✅ 红点保持隐藏（关闭时已清零）、订阅常驻不重建                                                                                                                   |
+| 重开后生成结束                   | ✅ 正常触发                                                                                                                                                       |
+| 点击气泡                         | ✅ 关闭阅读器弹窗（等同右上角关闭按钮）                                                                                                                           |
+| `events.off` 修复后弹窗反复开关  | ✅ 控制台无错误                                                                                                                                                   |
+| **先发送再打开弹窗（时序 Bug）** | ✅ **后台累计未读 → 打开弹窗立即显示红点+气泡**                                                                                                                   |
+| **弹窗关闭期间累计多次生成**     | ✅ 计数累计，打开后显示"有 N 次新楼层生成"                                                                                                                        |
+| **开关关闭时后台生成**           | ✅ 不累计（零订阅）；重开开关后恢复订阅                                                                                                                           |
+| **订阅幂等性**                   | ✅ open/close 周期监听器数量不变（delta 0）                                                                                                                       |
+| **悬浮窗：气泡在窗内（Bug）**    | ✅ **气泡 absolute 定位到悬浮窗内右下角**（`toastInsideDialog: true`），随窗口拖动/缩放跟随                                                                       |
+| **悬浮窗：置顶时气泡可点击**     | ✅ **置顶时 overlay 点击穿透（`pointer-events:none`），但气泡在 dialog 内随 `.novel-dialog-floating` 恢复交互（`toastPointerEvents: "auto"`），点击正常关闭弹窗** |
+| **悬浮窗：气泡点击关闭弹窗**     | ✅ 点击气泡 → 弹窗/遮罩/红点全部移除（`dialogClosed: true`）                                                                                                      |
+| **全屏回归：气泡仍视口右下角**   | ✅ `toastNearBottomRight: true`（视口 1288×702，气泡 right:1264/bottom:684），点击关闭正常                                                                        |
+| **悬浮窗修复后控制台**           | ✅ 无插件相关错误（仅 ST 自身弃用警告）                                                                                                                           |
 
 ### 8.3 遗留可选项（本次未做）
 

@@ -687,7 +687,11 @@ jQuery(async () => {
     // 红点角标（查询已注入的 DOM；开关关闭时红点保持隐藏，不影响本函数）
     const dotEl = topbarEl?.querySelector("[data-gen-dot]");
 
-    // 角落气泡：挂到 overlay（fixed 定位层，z-index 高于 dialog 内容）。
+    // 角落气泡：挂到 dialog（position:absolute 定位）。
+    // 全屏：dialog 无定位上下文 → 相对 overlay(fixed, 全屏) → 视口右下角（表现不变）；
+    // 悬浮窗：dialog 是 fixed 定位上下文 → 气泡固定在悬浮窗内右下角，并随窗口拖动/缩放跟随；
+    // 置顶时 overlay 是 pointer-events:none，气泡挂在 dialog 内可随 .novel-dialog-floating
+    // 一起恢复交互，保证置顶时也可点击（之前挂在 overlay 上会被点击穿透）。
     // 始终创建 DOM（与开关解耦）：开关在设置面板中切换时只增删订阅，
     // 气泡 DOM 随弹窗生命周期创建/销毁，避免"关闭开关→再打开"时气泡缺失。
     genToastEl = document.createElement("div");
@@ -703,7 +707,7 @@ jQuery(async () => {
       genNotify.clear();
       closeReaderDialog();
     });
-    dlg.overlay.appendChild(genToastEl);
+    dlg.dialog.appendChild(genToastEl);
 
     // 注入 UI 回调：显示红点 + 气泡（气泡 8 秒后自动收起，红点保留）。
     // 开关关闭时仍可能被 onNotify 调用（订阅已移除则不会触发），
