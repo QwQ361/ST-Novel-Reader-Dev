@@ -78,6 +78,7 @@ export function createGenNotifyCore(deps) {
    ```
 
    - 默认隐藏；`genNotify.getPending() > 0` 时显示，并带闪烁动画 class。
+   - **位置（用户优化）**：红点作为角标挂在 × 关闭按钮右上角 —— `<span class="novel-gen-dot" data-gen-dot>` 移入 `.novel-icon-close`（`position: relative`）内部，红点自身 `position: absolute; top:-3px; right:-3px`，`pointer-events: none` 不拦截 × 点击。
 
 4. **角落气泡 DOM**：创建一个挂到 `dlg.dialog`（随弹窗一起）右下角的通知气泡：
 
@@ -105,13 +106,19 @@ export function createGenNotifyCore(deps) {
 参考已有的 `@keyframes novel-highlight-flash` 动画先例：
 
 ```css
-/* 顶栏红点：闪烁 */
+/* 关闭按钮作为红点角标定位锚点 */
+.novel-icon-close { position: relative; }
+
+/* 红点角标：挂在 × 关闭按钮右上角 */
 .novel-gen-dot {
+  display: block; /* span 默认 inline 会忽略宽高，必须 block 化 */
+  position: absolute;
+  top: -3px; right: -3px;
   width: 10px; height: 10px; border-radius: 50%;
   background: #e53935; /* 红色 */
-  display: inline-block; margin: 0 6px;
-  animation: novel-gen-dot-blink 1s infinite;
   box-shadow: 0 0 6px rgba(229,57,53,.8);
+  animation: novel-gen-dot-blink 1s infinite;
+  pointer-events: none; /* 不拦截 × 按钮点击 */
 }
 @keyframes novel-gen-dot-blink {
   0%, 100% { opacity: 1; }

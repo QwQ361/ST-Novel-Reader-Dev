@@ -298,8 +298,10 @@
   );
 }
 
-/* 右上角关闭按钮（×）：与 ⚙ 按钮尺寸一致，仅字体加粗悬停变红 */
+/* 右上角关闭按钮（×）：与 ⚙ 按钮尺寸一致，仅字体加粗悬停变红。
+   position:relative 作为红点角标（.novel-gen-dot）的定位锚点 */
 .novel-icon-close {
+  position: relative;
   font-weight: 700;
   font-size: 0.95rem; /* 与基础 icon-btn 同字号（inherit 会取父级导致变小） */
   line-height: 1;
@@ -4957,10 +4959,13 @@ body.novel-theme-ocean {
    交互：点击气泡 = 关闭阅读器弹窗（等同右上角 ×）
    ============================================================ */
 
-/* 顶栏红点：位于 ⚙ 与 × 之间，有新楼层生成结束时持续闪烁 */
+/* 红点角标：固定在 × 关闭按钮的右上角，有新楼层生成结束时持续闪烁。
+   挂在 .novel-icon-close（position:relative）内，绝对定位到按钮右上角。 */
 .novel-gen-dot {
-  display: inline-block; /* JS 清空内联 display 后恢复为可尺寸元素 */
-  flex: 0 0 auto;
+  display: block; /* span 默认 inline 会忽略宽高；角标需 block 化 */
+  position: absolute;
+  top: -3px;
+  right: -3px;
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -4968,7 +4973,8 @@ body.novel-theme-ocean {
   box-shadow: 0 0 6px rgba(229, 57, 53, 0.8);
   animation: novel-gen-dot-blink 1s ease-in-out infinite;
   cursor: pointer;
-  vertical-align: middle;
+  pointer-events: none; /* 红点不拦截点击，点击落到 × 按钮本身 */
+  box-sizing: border-box;
 }
 
 @keyframes novel-gen-dot-blink {

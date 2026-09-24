@@ -575,8 +575,9 @@ jQuery(async () => {
             : ""
         }
         <button class="novel-icon-btn" data-action="settings" title="全局设置">⚙</button>
-        <span class="novel-gen-dot" data-gen-dot style="display:none" title="有新楼层生成"></span>
-        <button class="novel-icon-btn novel-icon-close" data-action="close" title="关闭">×</button>
+        <button class="novel-icon-btn novel-icon-close" data-action="close" title="关闭">
+          ×<span class="novel-gen-dot" data-gen-dot style="display:none" title="有新楼层生成"></span>
+        </button>
       </div>`;
     content.appendChild(topbarEl);
 
@@ -676,13 +677,13 @@ jQuery(async () => {
 
   /**
    * 创建生成结束通知的 UI 绑定（在 openReaderDialog 中调用）。
-   * - 顶栏红点（.novel-gen-dot）已在顶栏 HTML 中创建
+   * - 红点角标（.novel-gen-dot）已在顶栏 × 关闭按钮内创建（按钮右上角）
    * - 角落气泡挂到 dlg.overlay（fixed 定位，规避 dialog transform 影响 fixed 子元素）
    * - 注入 genNotifyUi 回调：有生成结束时显示红点 + 气泡；气泡点击关闭阅读器弹窗
    * @param {object} dlg createOverlayDialog 返回值
    */
   function bindGenNotifyUi(dlg) {
-    // 顶栏红点（查询已注入的 DOM；开关关闭时红点保持隐藏，不影响本函数）
+    // 红点角标（查询已注入的 DOM；开关关闭时红点保持隐藏，不影响本函数）
     const dotEl = topbarEl?.querySelector("[data-gen-dot]");
 
     // 角落气泡：挂到 overlay（fixed 定位层，z-index 高于 dialog 内容）。
