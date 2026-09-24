@@ -506,8 +506,9 @@ jQuery(async () => {
       reader.abort();
       // 连续滚动阅读核心：移除滚动监听并清空容器（下次打开重新初始化）
       scrollReader?.destroy();
-      // 生成结束通知：停止监听 + 清除 UI 引用 + 清定时器 + 清零计数
-      genNotify.unsubscribe();
+      // 生成结束通知：清除 UI 引用 + 清定时器 + 清零计数。
+      // 注意：不 unsubscribe —— 订阅在插件启动时建立并常驻（见"启动"区），
+      // 弹窗关闭期间后台累计未读计数，下次打开时若有未读立即显示红点+气泡。
       genNotifyUi = null;
       genToastEl = null;
       clearTimeout(genToastTimer);
@@ -724,10 +725,12 @@ jQuery(async () => {
       }, 8000);
     };
 
-    // 弹窗打开期间订阅生成事件（关闭时在 dlg.onClose 中 unsubscribe）。
-    // 仅开关开启时订阅；开关关闭时保持零订阅（设置面板中再打开时恢复订阅）。
-    if (getGlobalSettings().genNotifyEnabled) {
-      genNotify.subscribe();
+    // 打开时若已有未读生成结束计数（弹窗关闭期间后台常驻订阅累计），
+    // 立即显示红点 + 气泡，避免"先发送再打开弹窗"漏通知的时序问题。
+    // 注意：订阅在插件启动时建立（见"启动"区），此处不再 subscribe。
+    const pendingNow = genNotify.getPending();
+    if (pendingNow > 0) {
+      genNotifyUi?.({ count: pendingNow, source: "reopen" });
     }
   }
 
@@ -3354,6 +3357,14 @@ jQuery(async () => {
 
   initButton();
   subscribeEvents();
+
+  // 新楼层生成结束通知：常驻订阅（幂等）。
+  // 弹窗未打开时后台累计未读计数（genNotifyUi 为 null，onNotify 无副作用）；
+  // 打开阅读器时若有未读立即显示红点+气泡（见 bindGenNotifyUi）。
+  // 开关关闭时零订阅不累计；设置面板中再打开时恢复订阅。
+  if (getGlobalSettings().genNotifyEnabled) {
+    genNotify.subscribe();
+  }
 
   // 按持久化主题同步 body 主题 class：阅读器与指令库独立弹窗，
   // 启动即应用（即使阅读器未打开，指令库也使用阅读器选定的内置主题配色）
