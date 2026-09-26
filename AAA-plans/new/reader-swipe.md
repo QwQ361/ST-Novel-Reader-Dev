@@ -176,10 +176,11 @@ container.addEventListener("click", (e) => {
 ```css
 /* ---------- 楼层版本切换条（swipe） ---------- */
 .novel-swipe-bar {
-  display: inline-flex;
+  display: flex;
+  width: fit-content;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
+  margin: 6px auto 0;
   padding: 2px 8px;
   border: 1px solid
     color-mix(
