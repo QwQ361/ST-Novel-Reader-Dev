@@ -9,7 +9,7 @@
 /**
  * 将单段文本渲染为安全的正文 HTML（复用现有 renderMarkdown/escapeHtmlFallback 管线）。
  * 楼层版本切换（swipe）每次渲染都经过这里，保证正则过滤与安全渲染一致。
- * @param {object} deps 依赖注入（renderMarkdown / regexFilter）
+ * @param {object} deps 依赖注入（renderMarkdown / regexFilter / getEnableRichHtml）
  * @param {string} text 消息正文（mes 或 swipes 中的某个版本）
  * @param {object} [options]
  * @param {string} [options.avatar] 当前角色头像（决定启用哪些角色级正则）
@@ -26,7 +26,13 @@ function renderTextBody(deps, text, options = {}) {
   }
   try {
     if (typeof deps.renderMarkdown === "function") {
-      return deps.renderMarkdown(t);
+      // 复杂 HTML/CSS 渲染开关（默认开启）：关闭时渲染管线退化为简单 Markdown。
+      // 开关变化后需重开聊天或切换章节才会重新渲染（与其它渲染类设置一致）。
+      const enableRichHtml =
+        typeof deps.getEnableRichHtml === "function"
+          ? deps.getEnableRichHtml()
+          : true;
+      return deps.renderMarkdown(t, { enableRichHtml });
     }
   } catch (err) {
     console.warn("[NovelReader] renderMarkdown 失败，回退转义输出:", err);

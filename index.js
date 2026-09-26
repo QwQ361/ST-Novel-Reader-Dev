@@ -142,6 +142,8 @@ jQuery(async () => {
     getShowUserReplies: () => getGlobalSettings().showUserReplies,
     // 是否显示楼层版本切换条（设置页开关，默认 true；关闭后只渲染当前版本，与现状一致）
     getShowSwipeBar: () => getGlobalSettings().showSwipeBar,
+    // 是否启用复杂 HTML/CSS 渲染（设置页开关，默认 true；关闭后消息内原始 HTML/CSS 转义为纯文本）
+    getEnableRichHtml: () => getGlobalSettings().enableRichHtml !== false,
     // 自动识别标题：返回识别标签（空 = 关闭；非空 = 启用，如 "zj"）
     getChapterTitleTag: () => {
       const g = getGlobalSettings();
@@ -288,6 +290,9 @@ jQuery(async () => {
     if (g.showReaderChatActions === undefined) g.showReaderChatActions = false;
     // 楼层版本切换条：含多个版本（swipe）的楼层底部显示「‹ 1/N ›」切换条（默认开启）
     if (g.showSwipeBar === undefined) g.showSwipeBar = true;
+    // 复杂 HTML/CSS 渲染：允许消息内的原始 HTML 标签与 <style> 内联样式生效（默认开启）。
+    // 关闭时退化为简单 Markdown（原始 HTML 转义为纯文本，<style> 不生效）。
+    if (g.enableRichHtml === undefined) g.enableRichHtml = true;
     // 新楼层生成结束/被截断通知（默认开启）：顶栏红点闪烁 + 角落气泡
     if (g.genNotifyEnabled === undefined) g.genNotifyEnabled = true;
     // 番外功能总开关：默认关闭（关闭时楼层无番外按钮、目录不显示番外过滤、指令库入口隐藏）
@@ -2064,6 +2069,18 @@ jQuery(async () => {
       </div>
 
       <div class="novel-settings-row" data-settings-group="reading">
+        <div class="novel-settings-label">复杂 HTML/CSS 渲染</div>
+        <label class="novel-switch">
+          <input type="checkbox" class="novel-enable-rich-html" ${
+            g.enableRichHtml !== false ? "checked" : ""
+          } />
+          <span class="novel-switch-track"></span>
+          <span class="novel-switch-thumb"></span>
+        </label>
+        <div class="novel-settings-hint">开启后，正文中的原始 HTML 标签与 &lt;style&gt; 内联样式可正常渲染（如美化排版、文字特效）。关闭后原始 HTML 显示为纯文本，只渲染 Markdown 基础语法。修改后需重新打开章节生效。</div>
+      </div>
+
+      <div class="novel-settings-row" data-settings-group="reading">
         <div class="novel-settings-label">删除与重命名按钮</div>
         <div class="novel-chat-actions-checkbox-row">
           <label class="novel-chat-actions-checkbox">
@@ -2456,6 +2473,19 @@ jQuery(async () => {
       g.showSwipeBar = showSwipeBarInput.checked;
       deps.saveSettings();
       // 正文页：重新渲染当前章节以应用切换条显隐
+      if (state.page === "reader" && state.currentChapter) {
+        openChapter(state.currentChapter);
+      }
+    });
+
+    // ---- 复杂 HTML/CSS 渲染：切换后保存设置 + 重渲染当前章生效 ----
+    const enableRichHtmlInput = content.querySelector(
+      ".novel-enable-rich-html",
+    );
+    enableRichHtmlInput?.addEventListener("change", () => {
+      g.enableRichHtml = enableRichHtmlInput.checked;
+      deps.saveSettings();
+      // 正文页：重新渲染当前章节以应用渲染模式（滚动模式重新渲染当前章块）
       if (state.page === "reader" && state.currentChapter) {
         openChapter(state.currentChapter);
       }

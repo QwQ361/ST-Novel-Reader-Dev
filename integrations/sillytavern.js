@@ -216,10 +216,25 @@ export function getPresetManagerFunc() {
 
 /**
  * 将 Markdown 文本安全渲染为 HTML（独立管线，可渲染任意聊天的消息）。
+ *
+ * 两种模式（由 options.enableRichHtml 控制，默认开启）：
+ * 1) enableRichHtml = true（复杂 HTML/CSS 渲染）：
+ *    对齐 ST 官方 messageFormatting 的 sanitize 配置（MESSAGE_SANITIZE: true +
+ *    ADD_TAGS: ['custom-style']），保留消息内的原始 HTML 标签与 <style> 内联样式，
+ *    并把 decodeStyleTags 的 CSS 选择器前缀修正为 .novel-msg-body（命中阅读器正文容器）。
+ *    修复历史问题：旧版未传 prefix 导致 <style> 选择器被强制加 .mes_text 前缀，
+ *    而阅读器 DOM 无 .mes_text 祖先 → 复杂 CSS 永远不生效。
+ * 2) enableRichHtml = false（简单渲染）：
+ *    showdown 用 encodeHtml 转义全部原始 HTML，只渲染 Markdown 基础语法
+ *    （段落/加粗/斜体/列表/表格/引用等），不保留内联 <style> 与原始标签。
+ *
  * @param {string} markdown 原始 Markdown 文本
+ * @param {object} [options]
+ * @param {boolean} [options.enableRichHtml=true] 是否启用复杂 HTML/CSS 渲染
  * @returns {string} 已 sanitize 的 HTML（失败时返回空字符串）
  */
-export function renderMarkdownCore(markdown) {
+export function renderMarkdownCore(markdown, options = {}) {
+  const enableRichHtml = options.enableRichHtml !== false;
   try {
     const converter = _scriptModule?.converter;
     if (converter) {
@@ -228,6 +243,13 @@ export function renderMarkdownCore(markdown) {
       // 正则会先跳过 <style> 与代码块。桥接的主题样式 .novel-msg-body q { color: var(--SmartThemeQuoteColor) }
       // 依赖这个 <q> 元素，缺了它引号就吃不到主题色。
       let html = String(markdown ?? "");
+      // 简单模式：先转义全部原始 HTML 标签（含 <style>），只渲染 Markdown 基础语法。
+      // 转义后 <style> 无法被 encodeStyleTags 捕获 → 内联 CSS 不生效；
+      // <div> 等原始标签变成纯文本展示。引号→q 与 Markdown 语法（**/##/[a](b) 等）
+      // 均不含 < >，不受影响。代码块内已转义的 < 由 showdown 保持实体，显示正常。
+      if (!enableRichHtml) {
+        html = html.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
       // 保护 HTML 标签属性内的双引号（与 ST 官方 encode_tags=false 分支一致）：
       // 引号转 q 正则会把 <span style="color:red"> 里成对的 " 误判为引用文本并包成 <q>，
       // 导致标签属性被破坏。先把标签内 " 换成 \ufffe 占位，转 q 完成后还原。
@@ -263,12 +285,17 @@ export function renderMarkdownCore(markdown) {
       );
       // 还原 HTML 标签属性内的双引号（与 ST 官方一致）
       html = html.replace(/\ufffe/g, '"');
+
+      // 统一用 ST 已配置的 converter：简单模式已在上文预先转义原始 HTML 标签，
+      // 故 makeHtml 不会输出危险标签；复杂模式则保留原始 HTML。
       html = converter.makeHtml(html);
+
       // 处理代码块换行（与 ST 一致：修复 Firefox <br> 问题）
       html = html.replace(/<code(.*)>[\s\S]*?<\/code>/g, (match) =>
         match.replace(/\n/gm, "\u0000"),
       );
       html = html.replace(/\u0000/g, "\n");
+
       // sanitize 管线（encode → DOMPurify → decode）
       const encode = _chatsModule?.encodeStyleTags ?? window.encodeStyleTags;
       const decode = _chatsModule?.decodeStyleTags ?? window.decodeStyleTags;
@@ -276,9 +303,25 @@ export function renderMarkdownCore(markdown) {
       let cleaned = html;
       if (typeof encode === "function") cleaned = encode(cleaned);
       if (purify) {
-        cleaned = purify.sanitize(cleaned, { ADD_TAGS: ["custom-style"] });
+        if (enableRichHtml) {
+          // 对齐 ST 官方 messageFormatting：MESSAGE_SANITIZE: true 让 ST 注册的
+          // uponSanitizeElement hook 生效（未知元素内换行 → <br>），保留复杂结构；
+          // ADD_TAGS 放行 custom-style（encodeStyleTags 生成的 <style> 占位）。
+          cleaned = purify.sanitize(cleaned, {
+            ADD_TAGS: ["custom-style"],
+            MESSAGE_SANITIZE: true,
+          });
+        } else {
+          // 简单模式：默认 DOMPurify 白名单（基础标签），不放行 custom-style
+          cleaned = purify.sanitize(cleaned);
+        }
       }
-      if (typeof decode === "function") cleaned = decode(cleaned);
+      if (typeof decode === "function") {
+        // 修正 prefix：让 <style> 里的选择器命中阅读器正文容器 .novel-msg-body。
+        // （ST 官方用 .mes_text，阅读器无此祖先 → 必须改成自己的容器类；
+        //   旧版未传 prefix 用默认 .mes_text → 复杂 CSS 永远不生效）
+        cleaned = decode(cleaned, { prefix: ".novel-msg-body " });
+      }
       return cleaned;
     }
     // 兜底：无 converter 时只转义纯文本
