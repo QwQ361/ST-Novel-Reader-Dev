@@ -7,6 +7,58 @@
 // chat[messageId]?.extra?.type），只能渲染「当前打开的聊天」，渲染非当前聊天时返回空。
 
 /**
+ * 将单段文本渲染为安全的正文 HTML（复用现有 renderMarkdown/escapeHtmlFallback 管线）。
+ * 楼层版本切换（swipe）每次渲染都经过这里，保证正则过滤与安全渲染一致。
+ * @param {object} deps 依赖注入（renderMarkdown / regexFilter）
+ * @param {string} text 消息正文（mes 或 swipes 中的某个版本）
+ * @param {object} [options]
+ * @param {string} [options.avatar] 当前角色头像（决定启用哪些角色级正则）
+ * @returns {string} 安全 HTML
+ */
+function renderTextBody(deps, text, options = {}) {
+  let t = text || "";
+  if (typeof deps.regexFilter === "function" && t) {
+    try {
+      t = deps.regexFilter(t, options.avatar || "");
+    } catch (err) {
+      console.warn("[NovelReader] regexFilter 失败，使用原文:", err);
+    }
+  }
+  try {
+    if (typeof deps.renderMarkdown === "function") {
+      return deps.renderMarkdown(t);
+    }
+  } catch (err) {
+    console.warn("[NovelReader] renderMarkdown 失败，回退转义输出:", err);
+  }
+  return escapeHtmlFallback(t);
+}
+
+/**
+ * 计算楼层版本信息（renderMessage 与 renderMessagesBatched 共用，
+ * 保证正文渲染、切换条、引用表三处数据一致）。
+ * @param {object} mes 消息对象
+ * @returns {{swipes: string[], origin: number, hasMulti: boolean}}
+ *   swipes  = 全部版本正文数组（无多版本时 = [mes.mes || ""]）
+ *   origin  = 酒馆最初选中的版本下标（swipe_id 合法时取之，越界/缺失回退 0）
+ *   hasMulti= 是否含多个版本（swipes.length > 1）
+ */
+function getSwipeInfo(mes) {
+  const hasMulti = Array.isArray(mes.swipes) && mes.swipes.length > 1;
+  const swipes = hasMulti ? mes.swipes : [mes.mes || ""];
+  let origin = 0;
+  if (
+    hasMulti &&
+    typeof mes.swipe_id === "number" &&
+    mes.swipe_id >= 0 &&
+    mes.swipe_id < swipes.length
+  ) {
+    origin = mes.swipe_id;
+  }
+  return { swipes, origin, hasMulti };
+}
+
+/**
  * 单条消息渲染为安全的 HTML。
  * @param {object} deps 依赖注入
  * @param {object} mes 消息对象（ST 原始消息：name / is_user / is_system / mes / send_date / swipes）
@@ -16,36 +68,21 @@
  * @returns {string} 安全的 HTML 字符串（已 sanitize）
  */
 export function renderMessage(deps, mes, options = {}) {
-  const { renderMarkdown = null, regexFilter = null } = deps;
+  // 楼层版本切换条开关（默认开启；关闭时退化为只渲染 mes.mes，与现状一致）
+  const showSwipeBar =
+    typeof deps.getShowSwipeBar === "function" ? deps.getShowSwipeBar() : true;
 
   const name = mes.name || options.userName || "?";
   const isUser = Boolean(mes.is_user);
   const isSystem = Boolean(mes.is_system);
 
-  // 正则过滤：渲染前对消息正文应用用户勾选的酒馆正则（默认不应用任何正则）
-  let text = mes.mes || "";
-  if (typeof regexFilter === "function" && text) {
-    try {
-      text = regexFilter(text, options.avatar || "");
-    } catch (err) {
-      console.warn("[NovelReader] regexFilter 失败，使用原文:", err);
-    }
-  }
+  // 楼层版本信息：有多个版本且开关开启时显示切换条
+  const { swipes, origin, hasMulti } = getSwipeInfo(mes);
+  const renderSwipes = showSwipeBar && hasMulti;
+  const currentSwipe = renderSwipes ? origin : 0;
+  const text = renderSwipes ? (swipes[currentSwipe] ?? "") : mes.mes || "";
 
-  let bodyHtml = "";
-  try {
-    // 独立管线：converter → encodeStyleTags → DOMPurify.sanitize → decodeStyleTags
-    // 不触碰全局 chat，可渲染任意聊天的消息。
-    if (typeof renderMarkdown === "function") {
-      bodyHtml = renderMarkdown(text);
-    } else {
-      // 兜底：无渲染管线时只转义纯文本
-      bodyHtml = escapeHtmlFallback(text);
-    }
-  } catch (err) {
-    console.warn("[NovelReader] renderMarkdown 失败，回退转义输出:", err);
-    bodyHtml = escapeHtmlFallback(text);
-  }
+  const bodyHtml = renderTextBody(deps, text, options);
 
   // 说话人标签（原样显示，不转换）
   const label = name;
@@ -62,20 +99,37 @@ export function renderMessage(deps, mes, options = {}) {
     .filter(Boolean)
     .join(" ");
 
+  const mesId = escapeHtmlFallback(String(mes.mesId ?? ""));
+
+  // 切换条：仅当含多个版本且开关开启时显示（‹ 1/N › ↺）
+  const swipeBarHtml = renderSwipes
+    ? `
+      <div class="novel-swipe-bar" data-swipe-bar>
+        <button type="button" class="novel-swipe-btn" data-swipe-prev title="上一个版本">‹</button>
+        <span class="novel-swipe-count">${currentSwipe + 1}/${swipes.length}</span>
+        <button type="button" class="novel-swipe-btn" data-swipe-next title="下一个版本">›</button>
+        <button type="button" class="novel-swipe-btn novel-swipe-reset" data-swipe-reset title="回到当前选中的版本" ${
+          currentSwipe === origin ? "disabled" : ""
+        }>↺</button>
+      </div>`
+    : "";
+
   return `
-    <div class="${cls}" data-id="${escapeHtmlFallback(String(mes.mesId ?? ""))}">
+    <div class="${cls}" data-id="${mesId}" data-mes-id="${mesId}" data-swipe-idx="${currentSwipe}" data-swipe-total="${swipes.length}" data-swipe-origin="${origin}">
       <div class="novel-msg-head">
         <span class="novel-msg-name">${escapeHtmlFallback(label)}</span>
         ${time ? `<span class="novel-msg-time">${time}</span>` : ""}
       </div>
       <div class="novel-msg-body">${bodyHtml}</div>
+      ${swipeBarHtml}
     </div>`;
 }
 
 /**
- * 将消息数组分批渲染到容器（避免一次性插入上万条 DOM 卡死）。
+ * 将消息数组分批渲染到容器（避免一次性插入上万条 DOM 卡死），
+ * 并绑定楼层版本切换条的事件委托（同一容器只绑一次）。
  * @param {object} deps 依赖注入
- * @param {HTMLElement} container 目标容器
+ * @param {HTMLElement} container 目标容器（.novel-msg-list）
  * @param {Array<object>} messages 消息数组
  * @param {object} [options] 见 renderMessage
  * @param {number} [options.batchSize=200] 每批渲染条数
@@ -90,6 +144,10 @@ export async function renderMessagesBatched(
   const { batchSize = 200, onProgress } = options;
   const total = messages.length;
 
+  // 楼层版本引用表：mesId → { swipes, origin, avatar }
+  // （不依赖全局 chat 数组；key 与楼层 data-mes-id 一致，供切换时回找消息对象）
+  const swipeRefs = new Map();
+
   // 用 DocumentFragment 累积，避免多次重排
   let fragment = document.createDocumentFragment();
   let pending = 0;
@@ -102,6 +160,15 @@ export async function renderMessagesBatched(
     // wrapper 只含一个子节点（novel-msg），取其首个元素挂载
     const node = wrapper.firstElementChild;
     if (node) {
+      // 引用表 key 与楼层 data-mes-id 保持一致：优先 mesId，缺失用章内序号
+      const key = mes.mesId != null ? String(mes.mesId) : `m${i}`;
+      node.dataset.mesId = key;
+      const { swipes, origin } = getSwipeInfo(mes);
+      swipeRefs.set(key, {
+        swipes,
+        origin,
+        avatar: options.avatar || "",
+      });
       fragment.appendChild(node);
       pending += 1;
     }
@@ -119,6 +186,69 @@ export async function renderMessagesBatched(
   if (pending > 0) {
     container.appendChild(fragment);
   }
+
+  bindSwipeBarEvents(deps, container, swipeRefs);
+}
+
+/**
+ * 在正文容器上绑定楼层版本切换条的事件委托（同一容器只绑一次）。
+ * 事件委托兼容「批量渲染 + 滚动模式反复追加章节块」的架构：
+ * 滚动模式下每章一个独立 .novel-msg-list 容器，各自绑定。
+ * @param {object} deps 依赖注入
+ * @param {HTMLElement} container 正文容器（.novel-msg-list）
+ * @param {Map<string, {swipes: string[], origin: number, avatar: string}>} swipeRefs 楼层版本引用表
+ */
+function bindSwipeBarEvents(deps, container, swipeRefs) {
+  if (!container || container.dataset.swipeBound === "1") return;
+  container.dataset.swipeBound = "1";
+
+  /** 切换/复位楼层显示的 swipe 版本（就地替换正文 + 更新计数与 ↺ 按钮态） */
+  function switchMessageSwipe(msgEl, idx) {
+    const key = msgEl.dataset.mesId || "";
+    const ref = swipeRefs.get(key);
+    if (!ref) return;
+    const swipes = ref.swipes;
+    if (!Array.isArray(swipes) || swipes.length === 0) return;
+    const total = swipes.length;
+    const safeIdx = ((idx % total) + total) % total; // 越界取模兜底
+    const body = msgEl.querySelector(".novel-msg-body");
+    if (!body) return;
+    // 新版本正文同样走正则过滤 + 安全渲染管线
+    body.innerHTML = renderTextBody(deps, swipes[safeIdx] ?? "", {
+      avatar: ref.avatar,
+    });
+    msgEl.dataset.swipeIdx = String(safeIdx);
+    const countEl = msgEl.querySelector(".novel-swipe-count");
+    if (countEl) countEl.textContent = `${safeIdx + 1}/${total}`;
+    // ↺ 按钮：当前显示酒馆最初选中版本时置灰，否则可用
+    const resetBtn = msgEl.querySelector("[data-swipe-reset]");
+    if (resetBtn) resetBtn.disabled = safeIdx === ref.origin;
+  }
+
+  container.addEventListener("click", (e) => {
+    // 切换版本：‹ / ›（循环切换）
+    const btn = e.target.closest("[data-swipe-prev], [data-swipe-next]");
+    if (btn) {
+      const msg = btn.closest(".novel-msg");
+      if (!msg) return;
+      const total = Number(msg.dataset.swipeTotal || 0);
+      if (total < 2) return; // 无切换空间
+      let idx = Number(msg.dataset.swipeIdx || 0);
+      const dir = btn.hasAttribute("data-swipe-prev") ? -1 : 1;
+      idx = (idx + dir + total) % total;
+      switchMessageSwipe(msg, idx);
+      return;
+    }
+
+    // 回到当前版本：↺（恢复为酒馆最初选中的 swipe_id 版本）
+    const reset = e.target.closest("[data-swipe-reset]");
+    if (reset) {
+      const msg = reset.closest(".novel-msg");
+      if (!msg) return;
+      const origin = Number(msg.dataset.swipeOrigin ?? 0);
+      switchMessageSwipe(msg, origin);
+    }
+  });
 }
 
 /**

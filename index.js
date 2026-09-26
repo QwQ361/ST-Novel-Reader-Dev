@@ -140,6 +140,8 @@ jQuery(async () => {
     saveSettings: () => ctx.saveSettingsDebounced?.(),
     // 是否显示 user 回复（设置页开关，默认 true）
     getShowUserReplies: () => getGlobalSettings().showUserReplies,
+    // 是否显示楼层版本切换条（设置页开关，默认 true；关闭后只渲染当前版本，与现状一致）
+    getShowSwipeBar: () => getGlobalSettings().showSwipeBar,
     // 自动识别标题：返回识别标签（空 = 关闭；非空 = 启用，如 "zj"）
     getChapterTitleTag: () => {
       const g = getGlobalSettings();
@@ -284,6 +286,8 @@ jQuery(async () => {
     if (g.showTocChatActions === undefined) g.showTocChatActions = false;
     // 阅读页是否显示聊天删除/重命名按钮（默认关闭）
     if (g.showReaderChatActions === undefined) g.showReaderChatActions = false;
+    // 楼层版本切换条：含多个版本（swipe）的楼层底部显示「‹ 1/N ›」切换条（默认开启）
+    if (g.showSwipeBar === undefined) g.showSwipeBar = true;
     // 新楼层生成结束/被截断通知（默认开启）：顶栏红点闪烁 + 角落气泡
     if (g.genNotifyEnabled === undefined) g.genNotifyEnabled = true;
     // 番外功能总开关：默认关闭（关闭时楼层无番外按钮、目录不显示番外过滤、指令库入口隐藏）
@@ -1976,6 +1980,18 @@ jQuery(async () => {
       </div>
 
       <div class="novel-settings-row">
+        <div class="novel-settings-label">楼层版本切换条</div>
+        <label class="novel-switch">
+          <input type="checkbox" class="novel-show-swipe-bar" ${
+            g.showSwipeBar ? "checked" : ""
+          } />
+          <span class="novel-switch-track"></span>
+          <span class="novel-switch-thumb"></span>
+        </label>
+        <div class="novel-settings-hint">开启后，含多个版本（swipe）的楼层底部显示「‹ 1/N ›」切换条，可查看其它版本并一键回到当前选中版本。</div>
+      </div>
+
+      <div class="novel-settings-row">
         <div class="novel-settings-label">删除与重命名按钮</div>
         <div class="novel-chat-actions-checkbox-row">
           <label class="novel-chat-actions-checkbox">
@@ -2332,6 +2348,17 @@ jQuery(async () => {
       g.showReaderChatActions = showReaderActionsInput.checked;
       deps.saveSettings();
       // 正文页：重新渲染当前章节以应用按钮显隐
+      if (state.page === "reader" && state.currentChapter) {
+        openChapter(state.currentChapter);
+      }
+    });
+
+    // ---- 楼层版本切换条：切换后保存设置 + 重渲染当前章生效 ----
+    const showSwipeBarInput = content.querySelector(".novel-show-swipe-bar");
+    showSwipeBarInput?.addEventListener("change", () => {
+      g.showSwipeBar = showSwipeBarInput.checked;
+      deps.saveSettings();
+      // 正文页：重新渲染当前章节以应用切换条显隐
       if (state.page === "reader" && state.currentChapter) {
         openChapter(state.currentChapter);
       }

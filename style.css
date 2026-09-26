@@ -893,6 +893,61 @@
   border-radius: 6px;
 }
 
+/* ---------- 楼层版本切换条（swipe） ---------- */
+.novel-swipe-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 25%,
+      transparent
+    );
+  border-radius: 999px;
+  opacity: 0.75;
+  transition: opacity 0.2s ease;
+}
+.novel-msg:hover .novel-swipe-bar {
+  opacity: 1;
+}
+.novel-swipe-btn {
+  background: transparent;
+  border: none;
+  color: var(--novel-accent, var(--novel-fg, var(--SmartThemeBodyColor, #ddd)));
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+.novel-swipe-btn:hover:not(:disabled) {
+  opacity: 1;
+}
+.novel-swipe-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.novel-swipe-count {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  min-width: 2.5em;
+  text-align: center;
+}
+.novel-swipe-reset {
+  /* 「回到当前版本」按钮：与计数用分隔线区分，置灰态更弱 */
+  margin-left: 4px;
+  padding-left: 8px;
+  border-left: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+}
+
 /* 内联强调元素（em/strong/q）与块引用/代码样式定义在下方「内置主题」区块：
    优先用主题变量，跟随酒馆时回退 --novel-fg / --SmartTheme* */
 
