@@ -183,9 +183,12 @@ jQuery(async () => {
   // 新楼层生成结束/被截断 → 红点闪烁 + 角落气泡通知。
   // onNotify 转发给可变 genNotifyUi（由 openReaderDialog 内的 bindGenNotifyUi 注入），
   // 弹窗打开前 genNotifyUi 为 null，通知回调不产生副作用。
+  // isReaderOpen：仅当生成结束的那一刻阅读器弹窗处于打开状态才通知——
+  // 用户沉迷阅读看不到酒馆楼层才需要提醒；阅读器未打开时用户已看到楼层，无需通知。
   const genNotify = createGenNotifyCore({
     ...deps,
     getStContext: () => getStContext(),
+    isReaderOpen: () => dialogRef !== null,
     onNotify: (info) => genNotifyUi?.(info),
   });
   let genNotifyUi = null; // 由 openReaderDialog 注入的 UI 回调（见 bindGenNotifyUi）
@@ -507,8 +510,9 @@ jQuery(async () => {
       // 连续滚动阅读核心：移除滚动监听并清空容器（下次打开重新初始化）
       scrollReader?.destroy();
       // 生成结束通知：清除 UI 引用 + 清定时器 + 清零计数。
-      // 注意：不 unsubscribe —— 订阅在插件启动时建立并常驻（见"启动"区），
-      // 弹窗关闭期间后台累计未读计数，下次打开时若有未读立即显示红点+气泡。
+      // 注意：不 unsubscribe —— 订阅在插件启动时建立并常驻（见"启动"区）。
+      // 是否通知由"生成结束那一刻阅读器是否打开"（isReaderOpen）决定，
+      // 阅读器关闭期间发生的生成结束不会累计，下次打开也不会弹出红点/气泡。
       genNotifyUi = null;
       genToastEl = null;
       clearTimeout(genToastTimer);
@@ -729,13 +733,10 @@ jQuery(async () => {
       }, 8000);
     };
 
-    // 打开时若已有未读生成结束计数（弹窗关闭期间后台常驻订阅累计），
-    // 立即显示红点 + 气泡，避免"先发送再打开弹窗"漏通知的时序问题。
-    // 注意：订阅在插件启动时建立（见"启动"区），此处不再 subscribe。
-    const pendingNow = genNotify.getPending();
-    if (pendingNow > 0) {
-      genNotifyUi?.({ count: pendingNow, source: "reopen" });
-    }
+    // 打开时不再检查 getPending()：订阅在插件启动时建立（见"启动"区），
+    // 但是否通知由"生成结束那一刻阅读器是否打开"（isReaderOpen）决定，
+    // 阅读器关闭期间不会累计计数，故打开时不存在需要补显的未读。
+    // 仅当本次打开期间有生成结束事件时，onNotify 才会驱动红点+气泡。
   }
 
   // ============ 关闭位置记忆（重新打开恢复原页面） ============
@@ -2040,7 +2041,7 @@ jQuery(async () => {
           <span class="novel-switch-track"></span>
           <span class="novel-switch-thumb"></span>
         </label>
-        <div class="novel-settings-hint">阅读器打开时，若酒馆有新楼层生成结束或被截断（含手动停止），顶栏红点闪烁 + 右下角气泡提醒；点击气泡关闭阅读器。</div>
+        <div class="novel-settings-hint">阅读器打开期间，若酒馆有新楼层生成结束或被截断（含手动停止），顶栏红点闪烁 + 右下角气泡提醒；点击气泡关闭阅读器。生成结束时阅读器未打开（你能看到酒馆楼层）则不会提醒。</div>
       </div>
 
       <div class="novel-settings-row">
