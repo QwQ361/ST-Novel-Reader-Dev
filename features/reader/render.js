@@ -102,11 +102,12 @@ export function renderMessage(deps, mes, options = {}) {
   const mesId = escapeHtmlFallback(String(mes.mesId ?? ""));
 
   // 切换条：仅当含多个版本且开关开启时显示（‹ 1/N › ↺）
+  // 计数「1/N」可点击：点击后原地变为数字输入框，可手动输入版本号跳转
   const swipeBarHtml = renderSwipes
     ? `
       <div class="novel-swipe-bar" data-swipe-bar>
         <button type="button" class="novel-swipe-btn" data-swipe-prev title="上一个版本">‹</button>
-        <span class="novel-swipe-count">${currentSwipe + 1}/${swipes.length}</span>
+        <span class="novel-swipe-count" data-swipe-jump title="点击跳转到指定版本">${currentSwipe + 1}/${swipes.length}</span>
         <button type="button" class="novel-swipe-btn" data-swipe-next title="下一个版本">›</button>
         <button type="button" class="novel-swipe-btn novel-swipe-reset" data-swipe-reset title="回到当前选中的版本" ${
           currentSwipe === origin ? "disabled" : ""
@@ -225,6 +226,66 @@ function bindSwipeBarEvents(deps, container, swipeRefs) {
     if (resetBtn) resetBtn.disabled = safeIdx === ref.origin;
   }
 
+  /**
+   * 把计数「1/N」就地切换为数字输入框（保持 .novel-swipe-count 类名，便于样式复用）。
+   * 输入范围 1~N，Enter/失焦确认跳转，Escape 取消。
+   */
+  function startSwipeJump(countEl) {
+    if (countEl.dataset.swipeInput === "1") return; // 已处于输入态
+    const total = Number(
+      countEl.closest(".novel-msg")?.dataset.swipeTotal || 0,
+    );
+    if (total < 2) return;
+    const current =
+      Number(countEl.closest(".novel-msg")?.dataset.swipeIdx || 0) + 1;
+    countEl.dataset.swipeInput = "1";
+    countEl.textContent = "";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(total);
+    input.step = "1";
+    input.value = String(current);
+    input.className = "novel-swipe-input";
+    input.setAttribute("aria-label", "跳转到指定版本");
+    countEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    /** 结束输入态并恢复计数显示（失焦/确认/取消共用） */
+    const finish = () => {
+      countEl.dataset.swipeInput = "";
+      countEl.textContent = `${Number(countEl.closest(".novel-msg")?.dataset.swipeIdx || 0) + 1}/${total}`;
+    };
+    /** 读取输入并跳转（越界自动夹取到 1~N） */
+    const commit = () => {
+      const raw = Number(input.value);
+      const target =
+        Number.isFinite(raw) && raw >= 1 ? Math.min(Math.round(raw), total) : 0;
+      if (target) {
+        const msg = countEl.closest(".novel-msg");
+        if (msg) switchMessageSwipe(msg, target - 1);
+      }
+    };
+
+    input.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        input.blur(); // 交由 blur 统一收尾（commit + finish），避免与失焦重复触发
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        input.value = "";
+        input.blur(); // 取消：清空输入再失焦，blur 里 commit 因空值不跳转，仅恢复计数
+      }
+    });
+    input.addEventListener("blur", () => {
+      // 失焦即确认（与 Enter 行为一致）；Escape 已清空输入，此处置为取消
+      commit();
+      finish();
+    });
+  }
+
   container.addEventListener("click", (e) => {
     // 切换版本：‹ / ›（循环切换）
     const btn = e.target.closest("[data-swipe-prev], [data-swipe-next]");
@@ -237,6 +298,13 @@ function bindSwipeBarEvents(deps, container, swipeRefs) {
       const dir = btn.hasAttribute("data-swipe-prev") ? -1 : 1;
       idx = (idx + dir + total) % total;
       switchMessageSwipe(msg, idx);
+      return;
+    }
+
+    // 手动输入跳转：点击计数「1/N」
+    const jump = e.target.closest("[data-swipe-jump]");
+    if (jump && !jump.dataset.swipeInput) {
+      startSwipeJump(jump);
       return;
     }
 

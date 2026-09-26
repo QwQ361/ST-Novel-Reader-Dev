@@ -936,6 +936,45 @@
   opacity: 0.6;
   min-width: 2.5em;
   text-align: center;
+  /* 计数可点击：提示可手动输入跳转 */
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 3px;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease;
+}
+.novel-swipe-count:hover {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--novel-fg, var(--SmartThemeBodyColor, #ddd))) 15%,
+    transparent
+  );
+}
+/* 手动输入跳转的数字输入框（内联替换计数文本） */
+.novel-swipe-input {
+  width: 3.5em;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  background: transparent;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-accent, var(--novel-fg, var(--SmartThemeBodyColor, #ddd))) 40%,
+      transparent
+    );
+  border-radius: 4px;
+  padding: 1px 2px;
+  outline: none;
+}
+.novel-swipe-input:focus {
+  border-color: var(
+    --novel-accent,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd))
+  );
 }
 .novel-swipe-reset {
   /* 「回到当前版本」按钮：与计数用分隔线区分，置灰态更弱 */
