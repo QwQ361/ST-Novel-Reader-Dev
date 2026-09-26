@@ -1928,7 +1928,14 @@ jQuery(async () => {
       .join("");
 
     content.innerHTML = `
-      <div class="novel-settings-row novel-mode-section">
+      <div class="novel-settings-tabs" role="tablist">
+        <button type="button" class="novel-settings-tab active" data-settings-tab="general" role="tab" aria-selected="true">通用</button>
+        <button type="button" class="novel-settings-tab" data-settings-tab="reading" role="tab" aria-selected="false">阅读</button>
+        <button type="button" class="novel-settings-tab" data-settings-tab="side" role="tab" aria-selected="false">番外与通知</button>
+        <button type="button" class="novel-settings-tab" data-settings-tab="regex" role="tab" aria-selected="false">正则</button>
+      </div>
+
+      <div class="novel-settings-row novel-mode-section" data-settings-group="general">
         <div class="novel-settings-label">按钮位置</div>
         <div class="novel-mode-toggle">
           <button type="button" class="novel-mode-btn ${
@@ -1945,16 +1952,16 @@ jQuery(async () => {
         </div>
       </div>
 
-      <div class="novel-settings-row">
+      <div class="novel-settings-row" data-settings-group="general">
         <div class="novel-settings-label">目录每页章数</div>
         <input type="range" min="10" max="500" step="10" value="${Number(g.chaptersPerPage) || 100}" />
         <div class="novel-settings-value"></div>
       </div>
-      <div class="novel-settings-row">
+      <div class="novel-settings-row" data-settings-group="general">
         <div class="novel-settings-hint">用于目录页的分页显示，修改后立即生效。</div>
       </div>
 
-      <div class="novel-settings-row">
+      <div class="novel-settings-row" data-settings-group="general">
         <div class="novel-settings-label">阅读窗口模式</div>
         <select class="novel-window-mode-select">
           <option value="fullscreen" ${
@@ -1967,7 +1974,7 @@ jQuery(async () => {
         <div class="novel-settings-hint">全屏：阅读器占满整个屏幕；悬浮窗：小窗口显示，可拖动标题栏移动位置，拖动右下角调整大小。</div>
       </div>
 
-      <div class="novel-settings-row">
+      <div class="novel-settings-row" data-settings-group="reading">
         <div class="novel-settings-label">显示用户回复</div>
         <label class="novel-switch">
           <input type="checkbox" class="novel-show-user-input" ${
@@ -1979,7 +1986,7 @@ jQuery(async () => {
         <div class="novel-settings-hint">开启时 user 回复与角色消息合并为一章；关闭后不显示 user 回复，每条角色消息作为单独一章。</div>
       </div>
 
-      <div class="novel-settings-row">
+      <div class="novel-settings-row" data-settings-group="reading">
         <div class="novel-settings-label">楼层版本切换条</div>
         <label class="novel-switch">
           <input type="checkbox" class="novel-show-swipe-bar" ${
@@ -1991,7 +1998,7 @@ jQuery(async () => {
         <div class="novel-settings-hint">开启后，含多个版本（swipe）的楼层底部显示「‹ 1/N ›」切换条，可查看其它版本并一键回到当前选中版本。</div>
       </div>
 
-      <div class="novel-settings-row">
+      <div class="novel-settings-row" data-settings-group="reading">
         <div class="novel-settings-label">删除与重命名按钮</div>
         <div class="novel-chat-actions-checkbox-row">
           <label class="novel-chat-actions-checkbox">
@@ -2010,7 +2017,7 @@ jQuery(async () => {
         <div class="novel-settings-hint">聊天列表卡片始终显示；目录页与阅读页勾选时才显示。</div>
       </div>
 
-      <div class="novel-settings-row novel-side-story-section">
+      <div class="novel-settings-row novel-side-story-section" data-settings-group="side">
         <div class="novel-settings-label">番外功能</div>
         <label class="novel-switch">
           <input type="checkbox" class="novel-side-story-enabled" ${
@@ -2048,7 +2055,7 @@ jQuery(async () => {
         </div>
       </div>
 
-      <div class="novel-settings-row">
+      <div class="novel-settings-row" data-settings-group="side">
         <div class="novel-settings-label">生成结束通知</div>
         <label class="novel-switch">
           <input type="checkbox" class="novel-gen-notify-enabled" ${
@@ -2060,7 +2067,7 @@ jQuery(async () => {
         <div class="novel-settings-hint">阅读器打开期间，若酒馆有新楼层生成结束或被截断（含手动停止），顶栏红点闪烁 + 右下角气泡提醒；点击气泡关闭阅读器。生成结束时阅读器未打开（你能看到酒馆楼层）则不会提醒。</div>
       </div>
 
-      <div class="novel-settings-row">
+      <div class="novel-settings-row" data-settings-group="general">
         <div class="novel-settings-label">打开时显示</div>
         <select class="novel-start-page-select">
           <option value="last" ${g.startPage !== "home" ? "selected" : ""}>上次关闭的页面</option>
@@ -2069,7 +2076,7 @@ jQuery(async () => {
         <div class="novel-settings-hint">刷新酒馆后第一次打开阅读器时显示的页面；之后正常关闭再打开（不刷新）会回到上次位置。</div>
       </div>
 
-      <div class="novel-settings-row novel-chapter-title-section">
+      <div class="novel-settings-row novel-chapter-title-section" data-settings-group="reading">
         <div class="novel-settings-label">自动识别标题</div>
         <label class="novel-switch">
           <input type="checkbox" class="novel-auto-chapter-title" ${
@@ -2106,7 +2113,7 @@ jQuery(async () => {
         </div>
       </div>
 
-      <div class="novel-settings-row novel-icon-config-section">
+      <div class="novel-settings-row novel-icon-config-section" data-settings-group="general">
         <div class="novel-settings-label">自定义顶栏图标</div>
         <div class="novel-icon-input-row">
           <input type="text" class="novel-icon-url-input"
@@ -2143,7 +2150,7 @@ jQuery(async () => {
         }</div>
       </div>
 
-      <div class="novel-settings-row novel-regex-section">
+      <div class="novel-settings-row novel-regex-section" data-settings-group="regex">
         <div class="novel-regex-active-summary"></div>
         <div class="novel-regex-label-row">
           <div class="novel-settings-label">全局正则</div>
@@ -2153,7 +2160,7 @@ jQuery(async () => {
         <div class="novel-regex-list"></div>
       </div>
 
-      <div class="novel-settings-row novel-regex-preset-section">
+      <div class="novel-settings-row novel-regex-preset-section" data-settings-group="regex">
         <div class="novel-regex-label-row">
           <div class="novel-settings-label">预设正则</div>
           <button type="button" class="novel-regex-toggle-all" data-scope="preset">全选</button>
@@ -2173,6 +2180,31 @@ jQuery(async () => {
         <select class="novel-regex-preset-select"></select>
         <div class="novel-regex-preset-list"></div>
       </div>`;
+
+    // ---- 标签页分组：切换 Tab 时按 data-settings-group 显隐对应设置项 ----
+    const settingsTabs = content.querySelectorAll(".novel-settings-tab");
+    const settingsGroups = content.querySelectorAll("[data-settings-group]");
+    let activeTab = "general";
+    /** 显示指定分组，隐藏其余 */
+    function showSettingsGroup(name) {
+      activeTab = name;
+      settingsTabs.forEach((tab) => {
+        const on = tab.dataset.settingsTab === name;
+        tab.classList.toggle("active", on);
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      settingsGroups.forEach((group) => {
+        const show = group.dataset.settingsGroup === name;
+        group.style.display = show ? "" : "none";
+      });
+    }
+    settingsTabs.forEach((tab) => {
+      tab.addEventListener("click", () =>
+        showSettingsGroup(tab.dataset.settingsTab),
+      );
+    });
+    // 默认只显示「通用」分组
+    showSettingsGroup("general");
 
     // ---- 按钮位置：三按钮切换（立即生效 + 持久化） ----
     const modeSection = content.querySelector(".novel-mode-section");

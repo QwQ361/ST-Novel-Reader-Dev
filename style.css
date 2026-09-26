@@ -1335,6 +1335,46 @@ body.novel-theme-ocean {
   gap: 6px;
 }
 
+/* 设置弹窗标签页导航（通用 / 阅读 / 番外与通知 / 正则） */
+.novel-settings-tabs {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 15%,
+      transparent
+    );
+}
+
+.novel-settings-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 4px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  background: transparent;
+  opacity: 0.55;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.novel-settings-tab:hover {
+  opacity: 0.85;
+}
+
+.novel-settings-tab.active {
+  background: var(--novel-accent, var(--SmartThemeMainColor, #4f8cff));
+  color: #fff;
+  opacity: 1;
+}
+
 .novel-settings-label {
   font-size: 0.85rem;
   opacity: 0.8;
