@@ -708,6 +708,45 @@
   opacity: 0.7;
   min-width: 8em;
   text-align: center;
+  /* 页码可点击：提示可手动输入跳转 */
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 6px;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease;
+}
+.novel-pager-info:hover {
+  opacity: 1;
+  background: color-mix(
+    in srgb,
+    var(--novel-accent, var(--novel-fg, var(--SmartThemeBodyColor, #ddd))) 15%,
+    transparent
+  );
+}
+/* 目录分页器手动输入页码的数字输入框（内联替换页码文本） */
+.novel-pager-input {
+  width: 4.5em;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  background: transparent;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-accent, var(--novel-fg, var(--SmartThemeBodyColor, #ddd))) 40%,
+      transparent
+    );
+  border-radius: 4px;
+  padding: 1px 2px;
+  outline: none;
+}
+.novel-pager-input:focus {
+  border-color: var(
+    --novel-accent,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd))
+  );
 }
 
 /* ---------- 正文阅读页 ---------- */

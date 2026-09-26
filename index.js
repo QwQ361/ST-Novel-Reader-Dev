@@ -1463,9 +1463,15 @@ jQuery(async () => {
         state.tocPage -= 1;
         renderTocPage(container);
       });
+      // 页码「N / 总页数」：可点击，点击后原地变为数字输入框，手动输入页码跳转
       const infoEl = document.createElement("span");
       infoEl.className = "novel-pager-info";
+      infoEl.dataset.tocPageJump = "1";
+      infoEl.title = "点击跳转到指定页";
       infoEl.textContent = `${state.tocPage + 1} / ${totalPages}`;
+      infoEl.addEventListener("click", () => {
+        startTocPageJump(infoEl, totalPages, () => renderTocPage(container));
+      });
       const nextBtn = document.createElement("button");
       nextBtn.className = "novel-icon-btn";
       nextBtn.textContent = "→";
@@ -1481,6 +1487,65 @@ jQuery(async () => {
     }
 
     container.appendChild(toc);
+  }
+
+  /**
+   * 目录分页器页码跳转：点击「N / 总页数」后原地变为数字输入框。
+   * 输入 1~totalPages，Enter/失焦确认跳转，Escape 取消。
+   * @param {HTMLElement} infoEl 页码元素（.novel-pager-info）
+   * @param {number} totalPages 总页数
+   * @param {() => void} onJump 确认跳转后的重渲染回调
+   */
+  function startTocPageJump(infoEl, totalPages, onJump) {
+    if (infoEl.dataset.tocPageInput === "1") return; // 已处于输入态
+    const current = state.tocPage + 1;
+    infoEl.dataset.tocPageInput = "1";
+    infoEl.textContent = "";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(totalPages);
+    input.step = "1";
+    input.value = String(current);
+    input.className = "novel-pager-input";
+    input.setAttribute("aria-label", "跳转到指定页");
+    infoEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    /** 结束输入态并恢复页码显示 */
+    const finish = () => {
+      infoEl.dataset.tocPageInput = "";
+      infoEl.textContent = `${state.tocPage + 1} / ${totalPages}`;
+    };
+    /** 读取输入并跳转（越界自动夹取到 1~totalPages） */
+    const commit = () => {
+      const raw = Number(input.value);
+      const target =
+        Number.isFinite(raw) && raw >= 1
+          ? Math.min(Math.round(raw), totalPages)
+          : 0;
+      if (target && target !== state.tocPage + 1) {
+        state.tocPage = target - 1;
+        onJump?.();
+      }
+    };
+
+    input.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        input.blur(); // 交由 blur 统一收尾（commit + finish），避免重复触发
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        input.value = ""; // 清空后失焦：commit 因空值不跳转，仅恢复页码
+        input.blur();
+      }
+    });
+    input.addEventListener("blur", () => {
+      commit();
+      finish();
+    });
   }
 
   // ============ 正文阅读页（按章渲染） ============
