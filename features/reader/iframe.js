@@ -93,8 +93,12 @@ function buildIframeHtml(code, id) {
   const runtimeScript = `
     (function () {
       var APP_ID = ${id};
+      var lastReportedH = 0;
       function report(action) {
         var h = Math.ceil(document.documentElement.scrollHeight) + 2;
+        // 高度变化小于阈值（4px）视为抖动/反馈循环，不重复汇报
+        if (action === "height" && Math.abs(h - lastReportedH) < 4 && lastReportedH > 0) return;
+        lastReportedH = h;
         parent.postMessage({ type: "novel-html-app", id: APP_ID, action: action || "height", height: h }, "*");
       }
       function applyTheme(t) {
@@ -133,10 +137,12 @@ function buildIframeHtml(code, id) {
     })();
   `;
 
-  // 用户代码内联在 <body> 中：若其 JS 字符串含字面 </script> 序列会提前闭合脚本标签，
-  // 把 </script 替换为 <\/script（对 HTML 解析器等价，对 JS 字符串无害）防止提前终止。
-  const safeCode = String(code ?? "").replace(/<\/script/gi, "<\\/script");
-
+  // 用户代码原样内联在 <body> 中，不要替换 </script。
+  // 原因：把 </script 改成 <\/script 会破坏 HTML 解析器的脚本闭合识别
+  // （<\/script 不是有效闭合标签），脚本区会延伸到 runtimeScript 末尾，
+  // 用户 JS 与 runtime 合并成一个含非法 token 的大脚本，导致全部不执行。
+  // srcdoc 属性层面已由 escapeHtmlFallback 转义（< > & "），属性逃逸已防护；
+  // 解码后的文档中用户 <script>...</script> 正常配对，浏览器正确执行。
   const srcdoc = `<!DOCTYPE html>
 <html>
 <head>
@@ -155,21 +161,22 @@ function buildIframeHtml(code, id) {
     color: var(--novel-fg, inherit);
     font-size: var(--novel-font-size, 16px);
     line-height: 1.6;
+    /* 防止高度反馈循环：body 高度不跟随 iframe 高度联动 */
+    overflow: clip;
   }
   * { box-sizing: border-box; }
 </style>
 </head>
 <body>
-${safeCode}
+${String(code ?? "")}
 <script>${runtimeScript}<\/script>
 </body>
 </html>`;
 
-  // srcdoc 属性必须转义（尤其双引号与 </script> 序列，防止属性逃逸/提前闭合）
+  // srcdoc 属性必须转义（尤其双引号，防止属性逃逸）
   return `<div class="novel-html-app" data-html-app-id="${id}"><iframe
     class="novel-html-app-frame"
     sandbox="allow-scripts"
-    loading="lazy"
     srcdoc="${escapeHtmlFallback(srcdoc)}"></iframe></div>`;
 }
 
@@ -265,10 +272,14 @@ export function bindHtmlAppMessages(win, getRootEl) {
       return;
     }
 
-    // 高度回写
+    // 高度回写：与当前值差异小于阈值（4px）视为反馈循环抖动，不重复写，
+    // 避免触发子页面 ResizeObserver 再次汇报 → 无限循环。
     const height = Number(data.height);
     if (!Number.isFinite(height)) return;
-    frame.style.height = `${Math.max(40, Math.ceil(height))}px`;
+    const target = Math.max(40, Math.ceil(height));
+    const current = parseInt(frame.style.height, 10) || 0;
+    if (current > 0 && Math.abs(target - current) < 4) return;
+    frame.style.height = `${target}px`;
     container.classList.add("novel-html-app-ready");
   });
 }
