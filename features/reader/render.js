@@ -32,20 +32,25 @@ function renderTextBody(deps, text, options = {}) {
       ? deps.getHtmlAppEnabled()
       : true;
 
+  // 提取 ```html 代码块 → 占位符（仅当开关开启且存在 html 代码块）。
+  // ⚠️ 必须先于 regexFilter 执行：用户启用的正则（如「不发送杂项」的
+  // /<(style|Branch|Rant|Module|Special_Episode)>[\s\S]*?<\/\1>/g）会直接
+  // 命中 ```html 代码块内部的 <style> 等标签并整块删除，导致 HTML 应用
+  // 样式丢失。先提取为纯字母数字占位符（@@NOVEL_HTML_APP_n@@，不会被
+  // 任何正则命中），正则只作用于普通正文，渲染后再替换回沙箱 iframe。
+  let apps = [];
+  if (htmlAppsEnabled) {
+    const pre = preprocessHtmlApps(t);
+    t = pre.text;
+    apps = pre.apps;
+  }
+
   if (typeof deps.regexFilter === "function" && t) {
     try {
       t = deps.regexFilter(t, options.avatar || "");
     } catch (err) {
       console.warn("[NovelReader] regexFilter 失败，使用原文:", err);
     }
-  }
-
-  // 提取 ```html 代码块 → 占位符（仅当开关开启且存在 html 代码块）
-  let apps = [];
-  if (htmlAppsEnabled) {
-    const pre = preprocessHtmlApps(t);
-    t = pre.text;
-    apps = pre.apps;
   }
 
   try {
