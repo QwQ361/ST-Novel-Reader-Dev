@@ -17,6 +17,7 @@ import {
 import { createChatlogsCore } from "./features/chatlogs/index.js";
 import { createGenNotifyCore } from "./features/gen-notify/index.js";
 import { createProgressCore } from "./features/progress/index.js";
+import { refreshHtmlAppThemes } from "./features/reader/iframe.js";
 import { createReaderCore } from "./features/reader/index.js";
 import { createScrollReader } from "./features/reader/scroll.js";
 import { createRegexCore } from "./features/regex/index.js";
@@ -142,6 +143,10 @@ jQuery(async () => {
     getShowUserReplies: () => getGlobalSettings().showUserReplies,
     // 是否显示楼层版本切换条（设置页开关，默认 true；关闭后只渲染当前版本，与现状一致）
     getShowSwipeBar: () => getGlobalSettings().showSwipeBar,
+    // 是否启用 HTML 应用渲染（设置页开关，默认 true；关闭后 ```html 代码块退化为普通代码）
+    getHtmlAppEnabled: () => getGlobalSettings().htmlAppEnabled !== false,
+    // HTML 应用读取主题变量的根元素（阅读器弹窗 .novel-dialog，未打开时返回 null）
+    getHtmlAppRootEl: () => dialogRef?.dialog ?? null,
     // 自动识别标题：返回识别标签（空 = 关闭；非空 = 启用，如 "zj"）
     getChapterTitleTag: () => {
       const g = getGlobalSettings();
@@ -288,6 +293,8 @@ jQuery(async () => {
     if (g.showReaderChatActions === undefined) g.showReaderChatActions = false;
     // 楼层版本切换条：含多个版本（swipe）的楼层底部显示「‹ 1/N ›」切换条（默认开启）
     if (g.showSwipeBar === undefined) g.showSwipeBar = true;
+    // HTML 应用：正文中的 ```html 代码块以沙箱 iframe 方式渲染，支持复杂交互界面（默认开启）
+    if (g.htmlAppEnabled === undefined) g.htmlAppEnabled = true;
     // 新楼层生成结束/被截断通知（默认开启）：顶栏红点闪烁 + 角落气泡
     if (g.genNotifyEnabled === undefined) g.genNotifyEnabled = true;
     // 番外功能总开关：默认关闭（关闭时楼层无番外按钮、目录不显示番外过滤、指令库入口隐藏）
@@ -2064,6 +2071,18 @@ jQuery(async () => {
       </div>
 
       <div class="novel-settings-row" data-settings-group="reading">
+        <div class="novel-settings-label">HTML 应用</div>
+        <label class="novel-switch">
+          <input type="checkbox" class="novel-html-app-enabled" ${
+            g.htmlAppEnabled !== false ? "checked" : ""
+          } />
+          <span class="novel-switch-track"></span>
+          <span class="novel-switch-thumb"></span>
+        </label>
+        <div class="novel-settings-hint">开启后，正文中的「html 代码块」（三个反引号包 html）以隔离沙箱 iframe 方式渲染，支持脚本与复杂交互界面（如按钮、卡片、小游戏）。关闭后此类代码块按普通代码显示。</div>
+      </div>
+
+      <div class="novel-settings-row" data-settings-group="reading">
         <div class="novel-settings-label">删除与重命名按钮</div>
         <div class="novel-chat-actions-checkbox-row">
           <label class="novel-chat-actions-checkbox">
@@ -2456,6 +2475,16 @@ jQuery(async () => {
       g.showSwipeBar = showSwipeBarInput.checked;
       deps.saveSettings();
       // 正文页：重新渲染当前章节以应用切换条显隐
+      if (state.page === "reader" && state.currentChapter) {
+        openChapter(state.currentChapter);
+      }
+    });
+
+    // ---- HTML 应用开关：保存设置 + 重新渲染当前章节（html 代码块 → 普通代码 ↔ iframe） ----
+    const htmlAppInput = content.querySelector(".novel-html-app-enabled");
+    htmlAppInput?.addEventListener("change", () => {
+      g.htmlAppEnabled = htmlAppInput.checked;
+      deps.saveSettings();
       if (state.page === "reader" && state.currentChapter) {
         openChapter(state.currentChapter);
       }
@@ -3250,6 +3279,12 @@ jQuery(async () => {
       themeTextBridge.setEnabled(true);
     }
     dialogEl.style.color = "";
+    // HTML 应用：主题已应用，向所有 iframe 广播新主题（实时跟随，无需重载）
+    try {
+      refreshHtmlAppThemes(dialogEl);
+    } catch (err) {
+      // 广播失败不影响阅读器
+    }
   }
 
   // ============ 事件订阅 ============

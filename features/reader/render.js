@@ -6,10 +6,19 @@
 // ⚠️ 不能复用 ST 的 messageFormatting：它严重依赖全局 chat 数组（chat.map / getRegexedString /
 // chat[messageId]?.extra?.type），只能渲染「当前打开的聊天」，渲染非当前聊天时返回空。
 
+import {
+  hydrateHtmlApps,
+  postprocessHtmlApps,
+  preprocessHtmlApps,
+} from "./iframe.js";
+
 /**
  * 将单段文本渲染为安全的正文 HTML（复用现有 renderMarkdown/escapeHtmlFallback 管线）。
  * 楼层版本切换（swipe）每次渲染都经过这里，保证正则过滤与安全渲染一致。
- * @param {object} deps 依赖注入（renderMarkdown / regexFilter）
+ *
+ * HTML 应用支持：正文中的 ```html 代码块在 markdown 渲染前被提取为占位符
+ * （穿透 showdown + DOMPurify），渲染后再替换为沙箱 iframe，实现复杂交互界面。
+ * @param {object} deps 依赖注入（renderMarkdown / regexFilter / getHtmlAppEnabled / getHtmlAppRootEl）
  * @param {string} text 消息正文（mes 或 swipes 中的某个版本）
  * @param {object} [options]
  * @param {string} [options.avatar] 当前角色头像（决定启用哪些角色级正则）
@@ -17,6 +26,12 @@
  */
 function renderTextBody(deps, text, options = {}) {
   let t = text || "";
+  // HTML 应用开关（设置页开关，默认开启；关闭时退化为普通代码块渲染）
+  const htmlAppsEnabled =
+    typeof deps.getHtmlAppEnabled === "function"
+      ? deps.getHtmlAppEnabled()
+      : true;
+
   if (typeof deps.regexFilter === "function" && t) {
     try {
       t = deps.regexFilter(t, options.avatar || "");
@@ -24,9 +39,20 @@ function renderTextBody(deps, text, options = {}) {
       console.warn("[NovelReader] regexFilter 失败，使用原文:", err);
     }
   }
+
+  // 提取 ```html 代码块 → 占位符（仅当开关开启且存在 html 代码块）
+  let apps = [];
+  if (htmlAppsEnabled) {
+    const pre = preprocessHtmlApps(t);
+    t = pre.text;
+    apps = pre.apps;
+  }
+
   try {
     if (typeof deps.renderMarkdown === "function") {
-      return deps.renderMarkdown(t);
+      const html = deps.renderMarkdown(t);
+      // 占位符 → 沙箱 iframe（在 sanitize 之后替换，iframe 标签本身不再被清洗）
+      return postprocessHtmlApps(html, apps);
     }
   } catch (err) {
     console.warn("[NovelReader] renderMarkdown 失败，回退转义输出:", err);
@@ -189,6 +215,14 @@ export async function renderMessagesBatched(
   }
 
   bindSwipeBarEvents(deps, container, swipeRefs);
+
+  // 水合 HTML 应用：确保全局 message 监听已绑定，并向已插入的 iframe 触发高度同步
+  // （滚动模式每章块独立容器，各自调用一次；全局监听内部去重）
+  try {
+    hydrateHtmlApps(container, () => deps.getHtmlAppRootEl?.() || null);
+  } catch (err) {
+    console.warn("[NovelReader] HTML 应用水合失败:", err);
+  }
 }
 
 /**
@@ -218,6 +252,12 @@ function bindSwipeBarEvents(deps, container, swipeRefs) {
     body.innerHTML = renderTextBody(deps, swipes[safeIdx] ?? "", {
       avatar: ref.avatar,
     });
+    // 新版本正文可能含 HTML 应用：水合（绑定消息监听 + 触发高度同步）
+    try {
+      hydrateHtmlApps(body, () => deps.getHtmlAppRootEl?.() || null);
+    } catch (err) {
+      console.warn("[NovelReader] HTML 应用水合失败:", err);
+    }
     msgEl.dataset.swipeIdx = String(safeIdx);
     const countEl = msgEl.querySelector(".novel-swipe-count");
     if (countEl) countEl.textContent = `${safeIdx + 1}/${total}`;
