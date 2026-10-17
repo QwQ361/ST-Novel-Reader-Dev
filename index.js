@@ -594,6 +594,7 @@ jQuery(async () => {
             : ""
         }
         <button class="novel-icon-btn novel-batch-topbar-btn" data-action="batch" title="批量删除聊天" style="display:none">批量删除</button>
+        <button class="novel-icon-btn novel-batch-cancel-btn" data-action="batch-cancel" title="退出批量删除" style="display:none">取消</button>
         <button class="novel-icon-btn" data-action="settings" title="全局设置">⚙</button>
         <button class="novel-icon-btn novel-icon-close" data-action="close" title="关闭">
           ×<span class="novel-gen-dot" data-gen-dot style="display:none" title="有新楼层生成"></span>
@@ -1350,19 +1351,26 @@ jQuery(async () => {
    */
   function updateBatchTopbarBtn() {
     const btn = topbarEl.querySelector(".novel-batch-topbar-btn");
-    if (!btn) return;
+    const cancelBtn = topbarEl.querySelector(".novel-batch-cancel-btn");
     const onChatsPage = state.page === "chats";
-    btn.style.display = onChatsPage ? "" : "none";
-    if (!onChatsPage) return;
-    if (state.batchMode) {
-      const count = selectedChats.size;
-      btn.textContent = count ? `删除已选(${count})` : "取消";
-      btn.classList.toggle("novel-batch-topbar-btn-active", true);
-      btn.disabled = count === 0;
-    } else {
-      btn.textContent = "批量删除";
-      btn.classList.toggle("novel-batch-topbar-btn-active", false);
-      btn.disabled = false;
+    if (btn) {
+      btn.style.display = onChatsPage ? "" : "none";
+      if (onChatsPage) {
+        if (state.batchMode) {
+          const count = selectedChats.size;
+          btn.textContent = `删除已选(${count})`;
+          btn.classList.toggle("novel-batch-topbar-btn-active", true);
+          btn.disabled = count === 0;
+        } else {
+          btn.textContent = "批量删除";
+          btn.classList.toggle("novel-batch-topbar-btn-active", false);
+          btn.disabled = false;
+        }
+      }
+    }
+    // 取消按钮：仅在聊天列表页且处于批量模式时显示
+    if (cancelBtn) {
+      cancelBtn.style.display = onChatsPage && state.batchMode ? "" : "none";
     }
   }
 
@@ -1962,17 +1970,23 @@ jQuery(async () => {
         openGlobalSettings();
       });
     // 顶栏「批量删除」按钮：聊天列表页专属，非批量模式进入批量模式，
-    // 批量模式点击删除已选（无选中时退出批量模式）
+    // 批量模式点击删除已选（无选中时置灰不可点）
     topbarEl
       .querySelector('[data-action="batch"]')
       ?.addEventListener("click", () => {
         if (state.page !== "chats") return;
         if (state.batchMode) {
           if (selectedChats.size > 0) confirmBatchDelete();
-          else exitBatchMode();
         } else {
           enterBatchMode();
         }
+      });
+    // 顶栏「取消」按钮：仅批量模式下显示，点击退出批量删除模式
+    topbarEl
+      .querySelector('[data-action="batch-cancel"]')
+      ?.addEventListener("click", () => {
+        if (state.page !== "chats" || !state.batchMode) return;
+        exitBatchMode();
       });
     // 置顶按钮（仅悬浮窗模式存在）：置顶后点击弹窗外不再自动关闭
     topbarEl

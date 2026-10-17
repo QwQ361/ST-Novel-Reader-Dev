@@ -544,6 +544,17 @@
   cursor: not-allowed;
 }
 
+/* 顶栏「取消」按钮：批量模式下退出勾选，与普通 icon-btn 同尺寸但弱化 */
+.novel-batch-cancel-btn {
+  font-weight: 600;
+  color: color-mix(in srgb, currentColor 60%, transparent);
+}
+
+.novel-batch-cancel-btn:hover {
+  color: #e5484d;
+  border-color: #e5484d;
+}
+
 /* 批量模式下的聊天卡片：选中整体变红（优先级高于 .novel-card:hover） */
 .novel-card.novel-chat-card-selected {
   background: color-mix(in srgb, #e5484d 20%, transparent);
@@ -2839,7 +2850,8 @@ body.novel-theme-ocean {
     gap: 10px;
   }
 
-  .novel-batch-topbar-btn {
+  .novel-batch-topbar-btn,
+  .novel-batch-cancel-btn {
     padding: 6px 8px;
     font-size: 0.85rem;
   }
