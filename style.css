@@ -522,79 +522,37 @@
 }
 
 /* ---------- 聊天列表批量删除 ---------- */
-.novel-batch-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+/* 顶栏「批量删除」按钮：与其它 icon-btn 一致，进入批量模式后变红色警示态 */
+.novel-batch-topbar-btn {
+  font-weight: 600;
 }
 
-.novel-batch-btn {
-  font: inherit;
-  font-size: 0.85rem;
-  line-height: 1;
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid
-    color-mix(
-      in srgb,
-      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
-      transparent
-    );
-  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+.novel-batch-topbar-btn-active {
+  color: #e5484d;
+  border-color: color-mix(in srgb, #e5484d 55%, transparent);
+  background: color-mix(in srgb, #e5484d 10%, transparent);
 }
 
-.novel-batch-btn:hover:not(:disabled) {
-  background: color-mix(
-    in srgb,
-    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
-    transparent
-  );
+.novel-batch-topbar-btn:hover:not(:disabled) {
+  color: #e5484d;
+  border-color: #e5484d;
+  background: color-mix(in srgb, #e5484d 18%, transparent);
 }
 
-.novel-batch-btn:disabled {
+.novel-batch-topbar-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.novel-batch-btn-danger {
-  color: #e5484d;
-  border-color: color-mix(in srgb, #e5484d 45%, transparent);
-}
-
-.novel-batch-btn-danger:hover:not(:disabled) {
-  background: color-mix(in srgb, #e5484d 18%, transparent);
+/* 批量模式下的聊天卡片：选中整体变红（优先级高于 .novel-card:hover） */
+.novel-card.novel-chat-card-selected {
+  background: color-mix(in srgb, #e5484d 20%, transparent);
   border-color: #e5484d;
-  color: #e5484d;
 }
 
-/* 批量模式下的聊天卡片：左侧复选框 + 选中高亮 */
-.novel-chat-card-selectable {
-  position: relative;
-  padding-left: 42px;
-}
-
-.novel-chat-check {
-  position: absolute;
-  left: 12px;
-  top: 14px;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  cursor: pointer;
-  accent-color: var(--SmartThemeMainColor, #4f8cff);
-}
-
-.novel-chat-card-selected {
-  background: color-mix(in srgb, #4f8cff 16%, transparent);
-  border-color: var(--SmartThemeMainColor, #4f8cff);
+.novel-card.novel-chat-card-selected:hover {
+  background: color-mix(in srgb, #e5484d 28%, transparent);
+  border-color: #e5484d;
 }
 
 /* ---------- 目录页 ---------- */
@@ -2881,25 +2839,9 @@ body.novel-theme-ocean {
     gap: 10px;
   }
 
-  .novel-batch-toolbar {
-    gap: 6px;
-    margin-bottom: 10px;
-  }
-
-  .novel-batch-btn {
-    padding: 8px 10px;
-    font-size: 0.82rem;
-  }
-
-  .novel-chat-card-selectable {
-    padding-left: 38px;
-  }
-
-  .novel-chat-check {
-    left: 10px;
-    top: 13px;
-    width: 16px;
-    height: 16px;
+  .novel-batch-topbar-btn {
+    padding: 6px 8px;
+    font-size: 0.85rem;
   }
 
   .novel-char-card {

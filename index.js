@@ -593,6 +593,7 @@ jQuery(async () => {
         <button class="novel-icon-btn novel-pin-btn" data-action="pin" title="置顶：点击弹窗外不自动关闭">${PIN_SVG}</button>`
             : ""
         }
+        <button class="novel-icon-btn novel-batch-topbar-btn" data-action="batch" title="批量删除聊天" style="display:none">批量删除</button>
         <button class="novel-icon-btn" data-action="settings" title="全局设置">⚙</button>
         <button class="novel-icon-btn novel-icon-close" data-action="close" title="关闭">
           ×<span class="novel-gen-dot" data-gen-dot style="display:none" title="有新楼层生成"></span>
@@ -911,6 +912,8 @@ jQuery(async () => {
     // 关闭可能打开的设置子面板 + 检索结果面板
     closeSettingsPanel();
     closeSearchPanel();
+    // 同步顶栏「批量删除」按钮的显示/文案/禁用态
+    updateBatchTopbarBtn();
   }
 
   /** 返回上一页 / 书架页则退出阅读器 */
@@ -1224,6 +1227,7 @@ jQuery(async () => {
   // ============ 聊天列表页 ============
 
   async function openChatList(charIdx, char) {
+    resetBatchMode(); // 每次进入聊天列表页都从非批量模式开始
     state.currentChar = char;
     state.currentCharIdx = charIdx;
     setPage("chats");
@@ -1266,39 +1270,8 @@ jQuery(async () => {
         })
       : chats;
 
-    // 批量管理操作栏：非批量模式显示入口，批量模式显示 全选/删除已选/取消
-    const toolbar = document.createElement("div");
-    toolbar.className = "novel-batch-toolbar";
-    if (state.batchMode) {
-      const selectedCount = filtered.filter((c) =>
-        selectedChats.has(c.file_name),
-      ).length;
-      const allSelected =
-        filtered.length > 0 &&
-        filtered.every((c) => selectedChats.has(c.file_name));
-      toolbar.innerHTML = `
-        <button type="button" class="novel-batch-btn" data-action="batch-all">${allSelected ? "取消全选" : "全选"}</button>
-        <button type="button" class="novel-batch-btn novel-batch-btn-danger" data-action="batch-delete"${selectedCount ? "" : " disabled"}>删除已选${selectedCount ? ` (${selectedCount})` : ""}</button>
-        <button type="button" class="novel-batch-btn" data-action="batch-cancel">取消</button>`;
-      toolbar
-        .querySelector('[data-action="batch-all"]')
-        .addEventListener("click", () => {
-          toggleSelectAll(filtered);
-          renderChatListGrid(searchInputEl.value);
-        });
-      const delBtn = toolbar.querySelector('[data-action="batch-delete"]');
-      if (selectedCount) delBtn.addEventListener("click", confirmBatchDelete);
-      toolbar
-        .querySelector('[data-action="batch-cancel"]')
-        .addEventListener("click", exitBatchMode);
-    } else {
-      toolbar.innerHTML = `
-        <button type="button" class="novel-batch-btn" data-action="batch-enter">☑ 批量删除</button>`;
-      toolbar
-        .querySelector('[data-action="batch-enter"]')
-        .addEventListener("click", enterBatchMode);
-    }
-    page.appendChild(toolbar);
+    // 批量模式：无独立工具栏，勾选反馈由顶栏「批量删除」按钮（含已选数）承担
+    updateBatchTopbarBtn();
 
     if (!filtered.length) {
       const empty = document.createElement("div");
@@ -1315,9 +1288,10 @@ jQuery(async () => {
       const fileName = chat.file_name || "";
       const card = document.createElement("div");
       card.className = "novel-card novel-chat-card";
-      if (state.batchMode) card.classList.add("novel-chat-card-selectable");
       const isSelected = selectedChats.has(fileName);
-      if (isSelected) card.classList.add("novel-chat-card-selected");
+      // 批量模式：无复选框，选中卡片整体变红
+      if (state.batchMode && isSelected)
+        card.classList.add("novel-chat-card-selected");
       // meta 行只拼接非空字段段，段间用「 · 」连接，避免出现悬空点
       const metaParts = [chat.chat_items ?? chat.message_count ?? ""]
         .map((v) => String(v).trim())
@@ -1327,9 +1301,8 @@ jQuery(async () => {
       const preview = String(chat.last_mes || "").trim();
       const isIsoStamp =
         /^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})?$/.test(preview);
-      // 批量模式：卡片左侧复选框 + 选中高亮；隐藏单条操作条，卡片点击 = 切换勾选
+      // 批量模式：隐藏单条操作条，卡片点击 = 切换勾选
       card.innerHTML = `
-        ${state.batchMode ? `<input type="checkbox" class="novel-chat-check" title="勾选该聊天"${isSelected ? " checked" : ""} />` : ""}
         <div class="novel-card-title">${escapeHtml(String(fileName).replace(/\.jsonl$/i, ""))}</div>
         ${preview && !isIsoStamp ? `<div class="novel-card-preview">${escapeHtml(preview)}</div>` : ""}
         ${metaParts.length ? `<div class="novel-card-meta">${metaParts.map((v) => escapeHtml(v)).join(" · ")}</div>` : ""}
@@ -1342,12 +1315,6 @@ jQuery(async () => {
                </div>`
         }`;
       if (state.batchMode) {
-        const checkEl = card.querySelector(".novel-chat-check");
-        checkEl.addEventListener("click", (e) => {
-          e.stopPropagation();
-          toggleSelectChat(fileName);
-          renderChatListGrid(searchInputEl.value);
-        });
         card.addEventListener("click", () => {
           toggleSelectChat(fileName);
           renderChatListGrid(searchInputEl.value);
@@ -1376,7 +1343,30 @@ jQuery(async () => {
 
   // ============ 聊天列表批量删除（勾选模式） ============
 
-  /** 进入批量删除模式 */
+  /**
+   * 顶栏「批量删除」按钮：仅在聊天列表页显示。
+   * - 非批量模式：显示「批量删除」，点击进入批量模式。
+   * - 批量模式：显示「删除已选(N)」或「取消」，点击删除/退出。
+   */
+  function updateBatchTopbarBtn() {
+    const btn = topbarEl.querySelector(".novel-batch-topbar-btn");
+    if (!btn) return;
+    const onChatsPage = state.page === "chats";
+    btn.style.display = onChatsPage ? "" : "none";
+    if (!onChatsPage) return;
+    if (state.batchMode) {
+      const count = selectedChats.size;
+      btn.textContent = count ? `删除已选(${count})` : "取消";
+      btn.classList.toggle("novel-batch-topbar-btn-active", true);
+      btn.disabled = count === 0;
+    } else {
+      btn.textContent = "批量删除";
+      btn.classList.toggle("novel-batch-topbar-btn-active", false);
+      btn.disabled = false;
+    }
+  }
+
+  /** 进入批量删除模式（顶栏按钮点击进入） */
   function enterBatchMode() {
     state.batchMode = true;
     renderChatListGrid(searchInputEl.value);
@@ -1392,23 +1382,13 @@ jQuery(async () => {
   function resetBatchMode() {
     state.batchMode = false;
     selectedChats.clear();
+    updateBatchTopbarBtn();
   }
 
   /** 切换某聊天的勾选状态（键为 file_name） */
   function toggleSelectChat(fileName) {
     if (selectedChats.has(fileName)) selectedChats.delete(fileName);
     else selectedChats.add(fileName);
-  }
-
-  /** 全选/取消全选：针对当前筛选结果批量切换 */
-  function toggleSelectAll(chats) {
-    const allSelected =
-      chats.length > 0 && chats.every((c) => selectedChats.has(c.file_name));
-    if (allSelected) {
-      chats.forEach((c) => selectedChats.delete(c.file_name));
-    } else {
-      chats.forEach((c) => selectedChats.add(c.file_name));
-    }
   }
 
   /** 批量删除选中聊天（当前角色下） */
@@ -1980,6 +1960,19 @@ jQuery(async () => {
       .querySelector('[data-action="settings"]')
       .addEventListener("click", () => {
         openGlobalSettings();
+      });
+    // 顶栏「批量删除」按钮：聊天列表页专属，非批量模式进入批量模式，
+    // 批量模式点击删除已选（无选中时退出批量模式）
+    topbarEl
+      .querySelector('[data-action="batch"]')
+      ?.addEventListener("click", () => {
+        if (state.page !== "chats") return;
+        if (state.batchMode) {
+          if (selectedChats.size > 0) confirmBatchDelete();
+          else exitBatchMode();
+        } else {
+          enterBatchMode();
+        }
       });
     // 置顶按钮（仅悬浮窗模式存在）：置顶后点击弹窗外不再自动关闭
     topbarEl
