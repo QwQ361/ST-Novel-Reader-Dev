@@ -521,6 +521,82 @@
   color: #e5484d;
 }
 
+/* ---------- 聊天列表批量删除 ---------- */
+.novel-batch-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.novel-batch-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 14%,
+      transparent
+    );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.novel-batch-btn:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+    transparent
+  );
+}
+
+.novel-batch-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.novel-batch-btn-danger {
+  color: #e5484d;
+  border-color: color-mix(in srgb, #e5484d 45%, transparent);
+}
+
+.novel-batch-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #e5484d 18%, transparent);
+  border-color: #e5484d;
+  color: #e5484d;
+}
+
+/* 批量模式下的聊天卡片：左侧复选框 + 选中高亮 */
+.novel-chat-card-selectable {
+  position: relative;
+  padding-left: 42px;
+}
+
+.novel-chat-check {
+  position: absolute;
+  left: 12px;
+  top: 14px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--SmartThemeMainColor, #4f8cff);
+}
+
+.novel-chat-card-selected {
+  background: color-mix(in srgb, #4f8cff 16%, transparent);
+  border-color: var(--SmartThemeMainColor, #4f8cff);
+}
+
 /* ---------- 目录页 ---------- */
 .novel-toc {
   max-width: 760px;
@@ -2803,6 +2879,27 @@ body.novel-theme-ocean {
   .novel-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 10px;
+  }
+
+  .novel-batch-toolbar {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .novel-batch-btn {
+    padding: 8px 10px;
+    font-size: 0.82rem;
+  }
+
+  .novel-chat-card-selectable {
+    padding-left: 38px;
+  }
+
+  .novel-chat-check {
+    left: 10px;
+    top: 13px;
+    width: 16px;
+    height: 16px;
   }
 
   .novel-char-card {

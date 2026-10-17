@@ -484,7 +484,10 @@ jQuery(async () => {
     tocPage: 0, // 目录分页页码（0 起）
     tocFilter: "all", // 目录番外筛选："all" 都看 | "main" 只看主线 | "side" 只看番外
     pendingHighlightOffset: null, // 待定位的消息章内偏移（搜索结果跳转）
+    batchMode: false, // 聊天列表批量删除模式开关
   };
+  // 批量删除选中集合（键为聊天文件名 file_name，带 .jsonl；仅当前角色聊天列表使用）
+  const selectedChats = new Set();
   let searchPanelEl = null; // 小说内检索结果面板
   let topbarIconAdaptor = null; // 顶栏图标美化适配器（设置弹窗内改图标后重置轮询签名用）
 
@@ -867,6 +870,8 @@ jQuery(async () => {
   /** 设置当前页（清空内容区 + 更新顶栏返回按钮 + 搜索框占位/模式） */
   function setPage(page) {
     state.page = page;
+    // 离开聊天列表页（或重新进入）时退出批量删除模式，避免选中集残留到其它页
+    if (page !== "chats") resetBatchMode();
     bodyEl.innerHTML = "";
     // 离开正文页：销毁连续滚动阅读状态（容器已被清空，移除残留监听）
     if (page !== "reader") scrollReader?.destroy();
@@ -1239,7 +1244,7 @@ jQuery(async () => {
     renderChatListGrid(searchInputEl.value);
   }
 
-  /** 渲染聊天卡片网格（支持按文件名/预览实时筛选） */
+  /** 渲染聊天卡片网格（支持按文件名/预览实时筛选；批量模式支持勾选删除） */
   function renderChatListGrid(query) {
     const q = (query || "").toLowerCase().trim();
     bodyEl.querySelector(".novel-page")?.remove();
@@ -1261,8 +1266,45 @@ jQuery(async () => {
         })
       : chats;
 
+    // 批量管理操作栏：非批量模式显示入口，批量模式显示 全选/删除已选/取消
+    const toolbar = document.createElement("div");
+    toolbar.className = "novel-batch-toolbar";
+    if (state.batchMode) {
+      const selectedCount = filtered.filter((c) =>
+        selectedChats.has(c.file_name),
+      ).length;
+      const allSelected =
+        filtered.length > 0 &&
+        filtered.every((c) => selectedChats.has(c.file_name));
+      toolbar.innerHTML = `
+        <button type="button" class="novel-batch-btn" data-action="batch-all">${allSelected ? "取消全选" : "全选"}</button>
+        <button type="button" class="novel-batch-btn novel-batch-btn-danger" data-action="batch-delete"${selectedCount ? "" : " disabled"}>删除已选${selectedCount ? ` (${selectedCount})` : ""}</button>
+        <button type="button" class="novel-batch-btn" data-action="batch-cancel">取消</button>`;
+      toolbar
+        .querySelector('[data-action="batch-all"]')
+        .addEventListener("click", () => {
+          toggleSelectAll(filtered);
+          renderChatListGrid(searchInputEl.value);
+        });
+      const delBtn = toolbar.querySelector('[data-action="batch-delete"]');
+      if (selectedCount) delBtn.addEventListener("click", confirmBatchDelete);
+      toolbar
+        .querySelector('[data-action="batch-cancel"]')
+        .addEventListener("click", exitBatchMode);
+    } else {
+      toolbar.innerHTML = `
+        <button type="button" class="novel-batch-btn" data-action="batch-enter">☑ 批量删除</button>`;
+      toolbar
+        .querySelector('[data-action="batch-enter"]')
+        .addEventListener("click", enterBatchMode);
+    }
+    page.appendChild(toolbar);
+
     if (!filtered.length) {
-      page.innerHTML = `<div class="novel-empty">无匹配聊天</div>`;
+      const empty = document.createElement("div");
+      empty.className = "novel-empty";
+      empty.textContent = "无匹配聊天";
+      page.appendChild(empty);
       bodyEl.appendChild(page);
       return;
     }
@@ -1273,6 +1315,9 @@ jQuery(async () => {
       const fileName = chat.file_name || "";
       const card = document.createElement("div");
       card.className = "novel-card novel-chat-card";
+      if (state.batchMode) card.classList.add("novel-chat-card-selectable");
+      const isSelected = selectedChats.has(fileName);
+      if (isSelected) card.classList.add("novel-chat-card-selected");
       // meta 行只拼接非空字段段，段间用「 · 」连接，避免出现悬空点
       const metaParts = [chat.chat_items ?? chat.message_count ?? ""]
         .map((v) => String(v).trim())
@@ -1282,17 +1327,33 @@ jQuery(async () => {
       const preview = String(chat.last_mes || "").trim();
       const isIsoStamp =
         /^\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})?$/.test(preview);
-      // 聊天卡片操作条（删除/重命名）：始终常显，不受设置开关控制（开关只影响目录页/阅读页按钮）
+      // 批量模式：卡片左侧复选框 + 选中高亮；隐藏单条操作条，卡片点击 = 切换勾选
       card.innerHTML = `
+        ${state.batchMode ? `<input type="checkbox" class="novel-chat-check" title="勾选该聊天"${isSelected ? " checked" : ""} />` : ""}
         <div class="novel-card-title">${escapeHtml(String(fileName).replace(/\.jsonl$/i, ""))}</div>
         ${preview && !isIsoStamp ? `<div class="novel-card-preview">${escapeHtml(preview)}</div>` : ""}
         ${metaParts.length ? `<div class="novel-card-meta">${metaParts.map((v) => escapeHtml(v)).join(" · ")}</div>` : ""}
-        <div class="novel-card-actions">
-          <button class="novel-card-action" data-action="rename" title="重命名聊天">${RENAME_SVG}</button>
-          <button class="novel-card-action novel-card-action-delete" data-action="delete" title="删除聊天">${DELETE_SVG}</button>
-        </div>`;
-      // 操作条按钮事件：stopPropagation 防止冒泡触发卡片点击（openToc）
-      {
+        ${
+          state.batchMode
+            ? ""
+            : `<div class="novel-card-actions">
+                 <button class="novel-card-action" data-action="rename" title="重命名聊天">${RENAME_SVG}</button>
+                 <button class="novel-card-action novel-card-action-delete" data-action="delete" title="删除聊天">${DELETE_SVG}</button>
+               </div>`
+        }`;
+      if (state.batchMode) {
+        const checkEl = card.querySelector(".novel-chat-check");
+        checkEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          toggleSelectChat(fileName);
+          renderChatListGrid(searchInputEl.value);
+        });
+        card.addEventListener("click", () => {
+          toggleSelectChat(fileName);
+          renderChatListGrid(searchInputEl.value);
+        });
+      } else {
+        // 操作条按钮事件：stopPropagation 防止冒泡触发卡片点击（openToc）
         const renameBtn = card.querySelector('[data-action="rename"]');
         const deleteBtn = card.querySelector('[data-action="delete"]');
         renameBtn.addEventListener("click", (e) => {
@@ -1303,14 +1364,79 @@ jQuery(async () => {
           e.stopPropagation();
           confirmDeleteChat(state.currentChar, { file_name: fileName });
         });
+        card.addEventListener("click", () =>
+          openToc(state.currentChar, { file_name: fileName }),
+        );
       }
-      card.addEventListener("click", () =>
-        openToc(state.currentChar, { file_name: fileName }),
-      );
       grid.appendChild(card);
     });
     page.appendChild(grid);
     bodyEl.appendChild(page);
+  }
+
+  // ============ 聊天列表批量删除（勾选模式） ============
+
+  /** 进入批量删除模式 */
+  function enterBatchMode() {
+    state.batchMode = true;
+    renderChatListGrid(searchInputEl.value);
+  }
+
+  /** 退出批量模式（清空选中集并重绘） */
+  function exitBatchMode() {
+    resetBatchMode();
+    renderChatListGrid(searchInputEl.value);
+  }
+
+  /** 复位批量模式（清空开关与选中集，不重绘） */
+  function resetBatchMode() {
+    state.batchMode = false;
+    selectedChats.clear();
+  }
+
+  /** 切换某聊天的勾选状态（键为 file_name） */
+  function toggleSelectChat(fileName) {
+    if (selectedChats.has(fileName)) selectedChats.delete(fileName);
+    else selectedChats.add(fileName);
+  }
+
+  /** 全选/取消全选：针对当前筛选结果批量切换 */
+  function toggleSelectAll(chats) {
+    const allSelected =
+      chats.length > 0 && chats.every((c) => selectedChats.has(c.file_name));
+    if (allSelected) {
+      chats.forEach((c) => selectedChats.delete(c.file_name));
+    } else {
+      chats.forEach((c) => selectedChats.add(c.file_name));
+    }
+  }
+
+  /** 批量删除选中聊天（当前角色下） */
+  async function confirmBatchDelete() {
+    if (!state.currentChar) return;
+    const toDelete = Array.from(selectedChats);
+    if (!toDelete.length) {
+      if (window.toastr && typeof window.toastr.warning === "function") {
+        window.toastr.warning("请先选择要删除的聊天记录");
+      }
+      return;
+    }
+    if (
+      !window.confirm(
+        `确定要删除选中的 ${toDelete.length} 条聊天记录吗？\n此操作不可撤销，相关书签与阅读进度也会一并清除。`,
+      )
+    ) {
+      return;
+    }
+    await chatlogs.deleteChatFiles(state.currentChar.avatar, toDelete);
+    // 删除后刷新列表（删除成功的已移除），并退出批量模式
+    resetBatchMode();
+    const list = await bookshelf.refreshCharChats(
+      state.currentCharIdx,
+      state.currentChar.avatar,
+    );
+    state.currentChats = list;
+    renderChatListGrid(searchInputEl.value);
   }
 
   // ============ 目录页（分页章节列表） ============

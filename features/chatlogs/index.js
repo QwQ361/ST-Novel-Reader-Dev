@@ -80,17 +80,14 @@ export function createChatlogsCore(deps) {
   }
 
   /**
-   * 删除单条聊天（功能层：只执行 + 清理关联数据 + 缓存失效，不重绘 UI）。
+   * 执行单条聊天的实际删除（不通知、不重绘）：删除文件 + 清理关联数据 + 缓存失效。
+   * 由 deleteChatFile（单条）与 deleteChatFiles（批量）共用，避免批量时逐条弹 toast。
+   * @param {number} charIdx 角色索引（调用方已解析，避免批量循环内重复查找）
    * @param {string} avatar 角色头像文件名
    * @param {string} chatFileName 聊天文件名（带 .jsonl）
    * @returns {Promise<boolean>} 是否删除成功
    */
-  async function deleteChatFile(avatar, chatFileName) {
-    const charIdx = findCharIndex(avatar);
-    if (charIdx < 0) {
-      notify("error", "未找到对应角色，无法删除聊天");
-      return false;
-    }
+  async function performDelete(charIdx, avatar, chatFileName) {
     const fileNameNoExt = stripExt(chatFileName);
 
     // 双保险：优先酒馆原生函数，异常或缺失时回退 HTTP API
@@ -111,10 +108,7 @@ export function createChatlogsCore(deps) {
       deleted = await deleteViaHttpApi(avatar, fileNameNoExt);
     }
 
-    if (!deleted) {
-      notify("error", "删除聊天失败");
-      return false;
-    }
+    if (!deleted) return false;
 
     // 删除成功后同步清理关联数据 + 缓存失效（删除后同步核心）
     try {
@@ -126,8 +120,60 @@ export function createChatlogsCore(deps) {
       console.warn("[NovelReader] 删除聊天后清理关联数据失败:", err);
     }
 
+    return true;
+  }
+
+  /**
+   * 删除单条聊天（功能层：只执行 + 清理关联数据 + 缓存失效，不重绘 UI）。
+   * @param {string} avatar 角色头像文件名
+   * @param {string} chatFileName 聊天文件名（带 .jsonl）
+   * @returns {Promise<boolean>} 是否删除成功
+   */
+  async function deleteChatFile(avatar, chatFileName) {
+    const charIdx = findCharIndex(avatar);
+    if (charIdx < 0) {
+      notify("error", "未找到对应角色，无法删除聊天");
+      return false;
+    }
+
+    const ok = await performDelete(charIdx, avatar, chatFileName);
+    if (!ok) {
+      notify("error", "删除聊天失败");
+      return false;
+    }
+
     notify("success", "聊天已删除");
     return true;
+  }
+
+  /**
+   * 批量删除聊天（功能层：逐条删除 + 清理关联数据 + 缓存失效，统一汇总一条 toast）。
+   * 不负责重绘 UI，成功后由调用方刷新列表。
+   * @param {string} avatar 角色头像文件名
+   * @param {string[]} fileNames 聊天文件名数组（每条带 .jsonl）
+   * @returns {Promise<number>} 成功删除的条数
+   */
+  async function deleteChatFiles(avatar, fileNames) {
+    const list = Array.isArray(fileNames) ? fileNames : [];
+    if (!list.length) return 0;
+
+    const charIdx = findCharIndex(avatar);
+    if (charIdx < 0) {
+      notify("error", "未找到对应角色，无法删除聊天");
+      return 0;
+    }
+
+    let okCount = 0;
+    for (const fileName of list) {
+      if (await performDelete(charIdx, avatar, fileName)) okCount++;
+    }
+
+    if (okCount > 0) {
+      notify("success", `已删除 ${okCount} 条聊天记录`);
+    } else {
+      notify("error", "删除聊天失败");
+    }
+    return okCount;
   }
 
   /**
@@ -221,5 +267,5 @@ export function createChatlogsCore(deps) {
     }
   }
 
-  return { deleteChatFile, renameChatFile };
+  return { deleteChatFile, deleteChatFiles, renameChatFile };
 }
