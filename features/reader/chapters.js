@@ -182,9 +182,10 @@ export function filterTitleText(title, filters = []) {
 export function stripChapterNumberPrefix(title) {
   const t = String(title || "").trim();
   if (!t) return t;
-  // 第 + 数字（阿拉伯/全角/汉字）+ 章词 + 可选分隔符（冒号/点/空格/横线等）
+  // 第 + 数字（阿拉伯/全角/汉字）+ 章词 + 可选分隔符（冒号/点/空格/横线/间隔点等）
+  // 间隔点「·」「・」「•」与中英文逗号也算作章号前缀分隔符（如「第1章·序章」「第1章,序章」）
   const re =
-    /^第\s*[\d０-９一二三四五六七八九十百千万零〇两]+\s*[章回卷节部集][\s:：.。、\-—–|丨]*/;
+    /^第\s*[\d０-９一二三四五六七八九十百千万零〇两]+\s*[章回卷节部集][\s:：.。、\-—–|丨·・•,，]*/;
   const stripped = t.replace(re, "").trim();
   return stripped || t;
 }
