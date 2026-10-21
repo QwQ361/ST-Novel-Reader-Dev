@@ -198,6 +198,15 @@ export function createFlipReader(deps) {
    *  拆分保留模板的内联子元素（q/em/strong/code 等），避免样式丢失；
    *  每个片断用 wrapBody 包一层 .novel-msg-body，测量与显示均保持正文上下文。 */
   function splitOversizedEl(template, targetH, inner) {
+    // ⚠️ <br> 在 textContent 中贡献 0 长度（空元素），字符流偏移计算会完全忽略它，
+    // 但 DOM 渲染时它占满整行行高。若保留，按字符拆出的每个切片都会带上模板的
+    // 全部 <br>（如「单字 + 31 空行」），导致切片高度虚高、分页错乱（单字一页）。
+    // 统一把 <br> 替换为 \n 文本节点：\n 计入字符流长度，切分时换行随切片正确
+    // 分配（既不虚高也不丢失空行），white-space:pre-line 下呈现一致的换行。
+    // template 为原消息 body 子元素，原消息随后被移除（用完即弃），就地修改安全。
+    template.querySelectorAll("br").forEach((br) => {
+      br.replaceWith(document.createTextNode("\n"));
+    });
     const text = template.textContent || "";
     const out = [];
     let rest = text;
@@ -229,7 +238,9 @@ export function createFlipReader(deps) {
         out.push(wrapBody(makeTextClone(template, rest, true, offset)));
         break;
       }
-      out.push(wrapBody(makeTextClone(template, rest.slice(0, best), true, offset)));
+      out.push(
+        wrapBody(makeTextClone(template, rest.slice(0, best), true, offset)),
+      );
       rest = rest.slice(best);
       offset += best;
     }
