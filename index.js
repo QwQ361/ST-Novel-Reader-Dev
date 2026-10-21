@@ -17,6 +17,7 @@ import {
 import { createChatlogsCore } from "./features/chatlogs/index.js";
 import { createGenNotifyCore } from "./features/gen-notify/index.js";
 import { createProgressCore } from "./features/progress/index.js";
+import { createFlipReader } from "./features/reader/flip.js";
 import { refreshHtmlAppThemes } from "./features/reader/iframe.js";
 import { createReaderCore } from "./features/reader/index.js";
 import { createScrollReader } from "./features/reader/scroll.js";
