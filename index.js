@@ -249,7 +249,8 @@ jQuery(async () => {
         if (readerScrollEl) applyReaderStyles();
         if (block) injectReaderChatActions(block);
       },
-      // 页码变化：保存翻页进度（含页码，供下次打开恢复）
+      // 页码变化：保存翻页进度（含页码，供下次打开恢复）+ 刷新底部栏按钮可用态
+      // （同章翻页只走 showPage，不会触发 onCurrentChapterChange，这里必须同步按钮状态）
       onPageChange: (page, totalPages, chapterIndex) => {
         if (!state.currentChar || !state.currentChat) return;
         progress.save(state.currentChar.avatar, state.currentChat.file_name, {
@@ -257,6 +258,7 @@ jQuery(async () => {
           page,
           updatedAt: Date.now(),
         });
+        updateBottomButtons();
       },
       // 点击页面中间区域：切换顶/底栏显隐（悬浮窗模式顶栏即拖动柄，禁用）
       onToggleChrome: () => {

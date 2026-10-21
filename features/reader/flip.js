@@ -325,7 +325,7 @@ export function createFlipReader(deps) {
     }
     // 末页 → 下一章首页
     if (chapterIndex < totalChapters) {
-      await open(chapterIndex + 1, 1);
+      await open(flipEl, chapterIndex + 1, 1);
     }
   }
 
@@ -337,7 +337,7 @@ export function createFlipReader(deps) {
     }
     // 首页 → 上一章末页
     if (chapterIndex > 1) {
-      await open(chapterIndex - 1, -1); // -1 = 末页
+      await open(flipEl, chapterIndex - 1, -1); // -1 = 末页
     }
   }
 
@@ -393,7 +393,8 @@ export function createFlipReader(deps) {
 
       let p = Number(startPage) || 1;
       if (startPage === -1) p = pages.length; // 上一章 → 末页
-      showPage(Math.min(Math.max(1, p), pages.length));
+      // showPage 内部用 0-based 下标取页，这里先把 1-based 页码转成下标
+      showPage(Math.min(Math.max(1, p), pages.length) - 1);
       onCurrentChapterChange?.(chapterIndex);
     } catch (err) {
       console.warn("[NovelReader] 翻页模式渲染章节失败:", err);
@@ -416,7 +417,7 @@ export function createFlipReader(deps) {
   async function scrollToMessage(chapterIndex2, msgOffset) {
     // 仅当目标章与当前章不同才重开；同章直接定位，避免重复渲染
     if (chapterIndex !== Number(chapterIndex2)) {
-      await open(chapterIndex2, 1);
+      await open(flipEl, chapterIndex2, 1);
     }
     if (!pages.length) return;
     const target = String(msgOffset);
