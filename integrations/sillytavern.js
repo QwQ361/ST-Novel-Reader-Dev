@@ -264,6 +264,10 @@ export function renderMarkdownCore(markdown) {
       // 还原 HTML 标签属性内的双引号（与 ST 官方一致）
       html = html.replace(/\ufffe/g, '"');
       html = converter.makeHtml(html);
+      // 归一化 <br> 后的源码换行符：showdown 对 markdown 单换行输出「<br>\n」（<br> 后保留源换行）。
+      // .novel-msg-body 的 white-space:pre-line 会把紧跟 <br> 的 \n 也渲染成换行，导致双重换行（行距翻倍）。
+      // 去除紧跟 <br> 的换行符，只保留 <br> 本身的一个换行；纯 \n（无 <br>）仍由 pre-line 保留。
+      html = html.replace(/<br\s*\/?>\r?\n/g, "<br>");
       // 处理代码块换行（与 ST 一致：修复 Firefox <br> 问题）
       html = html.replace(/<code(.*)>[\s\S]*?<\/code>/g, (match) =>
         match.replace(/\n/gm, "\u0000"),
