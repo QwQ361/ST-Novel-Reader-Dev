@@ -124,24 +124,87 @@ export function createFlipReader(deps) {
     return true;
   }
 
-  /** 用模板元素的标签/类名/样式新建一个纯文本子元素 */
-  function makeTextClone(template, text) {
+  /**
+   * 用模板元素的标签/类名/样式新建一个克隆元素。
+   * 若提供了 innerHtml，则保留模板的内联子元素结构（q/em/strong/code 等），
+   * 仅替换其中的纯文本节点为 text；否则退化为纯文本元素。
+   * @param {number} [startOffset=0] text 在模板字符流（template.textContent）中的全局起始偏移。
+   *   用于 splitOversizedEl 拆分中途的子串：切片并非模板字符流前缀，若仍从第一个
+   *   文本节点开始填充，前导文本节点（如 <q> 前的「苏晴说：」）会抢先消耗切片文字，
+   *   导致切片范围外的内联文本（<q> 内）被误清空。按偏移对齐后，超出 [startOffset,
+   *   startOffset+text.length) 的文本节点清空、交集部分填充，引号文字不丢失。
+   */
+  function makeTextClone(template, text, innerHtml, startOffset = 0) {
     const el = document.createElement(template.tagName);
     el.className = template.className || "";
     const st = template.getAttribute("style");
     if (st) el.setAttribute("style", st);
+    if (innerHtml) {
+      // 深拷贝模板子结构（保留内联标签与样式），再按「字符流偏移」注入切片文本：
+      // TreeWalker 按 DOM 前序收集全部文本节点（含内联元素 <q>/<em>/<strong> 内的），
+      // 每个文本节点对应字符流的一段区间；切片 text 对应全局区间
+      // [startOffset, startOffset + text.length)。文本节点与切片区间的交集部分填充
+      // 对应子串，无交集则清空。保证引号文字（在切片范围内）不丢失、范围外被清空。
+      const clone = template.cloneNode(true);
+      const textNodes = [];
+      const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+      // 计算每个文本节点在字符流中的区间 [start, end)
+      let streamLen = 0;
+      const ranges = textNodes.map((tn) => {
+        const start = streamLen;
+        streamLen += tn.textContent.length;
+        return { tn, start, len: tn.textContent.length };
+      });
+      const absStart = startOffset;
+      const absEnd = startOffset + text.length;
+      for (const r of ranges) {
+        const rEnd = r.start + r.len;
+        // 该文本节点与切片区间的交集
+        const ovStart = Math.max(r.start, absStart);
+        const ovEnd = Math.min(rEnd, absEnd);
+        if (ovStart >= ovEnd) {
+          r.tn.textContent = ""; // 完全在切片范围外
+          continue;
+        }
+        r.tn.textContent = text.slice(ovStart - absStart, ovEnd - absStart);
+      }
+      // 切片超出模板字符流（理论上不会）：尾部追加
+      if (absEnd > streamLen) {
+        clone.appendChild(
+          document.createTextNode(text.slice(streamLen - absStart)),
+        );
+      }
+      return clone;
+    }
     el.textContent = text;
     return el;
   }
 
-  /** 二分法把超长文本元素拆成若干 ≤ targetH 的克隆（返回克隆数组） */
+  /** 把节点包一层 .novel-msg-body：恢复正文 CSS 上下文（引号色/行高/pre-line/p 间距等）。
+   *  拆分出的片断脱离 .novel-msg-body 后，.novel-msg-body xxx 选择器全部失效，
+   *  故每个片断必须重新包一层，测量与显示才一致。
+   *  margin-bottom 补 p:last-child margin-bottom:0 的缺失：单 p wrapper 需要与
+   *  .novel-msg-body p 一致的段间距。 */
+  function wrapBody(node) {
+    const wrap = document.createElement("div");
+    wrap.className = "novel-msg-body";
+    wrap.style.marginBottom = "8px";
+    wrap.appendChild(node);
+    return wrap;
+  }
+
+  /** 二分法把超长文本元素拆成若干 ≤ targetH 的克隆（返回克隆数组）。
+   *  拆分保留模板的内联子元素（q/em/strong/code 等），避免样式丢失；
+   *  每个片断用 wrapBody 包一层 .novel-msg-body，测量与显示均保持正文上下文。 */
   function splitOversizedEl(template, targetH, inner) {
     const text = template.textContent || "";
     const out = [];
     let rest = text;
+    let offset = 0; // rest 在 template 字符流中的全局起始偏移
     while (rest.length) {
       if (rest.length <= 2) {
-        out.push(makeTextClone(template, rest));
+        out.push(wrapBody(makeTextClone(template, rest, true, offset)));
         break;
       }
       let lo = 1;
@@ -149,10 +212,12 @@ export function createFlipReader(deps) {
       let best = 1;
       while (lo <= hi) {
         const mid = (lo + hi) >> 1;
-        const probe = makeTextClone(template, rest.slice(0, mid));
-        inner.appendChild(probe);
-        const h = probe.offsetHeight;
-        inner.removeChild(probe);
+        const probeWrap = wrapBody(
+          makeTextClone(template, rest.slice(0, mid), true, offset),
+        );
+        inner.appendChild(probeWrap);
+        const h = probeWrap.offsetHeight;
+        inner.removeChild(probeWrap);
         if (h <= targetH) {
           best = mid;
           lo = mid + 1;
@@ -161,11 +226,12 @@ export function createFlipReader(deps) {
         }
       }
       if (best >= rest.length) {
-        out.push(makeTextClone(template, rest));
+        out.push(wrapBody(makeTextClone(template, rest, true, offset)));
         break;
       }
-      out.push(makeTextClone(template, rest.slice(0, best)));
+      out.push(wrapBody(makeTextClone(template, rest.slice(0, best), true, offset)));
       rest = rest.slice(best);
+      offset += best;
     }
     return out;
   }
@@ -217,12 +283,12 @@ export function createFlipReader(deps) {
           let parts = [];
           if (ch <= PH) {
             const clone = child.cloneNode(true);
-            parts = [clone];
+            parts = [wrapBody(clone)]; // 保持 .novel-msg-body 上下文
           } else if (isSplittable(child)) {
-            parts = splitOversizedEl(child, PH, inner);
+            parts = splitOversizedEl(child, PH, inner); // 内部已 wrapBody
           } else {
             const clone = child.cloneNode(true);
-            parts = [clone];
+            parts = [wrapBody(clone)];
           }
           for (const p of parts) {
             p.dataset.flipMesIdx = String(mi);

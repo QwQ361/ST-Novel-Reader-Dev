@@ -1046,7 +1046,9 @@
 .novel-msg-body {
   line-height: 1.8;
   word-break: break-word;
-  white-space: normal;
+  /* pre-line：保留消息中的换行符（\n），同时仍折叠多余空格；
+     酒馆 markdown 的 <p> 内文本常含 \n，normal 会折叠成一行 */
+  white-space: pre-line;
   /* 正文文字色跟随主题（采样色 → ST 变量 → 默认） */
   color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
 }
