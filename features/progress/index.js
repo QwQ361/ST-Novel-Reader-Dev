@@ -26,7 +26,7 @@ export function createProgressCore(deps) {
    * 记录某聊天阅读位置。
    * @param {string} avatar 角色头像文件名
    * @param {string} fileName 聊天文件名（带 .jsonl）
-   * @param {{ chapter?: number, msgId?: number|string, index?: number, scrollTop?: number, updatedAt?: number }} pos 位置信息
+   * @param {{ chapter?: number, msgId?: number|string, index?: number, scrollTop?: number, page?: number, updatedAt?: number }} pos 位置信息
    */
   function save(avatar, fileName, pos) {
     const t = table();
@@ -36,6 +36,7 @@ export function createProgressCore(deps) {
       msgId: pos.msgId ?? null,
       index: pos.index ?? 0,
       scrollTop: pos.scrollTop ?? 0,
+      page: pos.page ?? null, // 翻页模式的页码（1 起；null = 非翻页模式）
       updatedAt: pos.updatedAt ?? Date.now(),
     };
     saveSettings();

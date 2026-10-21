@@ -24,7 +24,7 @@ import {
  * @param {string} [options.avatar] 当前角色头像（决定启用哪些角色级正则）
  * @returns {string} 安全 HTML
  */
-function renderTextBody(deps, text, options = {}) {
+export function renderTextBody(deps, text, options = {}) {
   let t = text || "";
   // HTML 应用开关（设置页开关，默认开启；关闭时退化为普通代码块渲染）
   const htmlAppsEnabled =
