@@ -2380,7 +2380,10 @@ jQuery(async () => {
       <div class="novel-settings-row novel-regex-preset-section" data-settings-group="regex">
         <div class="novel-regex-label-row">
           <div class="novel-settings-label">预设正则</div>
-          <button type="button" class="novel-regex-toggle-all" data-scope="preset">全选</button>
+          <div class="novel-regex-label-actions">
+            <button type="button" class="novel-regex-toggle-all" data-scope="preset" data-action="one-click">一键勾选</button>
+            <button type="button" class="novel-regex-toggle-all" data-scope="preset">全选</button>
+          </div>
         </div>
         <div class="novel-settings-hint">从 API 预设中启用正则：先选择预设，再勾选其中的正则。切换查看其他预设时，已勾选的正则依然生效（跨预设累积）。</div>
         <div class="novel-regex-preset-search-row">
@@ -2814,9 +2817,11 @@ jQuery(async () => {
       updateToggleAllLabels();
     }
 
-    // 全选/取消全选按钮文案刷新：根据当前区块勾选状态切换「全选/取消全选」
+    // 全选/取消全选按钮文案刷新：根据当前区块勾选状态切换「全选/取消全选」。
+    // 「一键勾选」按钮（data-action="one-click"）文案固定，不参与切换。
     function updateToggleAllLabels() {
       content.querySelectorAll(".novel-regex-toggle-all").forEach((btn) => {
+        if (btn.dataset.action === "one-click") return;
         const scope = btn.dataset.scope;
         let items = [];
         if (scope === "base") {
@@ -2848,6 +2853,31 @@ jQuery(async () => {
       if (!items.length) return;
       const allOn = items.every((item) => regexCore.isEnabled(item));
       items.forEach((item) => regexCore.setEnabledState(item, !allOn));
+      deps.saveSettings();
+      if (state.page === "reader") {
+        const ch = state.currentChapter;
+        if (ch) openChapter(ch);
+      } else if (state.page === "toc") {
+        const container = bodyEl.querySelector(".novel-page");
+        if (container) renderTocPage(container);
+      }
+      renderRegexBaseList();
+      renderRegexActiveSummary();
+      if (presetSelectEl) renderPresetRegexList(presetSelectEl.value);
+      updateToggleAllLabels();
+    }
+
+    // 一键勾选：勾选当前选中预设中已在酒馆启用（未禁用）的正则。
+    // 与「全选」不同：只勾选酒馆正则面板中处于启用状态的正则，禁用的保持不勾选。
+    function oneClickEnablePresetRegex() {
+      if (!presetSelectEl) return;
+      const presetName = presetSelectEl.value;
+      if (!presetName) return;
+      const items = regexCore
+        .getAllScripts({ presetNames: [presetName] })
+        .filter((item) => item.source === "preset" && !item.script?.disabled);
+      if (!items.length) return;
+      items.forEach((item) => regexCore.setEnabledState(item, true));
       deps.saveSettings();
       if (state.page === "reader") {
         const ch = state.currentChapter;
@@ -3021,9 +3051,16 @@ jQuery(async () => {
     renderRegexActiveSummary();
     renderRegexBaseList();
 
-    // 全选按钮事件绑定（作用域：base = 全局/角色列表；preset = 当前选中预设）
+    // 按钮事件绑定（作用域：base = 全局/角色列表；preset = 当前选中预设）
+    //  data-action="one-click" → 一键勾选当前预设中已启用的正则；否则为全选/取消全选
     content.querySelectorAll(".novel-regex-toggle-all").forEach((btn) => {
-      btn.addEventListener("click", () => toggleAllRegex(btn.dataset.scope));
+      btn.addEventListener("click", () => {
+        if (btn.dataset.action === "one-click") {
+          oneClickEnablePresetRegex();
+        } else {
+          toggleAllRegex(btn.dataset.scope);
+        }
+      });
     });
 
     // ---- 预设正则：先选预设，再勾选该预设中的正则（跨预设累积生效） ----

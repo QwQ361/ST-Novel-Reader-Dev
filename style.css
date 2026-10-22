@@ -1884,6 +1884,14 @@ body.novel-theme-ocean {
   gap: 8px;
 }
 
+/* 标题行右侧按钮组：一键勾选 + 全选水平排列 */
+.novel-regex-label-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
 /* 全选/取消全选按钮 */
 .novel-regex-toggle-all {
   flex: 0 0 auto;
