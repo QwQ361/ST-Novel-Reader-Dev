@@ -101,6 +101,10 @@ const RENAME_SVG =
 const DELETE_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>';
 
+// 导出图标（SVG，向下箭头 + 托盘，描边风格，与收藏一致）
+const EXPORT_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>';
+
 jQuery(async () => {
   console.log("[NovelReader] 启动中…");
 
@@ -205,6 +209,16 @@ jQuery(async () => {
     getChatMessages: (avatar, fileName) =>
       bookshelf.getChatMessages(avatar, fileName),
     // 正则过滤：渲染正文前先应用用户勾选的酒馆正则
+    regexFilter: (text, avatar) => regexCore.runRegexOnText(text, { avatar }),
+  });
+
+  // 聊天导出核心：把完整消息按分章规则切成章，逐条消息应用已勾选正则，
+  // 拼接为「章节标题 + 正文 + 五个空行」结构的纯文本，供目录页导出按钮下载。
+  const exportCore = createExportCore({
+    ...deps,
+    getChatMessages: (avatar, fileName) =>
+      bookshelf.getChatMessages(avatar, fileName),
+    // 正则过滤：导出时复用与阅读器一致的已勾选正则
     regexFilter: (text, avatar) => regexCore.runRegexOnText(text, { avatar }),
   });
 
@@ -1019,7 +1033,66 @@ jQuery(async () => {
     bodyEl.appendChild(page);
   }
 
-  // ============ 聊天操作（删除 / 重命名，功能层在 chatlogs，此处只做 UI 编排） ============
+  // ============ 聊天操作（删除 / 重命名 / 导出，功能层在 chatlogs / export，此处只做 UI 编排） ============
+
+  /**
+   * 下载文本文件（UTF-8 BOM 保证中文在 Windows 记事本正确显示）。
+   * @param {string} filename 下载文件名（含 .txt）
+   * @param {string} content 文本内容
+   */
+  function downloadTextFile(filename, content) {
+    const blob = new Blob(["\uFEFF" + content], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  /**
+   * 导出当前聊天为 txt。
+   * 依次弹出两次 confirm：
+   *   ① 是否导出 user 回复？（否 → 只导出 char）
+   *   ② 是否导出 html 代码？（否 → 略过 html 代码块）
+   * 都选择后生成 txt 并自动下载。
+   */
+  async function handleExportChat() {
+    if (!state.currentChar || !state.currentChat) return;
+
+    const includeUser = window.confirm(
+      "是否导出 user 回复？\n\n选择「确定」= 同时导出 user 与 char；\n选择「取消」= 只导出 char 消息。",
+    );
+    const includeHtml = window.confirm(
+      "是否导出 html 代码？\n\n选择「确定」= 正文中保留 ```html 代码块；\n选择「取消」= 自动略过 html 代码块。",
+    );
+
+    const char = state.currentChar;
+    const chat = state.currentChat;
+    const text = await exportCore.exportChat({
+      avatar: char.avatar,
+      fileName: chat.file_name,
+      includeUser,
+      includeHtml,
+    });
+    if (!text) {
+      window.alert("该聊天暂无内容，无法导出。");
+      return;
+    }
+
+    const charName = String(char.name || "未命名").replace(
+      /[\\/:*?"<>|]/g,
+      "_",
+    );
+    const chatName = String(chat.file_name || "聊天")
+      .replace(/\.jsonl$/i, "")
+      .replace(/[\\/:*?"<>|]/g, "_");
+    downloadTextFile(`${charName}-${chatName}.txt`, text);
+  }
 
   /**
    * 删除聊天前的二次确认（浏览器原生 confirm，破坏性操作统一确认后再执行）。
@@ -1506,6 +1579,7 @@ jQuery(async () => {
             : ""
         }
         <button class="novel-toc-bookmark-btn" title="查看收藏章节" data-action="bookmarks">${BOOKMARK_SVG}<span>收藏</span></button>
+        <button class="novel-toc-export-btn" title="导出聊天为 txt" data-action="export">${EXPORT_SVG}</button>
         ${
           showTocActions
             ? `<span class="novel-toc-chat-actions">
@@ -1523,6 +1597,14 @@ jQuery(async () => {
       .addEventListener("click", (e) => {
         e.stopPropagation();
         openBookmarksDialog();
+      });
+
+    // 目录头导出按钮：导出当前聊天为 txt（两次 confirm 后自动下载）
+    toc
+      .querySelector('[data-action="export"]')
+      .addEventListener("click", (e) => {
+        e.stopPropagation();
+        handleExportChat();
       });
 
     // 番外筛选按钮：切换过滤并重置页码

@@ -692,6 +692,53 @@
   color: #e5484d;
 }
 
+/* 目录头导出按钮：紧邻收藏按钮右侧（收藏按钮已占 margin-left:auto），
+   样式与删除/重命名操作按钮（.novel-toc-action）一致 */
+.novel-toc-export-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 8%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+      transparent
+    );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  /* 重置 button 默认样式：继承字体、无内边距 */
+  font: inherit;
+  padding: 0;
+  line-height: 1;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.novel-toc-export-btn:hover {
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 16%,
+    transparent
+  );
+}
+
+.novel-toc-export-btn svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  stroke-width: 2;
+  margin-top: 1px;
+}
+
 .novel-toc-list {
   display: flex;
   flex-direction: column;
@@ -2908,7 +2955,8 @@ body.novel-theme-ocean {
     gap: 4px;
   }
 
-  .novel-toc-action {
+  .novel-toc-action,
+  .novel-toc-export-btn {
     width: 28px;
     height: 28px;
   }
