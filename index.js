@@ -17,7 +17,6 @@ import {
 import { createChatlogsCore } from "./features/chatlogs/index.js";
 import { createGenNotifyCore } from "./features/gen-notify/index.js";
 import { createProgressCore } from "./features/progress/index.js";
-import { createFlipReader } from "./features/reader/flip.js";
 import { refreshHtmlAppThemes } from "./features/reader/iframe.js";
 import { createReaderCore } from "./features/reader/index.js";
 import { createScrollReader } from "./features/reader/scroll.js";
@@ -144,14 +143,6 @@ jQuery(async () => {
     getShowUserReplies: () => getGlobalSettings().showUserReplies,
     // 是否显示楼层版本切换条（设置页开关，默认 true；关闭后只渲染当前版本，与现状一致）
     getShowSwipeBar: () => getGlobalSettings().showSwipeBar,
-    // swipe 版本切换完成回调：翻页模式下消息高度变化，需重新分页。
-    // 版本已写回原始消息对象（mes.swipe_id），reflow 重新渲染时会保留所选版本。
-    onSwipeChanged: (msgEl) => {
-      if (isFlipReadMode() && flipReader) {
-        // 切换后该消息所在页内容已变化：重排保持当前页（reflow 内部按当前页码重新分页）
-        flipReader.reflow();
-      }
-    },
     // 是否启用 HTML 应用渲染（设置页开关，默认 true；关闭后 ```html 代码块退化为普通代码）
     getHtmlAppEnabled: () => getGlobalSettings().htmlAppEnabled !== false,
     // HTML 应用读取主题变量的根元素（阅读器弹窗 .novel-dialog，未打开时返回 null）
@@ -238,43 +229,6 @@ jQuery(async () => {
       },
     });
     return scrollReader;
-  }
-
-  // 翻页阅读核心（「阅读方式 = 翻页」时使用）：把章节按屏幕高度分页，一页一屏。
-  // 也惰性创建；回调在运行时才触发（UI 层函数均为提升的函数声明）。
-  let flipReader = null;
-  function getFlipReader() {
-    if (flipReader) return flipReader;
-    flipReader = createFlipReader({
-      reader,
-      // 跨章翻页导致当前章变化：同步状态并刷新底部按钮可用态
-      onCurrentChapterChange: (chapterIndex) => {
-        state.currentChapter = chapterIndex;
-        updateBottomButtons();
-      },
-      // 新章节渲染完成：应用阅读器样式 + 注入聊天操作按钮
-      onRenderedChapter: (chapterIndex, block) => {
-        if (readerScrollEl) applyReaderStyles();
-        if (block) injectReaderChatActions(block);
-      },
-      // 页码变化：保存翻页进度（含页码，供下次打开恢复）+ 刷新底部栏按钮可用态
-      // （同章翻页只走 showPage，不会触发 onCurrentChapterChange，这里必须同步按钮状态）
-      onPageChange: (page, totalPages, chapterIndex) => {
-        if (!state.currentChar || !state.currentChat) return;
-        progress.save(state.currentChar.avatar, state.currentChat.file_name, {
-          chapter: chapterIndex,
-          page,
-          updatedAt: Date.now(),
-        });
-        updateBottomButtons();
-      },
-      // 点击页面中间区域：切换顶/底栏显隐（悬浮窗模式顶栏即拖动柄，禁用）
-      onToggleChrome: () => {
-        if (getGlobalSettings().windowMode === "floating") return;
-        bodyEl.classList.toggle("novel-chrome-hidden");
-      },
-    });
-    return flipReader;
   }
 
   // 书签：收藏章节 + 收藏列表（数据存 extension_settings，按 角色+聊天 维度）
@@ -567,9 +521,8 @@ jQuery(async () => {
       saveLastView(); // 记住关闭前的页面（角色/聊天/章节）
       charFolderPanel?.close(); // 关闭可能打开的角色文件夹过滤面板（独立挂 body）
       reader.abort();
-      // 连续滚动 / 翻页阅读核心：移除监听并清空容器（下次打开重新初始化）
+      // 连续滚动阅读核心：移除滚动监听并清空容器（下次打开重新初始化）
       scrollReader?.destroy();
-      flipReader?.destroy();
       // 生成结束通知：清除 UI 引用 + 清定时器 + 清零计数。
       // 注意：不 unsubscribe —— 订阅在插件启动时建立并常驻（见"启动"区）。
       // 是否通知由"生成结束那一刻阅读器是否打开"（isReaderOpen）决定，
@@ -922,11 +875,8 @@ jQuery(async () => {
     // 离开聊天列表页（或重新进入）时退出批量删除模式，避免选中集残留到其它页
     if (page !== "chats") resetBatchMode();
     bodyEl.innerHTML = "";
-    // 离开正文页：销毁连续滚动 / 翻页阅读状态（容器已被清空，移除残留监听）
-    if (page !== "reader") {
-      scrollReader?.destroy();
-      flipReader?.destroy();
-    }
+    // 离开正文页：销毁连续滚动阅读状态（容器已被清空，移除残留监听）
+    if (page !== "reader") scrollReader?.destroy();
     const backBtn = topbarEl.querySelector('[data-action="back"]');
     const backActions = {
       bookshelf: "close", // 书架页：返回按钮 = 关闭阅读器（退出到 ST 主界面）
@@ -1726,11 +1676,6 @@ jQuery(async () => {
     return getGlobalSettings().readerSettings?.readMode === "scroll";
   }
 
-  /** 是否为翻页阅读模式（设置页「阅读方式 = 翻页」）：一页一屏，点击/键盘翻页 */
-  function isFlipReadMode() {
-    return getGlobalSettings().readerSettings?.readMode === "flip";
-  }
-
   /** 滚动保存阅读进度（分页模式当前章固定；滚动模式当前章随滚动动态变化） */
   function bindScrollProgressSaving(scroll, chapterIndex) {
     scroll.addEventListener("scroll", () => {
@@ -1775,11 +1720,8 @@ jQuery(async () => {
     readerScrollEl = scroll;
     page.appendChild(scroll);
     bodyEl.appendChild(page);
-    // 翻页模式不绑定滚动保存与点击显隐（翻页核心自管点击分左/中/右区域；页码进度由 onPageChange 保存）
-    if (!isFlipReadMode()) {
-      bindScrollProgressSaving(scroll, state.currentChapter || 1);
-      bindChromeToggle(scroll);
-    }
+    bindScrollProgressSaving(scroll, state.currentChapter || 1);
+    bindChromeToggle(scroll);
     return scroll;
   }
 
@@ -1800,15 +1742,6 @@ jQuery(async () => {
       await getScrollReader().open(scroll, chapterIndex);
       if (msgOffset != null) {
         await getScrollReader().scrollToMessage(chapterIndex, msgOffset);
-      }
-      state.pendingHighlightOffset = null;
-    } else if (isFlipReadMode()) {
-      // 翻页阅读模式：给正文容器设置字号（测量容器与显示页继承），再打开章节并翻到目标消息所在页
-      applyReaderStyles();
-      scroll.style.fontSize = `${getGlobalSettings().readerSettings.fontSize || getDefaultFontSize()}px`;
-      await getFlipReader().open(scroll, chapterIndex);
-      if (msgOffset != null) {
-        await getFlipReader().scrollToMessage(chapterIndex, msgOffset);
       }
       state.pendingHighlightOffset = null;
     } else {
@@ -1865,19 +1798,6 @@ jQuery(async () => {
           scroll.scrollTop = saved.scrollTop;
         });
       }
-    } else if (isFlipReadMode()) {
-      // 翻页阅读模式：给正文容器设置字号（测量容器与显示页继承），再按屏幕高度分页；
-      // 恢复保存的页码（无保存则打开末页）
-      applyReaderStyles();
-      scroll.style.fontSize = `${getGlobalSettings().readerSettings.fontSize || getDefaultFontSize()}px`;
-      await getFlipReader().open(scroll, chapterIndex);
-      const saved = progress.load(
-        state.currentChar.avatar,
-        state.currentChat.file_name,
-      );
-      if (saved && saved.chapter === chapterIndex && saved.page != null) {
-        await getFlipReader().gotoPage(saved.page);
-      }
     } else {
       await reader.renderChapter(scroll, chapterIndex, {
         onRendered: () => {
@@ -1916,8 +1836,6 @@ jQuery(async () => {
     const cur = state.currentChapter;
     const prev = bottombarEl.querySelector('[data-action="prev"]');
     const next = bottombarEl.querySelector('[data-action="next"]');
-    // 所有模式统一：prev/next = 上一章/下一章，可用态依据章节边界。
-    // （翻页模式下翻页由翻页箭头 / 点击左右区域完成，底部按钮保持章节职责。）
     if (prev) prev.disabled = cur <= 1;
     if (next) next.disabled = cur >= total;
     // 书签按钮：当前章节已收藏则高亮（标实心），未收藏为描边
@@ -2026,8 +1944,6 @@ jQuery(async () => {
 
   /** 上一章 / 下一章（按全部章节顺序，含番外） */
   async function goChapter(delta) {
-    // 翻页模式：底部「上一章/下一章」始终真正换章（打开目标章首页），
-    // 翻页由翻页箭头 / 点击左右区域完成，两者职责分离。
     const nextChapter = state.currentChapter + delta;
     const info = reader.getChatInfo();
     if (!info) return;
@@ -3298,7 +3214,7 @@ jQuery(async () => {
     // 面板弹出在底部栏上方（.novel-settings-panel bottom:100% 相对 bottombar 定位）
     bottombarEl.appendChild(panel);
 
-    // 阅读方式：单章分页 / 连续滚动 / 翻页
+    // 阅读方式：单章分页 / 连续滚动
     const modeRow = document.createElement("div");
     modeRow.className = "novel-settings-row";
     const modeLabel = document.createElement("div");
@@ -3309,7 +3225,6 @@ jQuery(async () => {
     const modeOptions = [
       { id: "paged", text: "分页" },
       { id: "scroll", text: "滚动" },
-      { id: "flip", text: "翻页" },
     ];
     modeOptions.forEach((opt) => {
       const seg = document.createElement("button");
@@ -3357,13 +3272,6 @@ jQuery(async () => {
       rs.fontSize = Number(fontRange.value);
       fontValue.textContent = `${fontRange.value}px`;
       applyReaderStyles();
-      // 翻页模式：字号变化后重新分页（保持当前页）
-      if (isFlipReadMode() && flipReader) {
-        const scrollEl = readerScrollEl;
-        if (scrollEl)
-          scrollEl.style.fontSize = `${rs.fontSize || getDefaultFontSize()}px`;
-        flipReader.reflow();
-      }
       deps.saveSettings();
     });
     fontRow.appendChild(fontLabel);

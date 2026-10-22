@@ -924,93 +924,6 @@
   flex-direction: column;
 }
 
-/* ---------- 翻页阅读模式（flip） ----------
-   每页一个 .novel-flip-page：固定一屏高度、内容不滚动（大块内容页例外可轻微滚动）。
-   页码指示器 .novel-flip-pager 绝对定位于容器底部，不占内容高度。 */
-.novel-flip-page {
-  max-width: 720px; /* 与 .novel-reader-inner 对齐：正文居中，两侧留白 */
-  margin: 0 auto;
-  box-sizing: border-box;
-  /* 翻页页内元素保持与分页/滚动模式一致的视觉层级 */
-  overflow: hidden;
-}
-
-/* 翻页页内段落间距与正文一致 */
-.novel-flip-page .novel-msg-body p {
-  margin: 0 0 8px;
-}
-
-/* 页码指示器：定位于可视容器底部中央（半透明，翻页时提示当前位置） */
-.novel-flip-pager {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  pointer-events: none; /* 仅按钮可点，空白区域点击穿透到翻页核心 */
-  color: color-mix(
-    in srgb,
-    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 55%,
-    transparent
-  );
-  font-size: 0.8rem;
-  user-select: none;
-}
-
-.novel-flip-pager-btn {
-  pointer-events: auto;
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  cursor: pointer;
-  background: color-mix(
-    in srgb,
-    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 10%,
-    transparent
-  );
-  border: 1px solid
-    color-mix(
-      in srgb,
-      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 18%,
-      transparent
-    );
-  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
-  font: inherit;
-  line-height: 1;
-  opacity: 0.75;
-  transition:
-    background 0.15s ease,
-    opacity 0.15s ease;
-}
-
-.novel-flip-pager-btn:hover {
-  opacity: 1;
-  background: color-mix(
-    in srgb,
-    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 18%,
-    transparent
-  );
-}
-
-/* 加载覆盖层：跨章渲染时显示「加载中…」 */
-.novel-flip-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
-  opacity: 0.6;
-  font-size: 1rem;
-  pointer-events: none;
-}
-
 .novel-msg {
   margin-bottom: 16px;
   animation: novel-fade-in 0.2s ease;
@@ -1046,9 +959,7 @@
 .novel-msg-body {
   line-height: 1.8;
   word-break: break-word;
-  /* pre-line：保留消息中的换行符（\n），同时仍折叠多余空格；
-     酒馆 markdown 的 <p> 内文本常含 \n，normal 会折叠成一行 */
-  white-space: pre-line;
+  white-space: normal;
   /* 正文文字色跟随主题（采样色 → ST 变量 → 默认） */
   color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
 }

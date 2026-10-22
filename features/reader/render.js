@@ -24,7 +24,7 @@ import {
  * @param {string} [options.avatar] 当前角色头像（决定启用哪些角色级正则）
  * @returns {string} 安全 HTML
  */
-export function renderTextBody(deps, text, options = {}) {
+function renderTextBody(deps, text, options = {}) {
   let t = text || "";
   // HTML 应用开关（设置页开关，默认开启；关闭时退化为普通代码块渲染）
   const htmlAppsEnabled =
@@ -200,7 +200,6 @@ export async function renderMessagesBatched(
         swipes,
         origin,
         avatar: options.avatar || "",
-        mes, // 原始消息对象：切换版本时写回 swipe_id，供翻页模式重排后保留所选版本
       });
       fragment.appendChild(node);
       pending += 1;
@@ -231,167 +230,137 @@ export async function renderMessagesBatched(
   }
 }
 
-// 模块级楼层版本引用表（key = .novel-msg 元素）：document 级事件委托用。
-// 用 WeakMap 避免持有已移除的消息 DOM 导致内存泄漏。
-const swipeRefsByEl = new WeakMap();
-let swipeDocBound = false;
-
 /**
- * 登记楼层版本切换条的引用并绑定 document 级事件委托。
- * 事件委托挂在 document 上（只绑一次），与消息 DOM 是否还在
- * .novel-msg-list 容器内无关：翻页模式把消息克隆/移动进显示页
- * （没有 .novel-msg-list 容器）后，事件仍能冒泡到 document 被处理。
+ * 在正文容器上绑定楼层版本切换条的事件委托（同一容器只绑一次）。
+ * 事件委托兼容「批量渲染 + 滚动模式反复追加章节块」的架构：
+ * 滚动模式下每章一个独立 .novel-msg-list 容器，各自绑定。
  * @param {object} deps 依赖注入
  * @param {HTMLElement} container 正文容器（.novel-msg-list）
  * @param {Map<string, {swipes: string[], origin: number, avatar: string}>} swipeRefs 楼层版本引用表
  */
 function bindSwipeBarEvents(deps, container, swipeRefs) {
-  if (!container) return;
-  // 登记本批消息：元素 → 引用（含原始消息对象与渲染 deps）
-  container.querySelectorAll(".novel-msg").forEach((node) => {
-    const key = node.dataset.mesId || "";
+  if (!container || container.dataset.swipeBound === "1") return;
+  container.dataset.swipeBound = "1";
+
+  /** 切换/复位楼层显示的 swipe 版本（就地替换正文 + 更新计数与 ↺ 按钮态） */
+  function switchMessageSwipe(msgEl, idx) {
+    const key = msgEl.dataset.mesId || "";
     const ref = swipeRefs.get(key);
-    if (ref) swipeRefsByEl.set(node, { ref, deps, mes: ref.mes });
-  });
-  if (!swipeDocBound) {
-    document.addEventListener("click", onSwipeDocClick);
-    swipeDocBound = true;
-  }
-}
-
-/** document 级点击委托：处理 .novel-swipe-bar 内的 ‹ › / 计数 / ↺ 点击 */
-function onSwipeDocClick(e) {
-  const target = e.target;
-  if (!(target instanceof Element)) return;
-  if (!target.closest(".novel-swipe-bar")) return; // 只处理切换条内点击
-  const msg = target.closest(".novel-msg");
-  if (!msg) return;
-  const entry = swipeRefsByEl.get(msg);
-  if (!entry) return;
-  const { ref } = entry;
-  const swipes = ref.swipes;
-  if (!Array.isArray(swipes) || swipes.length === 0) return;
-  const total = swipes.length;
-
-  // 切换版本：‹ / ›（循环切换）
-  const btn = target.closest("[data-swipe-prev], [data-swipe-next]");
-  if (btn) {
-    if (total < 2) return; // 无切换空间
-    const idx = Number(msg.dataset.swipeIdx || 0);
-    const dir = btn.hasAttribute("data-swipe-prev") ? -1 : 1;
-    switchMessageSwipe(msg, (idx + dir + total) % total, entry);
-    return;
-  }
-
-  // 手动输入跳转：点击计数「1/N」
-  const jump = target.closest("[data-swipe-jump]");
-  if (jump && !jump.dataset.swipeInput) {
-    startSwipeJump(jump, msg, entry);
-    return;
-  }
-
-  // 回到当前版本：↺（恢复为酒馆最初选中的 swipe_id 版本）
-  const reset = target.closest("[data-swipe-reset]");
-  if (reset) {
-    switchMessageSwipe(msg, ref.origin, entry);
-  }
-}
-
-/**
- * 切换/复位楼层显示的 swipe 版本（就地替换正文 + 更新计数与 ↺ 按钮态）。
- * 同时写回原始消息对象 mes.swipe_id，使翻页模式重排（reflow）后仍渲染所选版本。
- * @param {HTMLElement} msgEl 消息元素（.novel-msg）
- * @param {number} idx 目标版本下标（0 起，越界取模）
- * @param {{ref, deps, mes}} entry 引用表条目
- */
-function switchMessageSwipe(msgEl, idx, entry) {
-  const { ref, deps, mes } = entry;
-  const swipes = ref.swipes;
-  if (!Array.isArray(swipes) || swipes.length === 0) return;
-  const total = swipes.length;
-  const safeIdx = ((idx % total) + total) % total; // 越界取模兜底
-  const body = msgEl.querySelector(".novel-msg-body");
-  if (!body) return;
-  // 新版本正文同样走正则过滤 + 安全渲染管线
-  body.innerHTML = renderTextBody(deps, swipes[safeIdx] ?? "", {
-    avatar: ref.avatar,
-  });
-  // 新版本正文可能含 HTML 应用：水合（绑定消息监听 + 触发高度同步）
-  try {
-    hydrateHtmlApps(body, () => deps.getHtmlAppRootEl?.() || null);
-  } catch (err) {
-    console.warn("[NovelReader] HTML 应用水合失败:", err);
-  }
-  msgEl.dataset.swipeIdx = String(safeIdx);
-  // 写回原始消息：reflow / 重新渲染当前章时保留所选版本（仅影响内存数据，不落盘）
-  if (mes && typeof mes === "object") {
-    if (Array.isArray(mes.swipes)) mes.swipe_id = safeIdx;
-    else mes.mes = swipes[safeIdx] ?? "";
-  }
-  const countEl = msgEl.querySelector(".novel-swipe-count");
-  if (countEl) countEl.textContent = `${safeIdx + 1}/${total}`;
-  // ↺ 按钮：当前显示酒馆最初选中版本时置灰，否则可用
-  const resetBtn = msgEl.querySelector("[data-swipe-reset]");
-  if (resetBtn) resetBtn.disabled = safeIdx === ref.origin;
-  // 翻页模式：切换版本会改变消息高度，需重新分页（index.js 注入 onSwipeChanged 回调）
-  try {
-    deps.onSwipeChanged?.(msgEl);
-  } catch (err) {
-    console.warn("[NovelReader] swipe 切换后重排失败:", err);
-  }
-}
-
-/**
- * 把计数「1/N」就地切换为数字输入框（保持 .novel-swipe-count 类名，便于样式复用）。
- * 输入范围 1~N，Enter/失焦确认跳转，Escape 取消。
- */
-function startSwipeJump(countEl, msgEl, entry) {
-  if (countEl.dataset.swipeInput === "1") return; // 已处于输入态
-  const total = Number(msgEl.dataset.swipeTotal || 0);
-  if (total < 2) return;
-  const current = Number(msgEl.dataset.swipeIdx || 0) + 1;
-  countEl.dataset.swipeInput = "1";
-  countEl.textContent = "";
-  const input = document.createElement("input");
-  input.type = "number";
-  input.min = "1";
-  input.max = String(total);
-  input.step = "1";
-  input.value = String(current);
-  input.className = "novel-swipe-input";
-  input.setAttribute("aria-label", "跳转到指定版本");
-  countEl.appendChild(input);
-  input.focus();
-  input.select();
-
-  /** 结束输入态并恢复计数显示（失焦/确认/取消共用） */
-  const finish = () => {
-    countEl.dataset.swipeInput = "";
-    countEl.textContent = `${Number(msgEl.dataset.swipeIdx || 0) + 1}/${total}`;
-  };
-  /** 读取输入并跳转（越界自动夹取到 1~N） */
-  const commit = () => {
-    const raw = Number(input.value);
-    const target =
-      Number.isFinite(raw) && raw >= 1 ? Math.min(Math.round(raw), total) : 0;
-    if (target) switchMessageSwipe(msgEl, target - 1, entry);
-  };
-
-  input.addEventListener("keydown", (ev) => {
-    ev.stopPropagation();
-    if (ev.key === "Enter") {
-      ev.preventDefault();
-      input.blur(); // 交由 blur 统一收尾（commit + finish），避免与失焦重复触发
-    } else if (ev.key === "Escape") {
-      ev.preventDefault();
-      input.value = "";
-      input.blur(); // 取消：清空输入再失焦，blur 里 commit 因空值不跳转，仅恢复计数
+    if (!ref) return;
+    const swipes = ref.swipes;
+    if (!Array.isArray(swipes) || swipes.length === 0) return;
+    const total = swipes.length;
+    const safeIdx = ((idx % total) + total) % total; // 越界取模兜底
+    const body = msgEl.querySelector(".novel-msg-body");
+    if (!body) return;
+    // 新版本正文同样走正则过滤 + 安全渲染管线
+    body.innerHTML = renderTextBody(deps, swipes[safeIdx] ?? "", {
+      avatar: ref.avatar,
+    });
+    // 新版本正文可能含 HTML 应用：水合（绑定消息监听 + 触发高度同步）
+    try {
+      hydrateHtmlApps(body, () => deps.getHtmlAppRootEl?.() || null);
+    } catch (err) {
+      console.warn("[NovelReader] HTML 应用水合失败:", err);
     }
-  });
-  input.addEventListener("blur", () => {
-    // 失焦即确认（与 Enter 行为一致）；Escape 已清空输入，此处置为取消
-    commit();
-    finish();
+    msgEl.dataset.swipeIdx = String(safeIdx);
+    const countEl = msgEl.querySelector(".novel-swipe-count");
+    if (countEl) countEl.textContent = `${safeIdx + 1}/${total}`;
+    // ↺ 按钮：当前显示酒馆最初选中版本时置灰，否则可用
+    const resetBtn = msgEl.querySelector("[data-swipe-reset]");
+    if (resetBtn) resetBtn.disabled = safeIdx === ref.origin;
+  }
+
+  /**
+   * 把计数「1/N」就地切换为数字输入框（保持 .novel-swipe-count 类名，便于样式复用）。
+   * 输入范围 1~N，Enter/失焦确认跳转，Escape 取消。
+   */
+  function startSwipeJump(countEl) {
+    if (countEl.dataset.swipeInput === "1") return; // 已处于输入态
+    const total = Number(
+      countEl.closest(".novel-msg")?.dataset.swipeTotal || 0,
+    );
+    if (total < 2) return;
+    const current =
+      Number(countEl.closest(".novel-msg")?.dataset.swipeIdx || 0) + 1;
+    countEl.dataset.swipeInput = "1";
+    countEl.textContent = "";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(total);
+    input.step = "1";
+    input.value = String(current);
+    input.className = "novel-swipe-input";
+    input.setAttribute("aria-label", "跳转到指定版本");
+    countEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    /** 结束输入态并恢复计数显示（失焦/确认/取消共用） */
+    const finish = () => {
+      countEl.dataset.swipeInput = "";
+      countEl.textContent = `${Number(countEl.closest(".novel-msg")?.dataset.swipeIdx || 0) + 1}/${total}`;
+    };
+    /** 读取输入并跳转（越界自动夹取到 1~N） */
+    const commit = () => {
+      const raw = Number(input.value);
+      const target =
+        Number.isFinite(raw) && raw >= 1 ? Math.min(Math.round(raw), total) : 0;
+      if (target) {
+        const msg = countEl.closest(".novel-msg");
+        if (msg) switchMessageSwipe(msg, target - 1);
+      }
+    };
+
+    input.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        input.blur(); // 交由 blur 统一收尾（commit + finish），避免与失焦重复触发
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        input.value = "";
+        input.blur(); // 取消：清空输入再失焦，blur 里 commit 因空值不跳转，仅恢复计数
+      }
+    });
+    input.addEventListener("blur", () => {
+      // 失焦即确认（与 Enter 行为一致）；Escape 已清空输入，此处置为取消
+      commit();
+      finish();
+    });
+  }
+
+  container.addEventListener("click", (e) => {
+    // 切换版本：‹ / ›（循环切换）
+    const btn = e.target.closest("[data-swipe-prev], [data-swipe-next]");
+    if (btn) {
+      const msg = btn.closest(".novel-msg");
+      if (!msg) return;
+      const total = Number(msg.dataset.swipeTotal || 0);
+      if (total < 2) return; // 无切换空间
+      let idx = Number(msg.dataset.swipeIdx || 0);
+      const dir = btn.hasAttribute("data-swipe-prev") ? -1 : 1;
+      idx = (idx + dir + total) % total;
+      switchMessageSwipe(msg, idx);
+      return;
+    }
+
+    // 手动输入跳转：点击计数「1/N」
+    const jump = e.target.closest("[data-swipe-jump]");
+    if (jump && !jump.dataset.swipeInput) {
+      startSwipeJump(jump);
+      return;
+    }
+
+    // 回到当前版本：↺（恢复为酒馆最初选中的 swipe_id 版本）
+    const reset = e.target.closest("[data-swipe-reset]");
+    if (reset) {
+      const msg = reset.closest(".novel-msg");
+      if (!msg) return;
+      const origin = Number(msg.dataset.swipeOrigin ?? 0);
+      switchMessageSwipe(msg, origin);
+    }
   });
 }
 
