@@ -15,6 +15,7 @@ import {
   createCfmFolderPanel,
 } from "./features/cfm-bridge/index.js";
 import { createChatlogsCore } from "./features/chatlogs/index.js";
+import { createExportCore } from "./features/export/index.js";
 import { createGenNotifyCore } from "./features/gen-notify/index.js";
 import { createProgressCore } from "./features/progress/index.js";
 import { refreshHtmlAppThemes } from "./features/reader/iframe.js";
