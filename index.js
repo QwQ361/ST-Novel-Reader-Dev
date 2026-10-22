@@ -144,6 +144,14 @@ jQuery(async () => {
     getShowUserReplies: () => getGlobalSettings().showUserReplies,
     // 是否显示楼层版本切换条（设置页开关，默认 true；关闭后只渲染当前版本，与现状一致）
     getShowSwipeBar: () => getGlobalSettings().showSwipeBar,
+    // swipe 版本切换完成回调：翻页模式下消息高度变化，需重新分页。
+    // 版本已写回原始消息对象（mes.swipe_id），reflow 重新渲染时会保留所选版本。
+    onSwipeChanged: (msgEl) => {
+      if (isFlipReadMode() && flipReader) {
+        // 切换后该消息所在页内容已变化：重排保持当前页（reflow 内部按当前页码重新分页）
+        flipReader.reflow();
+      }
+    },
     // 是否启用 HTML 应用渲染（设置页开关，默认 true；关闭后 ```html 代码块退化为普通代码）
     getHtmlAppEnabled: () => getGlobalSettings().htmlAppEnabled !== false,
     // HTML 应用读取主题变量的根元素（阅读器弹窗 .novel-dialog，未打开时返回 null）
@@ -1908,21 +1916,10 @@ jQuery(async () => {
     const cur = state.currentChapter;
     const prev = bottombarEl.querySelector('[data-action="prev"]');
     const next = bottombarEl.querySelector('[data-action="next"]');
-    if (isFlipReadMode()) {
-      // 翻页模式：prev/next = 上一页 / 下一页（跨章自动）；可用态依据页码
-      const fr = flipReader;
-      if (prev) {
-        prev.disabled = !(fr && fr.getCurrentPage() > 1);
-        prev.title = "上一页";
-      }
-      if (next) {
-        next.disabled = !(fr && fr.getCurrentPage() < fr.getTotalPages());
-        next.title = "下一页";
-      }
-    } else {
-      if (prev) prev.disabled = cur <= 1;
-      if (next) next.disabled = cur >= total;
-    }
+    // 所有模式统一：prev/next = 上一章/下一章，可用态依据章节边界。
+    // （翻页模式下翻页由翻页箭头 / 点击左右区域完成，底部按钮保持章节职责。）
+    if (prev) prev.disabled = cur <= 1;
+    if (next) next.disabled = cur >= total;
     // 书签按钮：当前章节已收藏则高亮（标实心），未收藏为描边
     const bmBtn = bottombarEl.querySelector('[data-action="bookmark"]');
     if (bmBtn) {
@@ -2029,13 +2026,8 @@ jQuery(async () => {
 
   /** 上一章 / 下一章（按全部章节顺序，含番外） */
   async function goChapter(delta) {
-    // 翻页模式：底部栏 prev/next 在页内翻页（跨章自动跳下一章/上一章末页）
-    if (isFlipReadMode()) {
-      if (!flipReader) return;
-      if (delta < 0) await getFlipReader().prevPage();
-      else await getFlipReader().nextPage();
-      return;
-    }
+    // 翻页模式：底部「上一章/下一章」始终真正换章（打开目标章首页），
+    // 翻页由翻页箭头 / 点击左右区域完成，两者职责分离。
     const nextChapter = state.currentChapter + delta;
     const info = reader.getChatInfo();
     if (!info) return;

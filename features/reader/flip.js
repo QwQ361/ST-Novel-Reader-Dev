@@ -269,7 +269,10 @@ export function createFlipReader(deps) {
     for (let mi = 0; mi < msgs.length; mi += 1) {
       const msg = msgs[mi];
       const h = msg.offsetHeight;
-      if (h <= PH) {
+      // 含楼层版本切换条（swipe）的消息不拆分：拆分会丢失 swipe bar（它是 .novel-msg
+      // 的直接子元素），且拆分片断不再是 .novel-msg 结构，document 级 swipe 委托无法定位。
+      // 整条保留；超页则交给下方贪心分页作为独立可滚动页（scrollable）。
+      if (h <= PH || msg.querySelector(".novel-swipe-bar")) {
         msg.dataset.flipMesIdx = String(mi);
         nodes.push(msg);
         continue;
@@ -563,7 +566,7 @@ export function createFlipReader(deps) {
   function reflow() {
     if (!flipEl || busy) return;
     const keep = currentPage + 1;
-    open(chapterIndex, keep);
+    open(flipEl, chapterIndex, keep);
   }
 
   // ---------- 生命周期 ----------
