@@ -4929,8 +4929,10 @@ body.novel-theme-ocean {
   flex: 0 0 auto;
 }
 
-/* 页体：正文（复用 .novel-reader-inner + .novel-msg-list 布局） */
+/* 页体：正文（复用 .novel-reader-inner + .novel-msg-list 布局）。
+   position: relative：作为页底 swipe dock 的 absolute 定位参照 */
 .novel-flip-page-body {
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
@@ -4962,6 +4964,36 @@ body.novel-theme-ocean {
    且动画期间布局未稳定，会干扰分页高度测量的一致性） */
 .novel-flip-page-body .novel-msg {
   animation: none;
+}
+
+/* 页底 swipe dock：本页所有版本切换条统一下沉居中（absolute 定位，
+   不参与正文文档流，正文高度不受影响——分页时切换条已在消息内占位扣减，
+   移入 dock 后空出的高度正好容纳本容器）。单条时一条居中，多条时横向排列 */
+.novel-flip-page-body .novel-flip-page-swipe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 6px; /* 分页时切换条已在消息内占位扣减（bodyHeight 减 bar 高），
+     移入 dock 后腾出的正是 bar 高度；padding 仅留极小呼吸空间，
+     避免 dock 过高压住正文最后一行 */
+  z-index: 2;
+  pointer-events: none; /* 容器本身不拦截点击，条自身恢复 */
+}
+.novel-flip-page-body .novel-flip-page-swipe .novel-swipe-bar {
+  margin: 0; /* 覆盖 .novel-swipe-bar 的 auto 外边距（文档流居中不需要） */
+  pointer-events: auto;
+  /* dock 内常驻完全可见（不在 .novel-msg 内，hover 显隐规则不再命中；
+     默认 opacity 0.75 保持与消息内一致的半透明观感，hover 仍可加亮） */
+  opacity: 0.75;
+}
+.novel-flip-page-body .novel-flip-page-swipe .novel-swipe-bar:hover {
+  opacity: 1;
 }
 
 /* 底部栏翻页按钮（← →）：窄版，位于 上一章 / 下一章 之间 */

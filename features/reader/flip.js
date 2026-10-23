@@ -496,21 +496,43 @@ export function createFlipReader(deps) {
     // 挂载页面内容（clone：pages 里的 frag 供反复渲染同一页）
     list.appendChild(pageData.frag.cloneNode(true));
 
+    // 页底 swipe dock：本页所有版本切换条统一下沉居中显示。
+    // 分页时切换条仍按消息内文档流占位（bodyHeight 已扣减），
+    // 移入 dock 后空出的高度正好容纳 dock，不遮挡正文。
+    // 同时把版本状态（mesId / idx / total / origin）复制到条上——
+    // dock 内的条不在 .novel-msg 内，事件委托改从条自身读取。
+    const dockBars = list.querySelectorAll(".novel-swipe-bar");
+    if (dockBars.length) {
+      const swipeDock = document.createElement("div");
+      swipeDock.className = "novel-flip-page-swipe";
+      dockBars.forEach((bar) => {
+        const msgEl = bar.closest(".novel-msg");
+        if (msgEl) {
+          bar.dataset.mesId = msgEl.dataset.mesId || "";
+          bar.dataset.swipeTotal = msgEl.dataset.swipeTotal || "1";
+          bar.dataset.swipeIdx = msgEl.dataset.swipeIdx || "0";
+          bar.dataset.swipeOrigin = msgEl.dataset.swipeOrigin || "0";
+        }
+        swipeDock.appendChild(bar);
+      });
+      body.appendChild(swipeDock);
+    }
+
     // 楼层版本切换（翻页模式自绑定，不调用 render.js 的 bindSwipeBarEvents——
     // 其 switchMessageSwipe 就地替换 .novel-msg-body 会导致页内溢出，
     // 翻页模式必须走「记录 override + 整章重排」路径保持一致高度）
-    list.addEventListener("click", (e) => {
+    pageEl.addEventListener("click", (e) => {
       const btn = e.target.closest(
         "[data-swipe-prev], [data-swipe-next], [data-swipe-reset]",
       );
       if (btn) {
-        const msgEl = btn.closest(".novel-msg");
-        if (!msgEl) return;
-        const key = msgEl.dataset.mesId || "";
-        const total = Number(msgEl.dataset.swipeTotal || 0);
+        const bar = btn.closest(".novel-swipe-bar");
+        if (!bar) return;
+        const key = bar.dataset.mesId || "";
+        const total = Number(bar.dataset.swipeTotal || 0);
         if (!key || total < 2) return;
-        let idx = Number(msgEl.dataset.swipeIdx || 0);
-        const origin = Number(msgEl.dataset.swipeOrigin || 0);
+        let idx = Number(bar.dataset.swipeIdx || 0);
+        const origin = Number(bar.dataset.swipeOrigin || 0);
         if (btn.hasAttribute("data-swipe-prev")) {
           idx = (idx - 1 + total) % total;
         } else if (btn.hasAttribute("data-swipe-next")) {
@@ -552,11 +574,14 @@ export function createFlipReader(deps) {
    */
   function startSwipeJump(countEl) {
     if (countEl.dataset.swipeInput === "1") return; // 已处于输入态
-    const msgEl = countEl.closest(".novel-msg");
-    if (!msgEl) return;
-    const total = Number(msgEl.dataset.swipeTotal || 0);
+    // 状态读取源：dock 内的条不在 .novel-msg 内（renderPage 已把版本状态复制到条上）；
+    // 仍在消息内的条则回退到 .novel-msg 读取（兼容测量/直接调用路径）
+    const bar = countEl.closest(".novel-swipe-bar");
+    const stateEl = bar ?? countEl.closest(".novel-msg");
+    if (!stateEl) return;
+    const total = Number(stateEl.dataset.swipeTotal || 0);
     if (total < 2) return;
-    const current = Number(msgEl.dataset.swipeIdx || 0) + 1;
+    const current = Number(stateEl.dataset.swipeIdx || 0) + 1;
     countEl.dataset.swipeInput = "1";
     countEl.textContent = "";
     const input = document.createElement("input");
@@ -574,7 +599,11 @@ export function createFlipReader(deps) {
     /** 结束输入态并恢复计数显示 */
     const finish = () => {
       countEl.dataset.swipeInput = "";
-      countEl.textContent = `${Number(countEl.closest(".novel-msg")?.dataset.swipeIdx || 0) + 1}/${total}`;
+      const cur =
+        countEl.closest(".novel-swipe-bar")?.dataset.swipeIdx ||
+        countEl.closest(".novel-msg")?.dataset.swipeIdx ||
+        0;
+      countEl.textContent = `${Number(cur) + 1}/${total}`;
     };
     /** 读取输入并跳转（越界自动夹取到 1~N） */
     const commit = () => {
@@ -582,7 +611,7 @@ export function createFlipReader(deps) {
       const target =
         Number.isFinite(raw) && raw >= 1 ? Math.min(Math.round(raw), total) : 0;
       if (target) {
-        const key = msgEl.dataset.mesId || "";
+        const key = stateEl.dataset.mesId || "";
         if (key) {
           swipeOverrides.set(key, target - 1);
           scheduleRelayout({ keepMsg: firstMsgOf(currentPage) });
