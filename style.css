@@ -4897,6 +4897,87 @@ body.novel-theme-ocean {
   cursor: not-allowed;
 }
 
+/* ---------- 翻页阅读模式（「阅读方式 = 翻页」，一屏一页、不滚动） ---------- */
+
+/* 翻页模式：正文容器不滚动（一屏一页，滚动交给 ← → 翻页按钮） */
+.novel-reader-scroll.novel-flip-mode {
+  overflow: hidden;
+  padding: 0; /* 页面自身带 padding，容器不再留白 */
+}
+
+/* 隐藏测量容器：屏幕外定位（可见但不可见），宽度与页面内容一致，不限高度 */
+.novel-flip-measure {
+  position: absolute;
+  left: -99999px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 每页：固定高度 + 不滚动（翻页模式的核心形态） */
+.novel-flip-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 24px 16px; /* 上下 24px + 左右 16px（与 flip.js PAGE_PADDING_V/H 一致） */
+  box-sizing: border-box;
+}
+
+/* 页头：章标题 + 「第N章（p/N）」 */
+.novel-flip-page-head {
+  flex: 0 0 auto;
+}
+
+/* 页体：正文（复用 .novel-reader-inner + .novel-msg-list 布局） */
+.novel-flip-page-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.novel-flip-page-body .novel-reader-inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* 翻页模式下页头副标题（第N章（p/N））缩小页头占用，正文尽量多容纳 */
+.novel-flip-page-head .novel-chapter-title {
+  margin: 0 0 4px;
+  font-size: 1.2em;
+}
+
+.novel-flip-page-head .novel-chapter-subtitle {
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  font-size: 0.95em;
+}
+
+/* 翻页模式：正文消息间距收紧（每页空间有限，避免挤压） */
+.novel-flip-page-body .novel-msg {
+  margin-bottom: 12px;
+}
+
+/* 底部栏翻页按钮（← →）：窄版，位于 上一章 / 下一章 之间 */
+.novel-bottombar .novel-btn.novel-page-btn {
+  padding: 8px 10px;
+  min-width: 32px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .novel-flip-page {
+    padding: 20px 12px; /* 与移动端正文容器留白一致 */
+  }
+
+  .novel-bottombar .novel-btn.novel-page-btn {
+    padding: 8px 8px;
+    min-width: 28px;
+  }
+}
+
 /* ---------- 番外指令库：批量重命名弹窗（Promise 模式，参照 CFM） ---------- */
 .novel-ss-edit-popup-overlay {
   position: fixed;

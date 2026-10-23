@@ -24,7 +24,7 @@ import {
  * @param {string} [options.avatar] 当前角色头像（决定启用哪些角色级正则）
  * @returns {string} 安全 HTML
  */
-function renderTextBody(deps, text, options = {}) {
+export function renderTextBody(deps, text, options = {}) {
   let t = text || "";
   // HTML 应用开关（设置页开关，默认开启；关闭时退化为普通代码块渲染）
   const htmlAppsEnabled =
@@ -165,7 +165,8 @@ export function renderMessage(deps, mes, options = {}) {
  * @param {Array<object>} messages 消息数组
  * @param {object} [options] 见 renderMessage
  * @param {number} [options.batchSize=200] 每批渲染条数
- * @returns {Promise<void>} 渲染完成
+ * @returns {Promise<Map<string, {swipes: string[], origin: number, avatar: string}>>}
+ *   楼层版本引用表（供翻页模式绑定版本切换事件）
  */
 export async function renderMessagesBatched(
   deps,
@@ -228,17 +229,78 @@ export async function renderMessagesBatched(
   } catch (err) {
     console.warn("[NovelReader] HTML 应用水合失败:", err);
   }
+
+  return swipeRefs;
+}
+
+/**
+ * 将消息数组渲染到隐藏测量容器（不限高度，供翻页模式分页测量）。
+ * 复用 renderMessage 安全渲染管线（正则过滤 + renderMarkdown + HTML 应用），
+ * 仅不绑定楼层版本切换条（分页阶段不需要事件，显示阶段另行绑定）。
+ * @param {object} deps 依赖注入
+ * @param {HTMLElement} container 测量容器（宽度与正文一致）
+ * @param {Array<object>} messages 消息数组
+ * @param {object} [options] 见 renderMessage
+ * @param {Map<string, number>} [options.swipeOverrides] mesId → 覆盖版本号
+ *   （翻页模式 swipe 切换后重排时传入，保证测量内容与用户所见一致）
+ * @returns {Promise<Map<string, {swipes: string[], origin: number, avatar: string}>>}
+ *   楼层版本引用表（与渲染 DOM 的 data-mes-id 对应，显示阶段绑定切换事件用）
+ */
+export async function renderMessagesForMeasure(
+  deps,
+  container,
+  messages,
+  options = {},
+) {
+  const { userName, avatar, swipeOverrides } = options;
+  const swipeRefs = new Map();
+
+  for (let i = 0; i < messages.length; i += 1) {
+    const mes = messages[i];
+    if (!mes) continue;
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = renderMessage(deps, mes, { userName, avatar });
+    const node = wrapper.firstElementChild;
+    if (node) {
+      const key = mes.mesId != null ? String(mes.mesId) : `m${i}`;
+      node.dataset.mesId = key;
+      const { swipes, origin } = getSwipeInfo(mes);
+      swipeRefs.set(key, {
+        swipes,
+        origin,
+        avatar: avatar || "",
+      });
+      // 覆盖版本：把测量 DOM 的正文替换为用户当前选择的版本
+      if (swipeOverrides?.has(key)) {
+        const overrideIdx = swipeOverrides.get(key);
+        const safeIdx = Number.isFinite(overrideIdx)
+          ? ((Math.trunc(overrideIdx) % swipes.length) + swipes.length) %
+            swipes.length
+          : origin;
+        const body = node.querySelector(".novel-msg-body");
+        if (body) {
+          body.innerHTML = renderTextBody(deps, swipes[safeIdx] ?? "", {
+            avatar: avatar || "",
+          });
+        }
+      }
+      container.appendChild(node);
+    }
+  }
+
+  return swipeRefs;
 }
 
 /**
  * 在正文容器上绑定楼层版本切换条的事件委托（同一容器只绑一次）。
  * 事件委托兼容「批量渲染 + 滚动模式反复追加章节块」的架构：
  * 滚动模式下每章一个独立 .novel-msg-list 容器，各自绑定。
+ * 翻页模式下每个页面容器独立调用（每页一容器，事件绑定在其上）。
  * @param {object} deps 依赖注入
  * @param {HTMLElement} container 正文容器（.novel-msg-list）
  * @param {Map<string, {swipes: string[], origin: number, avatar: string}>} swipeRefs 楼层版本引用表
  */
-function bindSwipeBarEvents(deps, container, swipeRefs) {
+export function bindSwipeBarEvents(deps, container, swipeRefs) {
   if (!container || container.dataset.swipeBound === "1") return;
   container.dataset.swipeBound = "1";
 

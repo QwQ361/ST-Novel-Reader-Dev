@@ -105,9 +105,11 @@ export function createReaderCore(deps) {
    * 构建单章头部（标题 + 副标题）DOM 元素。
    * 章节头部用于两种场景：单章渲染（renderChapter）与连续滚动阅读（renderChapterBlock）。
    * @param {object} chapter 章节对象（含 displayIndex / titleSource / title）
+   * @param {object} [options]
+   * @param {string} [options.pageText] 页码后缀（翻页模式传入「（p/N）」，追加到副标题「第N章」后）
    * @returns {{titleEl: HTMLElement, subtitleEl: HTMLElement}}
    */
-  function buildChapterHeader(chapter) {
+  function buildChapterHeader(chapter, options = {}) {
     // 构建章标题：第一行「N / 总章数」，第二行「第N章 章节名」
     // （仅当标题来自标签识别时附带章节名，否则只显示「第N章」，与目录一致）
     // 番外章与主线章统一显示「第N章」（番外也计入编号）
@@ -117,6 +119,10 @@ export function createReaderCore(deps) {
     titleEl.textContent = `${chapter.displayIndex ?? chapter.index} / ${totalChapters} 章`;
 
     let subtitleText = `第${chapter.displayIndex ?? chapter.index}章`;
+    // 翻页模式：副标题追加页码后缀（第N章（1/3））
+    if (options.pageText) {
+      subtitleText += `（${options.pageText}）`;
+    }
     if (chapter.titleSource === "tag" && chapter.title) {
       subtitleText += ` ${chapter.title}`;
     }
@@ -177,7 +183,8 @@ export function createReaderCore(deps) {
    * @param {number} chapterIndex 章节索引（从 1 开始）
    * @param {object} [options]
    * @param {Function} [options.onRendered] 渲染完成回调
-   * @returns {Promise<number>} 本章消息条数
+   * @returns {Promise<{count: number, swipeRefs: Map|null}>}
+   *   count = 本章消息条数；swipeRefs = 楼层版本引用表（供翻页模式绑定版本切换）
    */
   async function renderChapter(container, chapterIndex, options = {}) {
     const { onRendered, highlightOffset = null } = options;
@@ -200,7 +207,7 @@ export function createReaderCore(deps) {
     container.innerHTML = "";
     container.appendChild(inner);
 
-    await renderMessagesBatched(
+    const swipeRefs = await renderMessagesBatched(
       { ...deps, renderMarkdown: deps.renderMarkdown },
       body,
       chapter.messages,
@@ -229,7 +236,7 @@ export function createReaderCore(deps) {
       container.scrollTop = 0;
     }
     onRendered?.(container);
-    return chapter.messages.length;
+    return { count: chapter.messages.length, swipeRefs };
   }
 
   /**
@@ -298,6 +305,7 @@ export function createReaderCore(deps) {
     loadChat,
     renderChapter,
     renderChapterBlock,
+    buildChapterHeader,
     getChatInfo,
     getChapter,
     searchMessages,

@@ -36,6 +36,8 @@ export function createProgressCore(deps) {
       msgId: pos.msgId ?? null,
       index: pos.index ?? 0,
       scrollTop: pos.scrollTop ?? 0,
+      // 翻页阅读模式的页码（0 起；其它阅读模式不使用该字段）
+      page: pos.page ?? 0,
       updatedAt: pos.updatedAt ?? Date.now(),
     };
     saveSettings();
