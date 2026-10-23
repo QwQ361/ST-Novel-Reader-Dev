@@ -283,6 +283,13 @@ export async function renderMessagesForMeasure(
             avatar: avatar || "",
           });
         }
+        // 同步版本状态：分页会复制源 .novel-msg 的 data-swipe-* 与计数文本，
+        // 不更新则重排后显示的计数仍为旧版本（实际正文已是覆盖版本）
+        node.dataset.swipeIdx = String(safeIdx);
+        const countEl = node.querySelector(".novel-swipe-count");
+        if (countEl) countEl.textContent = `${safeIdx + 1}/${swipes.length}`;
+        const resetBtn = node.querySelector("[data-swipe-reset]");
+        if (resetBtn) resetBtn.disabled = safeIdx === origin;
       }
       container.appendChild(node);
     }

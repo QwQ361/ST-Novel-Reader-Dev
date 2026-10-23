@@ -21,7 +21,7 @@
 //   onPageChange      (chapterIndex, page, total) => void 翻页/换章回调（更新底部栏 + 保存进度）
 
 import { hydrateHtmlApps } from "./iframe.js";
-import { bindSwipeBarEvents, renderMessagesForMeasure } from "./render.js";
+import { renderMessagesForMeasure } from "./render.js";
 
 // 页面上下 padding（与 .novel-flip-page CSS 的 padding: 24px 16px 保持一致）
 const PAGE_PADDING_V = 48;
@@ -135,16 +135,17 @@ export function createFlipReader(deps) {
    * 行级二分：找 block 内最大的文本偏移 cut，使 [0, cut) 的高度 ≤ maxHeight。
    * @returns {number} 最佳切分偏移（0 = 第一行都放不下；total = 整块放得下）
    */
-  function binaryCut(block, maxHeight, list) {
+  function binaryCut(block, maxHeight, mount) {
     const { textNodes, total } = collectTextNodes(block);
     if (!textNodes.length || total <= 1) return 0;
 
-    // 临时测量元素挂在测量容器的 .novel-msg-list 下（宽度上下文与正文一致）。
-    // 用与 block 相同的标签名 + className，保证块级样式（margin/padding）与真实一致，
-    // 避免克隆内容到裸 div 导致测量高度偏小而溢出。
+    // 临时测量元素挂在测量容器的 .novel-msg-body 下（宽度与 line-height/color
+    // 继承上下文与真实页面一致）。用与 block 相同的标签名 + className，
+    // 保证块级样式（margin/padding）与真实一致，避免克隆内容到裸 div
+    // 导致测量高度偏小而溢出。
     const holder = document.createElement(block.tagName);
     if (block.className) holder.className = block.className;
-    list.appendChild(holder);
+    mount.appendChild(holder);
     const measureAt = (offset) => {
       holder.innerHTML = "";
       holder.appendChild(clonePrefix(block, textNodes, offset));
@@ -224,16 +225,37 @@ export function createFlipReader(deps) {
   }
 
   /** 将块按行级二分切分：head 放当前页，tail 返回继续处理 */
-  function splitByHeight(block, maxHeight, list) {
+  function splitByHeight(block, maxHeight, mount) {
     const { textNodes, total } = collectTextNodes(block);
     if (!textNodes.length) return null;
-    const cut = binaryCut(block, maxHeight, list);
+    const cut = binaryCut(block, maxHeight, mount);
     if (cut <= 0 || cut >= total) return null; // 第一行放不下 / 整块放得下（调用方已排除）
     return splitBlock(block, textNodes, cut);
   }
 
-  /** 分页：遍历测量容器中的消息，逐块放入各页 */
+  /** 分页：遍历测量容器中的消息，逐块放入各页。
+   * 每页内容包回 .novel-msg 容器（复制源消息的 className + data-*），
+   * 保持「.novel-msg > .novel-msg-head / .novel-msg-body / .novel-swipe-bar」
+   * 完整结构——否则依赖该结构的全部机制失效：
+   *   - 内联样式选择器（.novel-msg-body q::before/after、strong/em/blockquote/code
+   *     颜色等）失效，<q> 出现 UA 默认双层引号、粗体/斜体颜色丢失；
+   *   - swipe 版本切换的事件委托 closest(".novel-msg") 失效，切换与覆盖记录失效；
+   *   - .novel-msg:hover .novel-swipe-bar 显隐失效。
+   * 消息头/切换条固定在该消息第一页；正文跨页时后续页为仅有 .novel-msg-body
+   * 的 .novel-msg（无头/切换条，连续阅读）。 */
   function paginateMessages(list, bodyHeight) {
+    // 翻页模式消息间距（.novel-flip-page-body .novel-msg 的 margin-bottom）。
+    // 块级 margin 不进 offsetHeight，但真实页面会占空间：
+    //   - 相邻两条消息之间：一条可见间隔（新页第一条消息的 margin 与上一页
+    //     内容无关，故只需在本页放入第二条及以上消息时预留一次）；
+    //   - 页内最后一条消息的 margin 会溢出到页底 padding，被 overflow hidden
+    //     裁切，视觉无差但会让可用高度高估 → 每条消息预留一次即可精确分页。
+    let msgGap = 0;
+    const firstMsgEl = list.children[0];
+    if (firstMsgEl) {
+      msgGap = parseFloat(getComputedStyle(firstMsgEl).marginBottom) || 0;
+    }
+
     const pages = [];
     const state = { current: null };
     const newPage = () => {
@@ -241,6 +263,9 @@ export function createFlipReader(deps) {
         frag: document.createDocumentFragment(),
         msgOffsets: new Set(),
         left: bodyHeight,
+        used: false, // 该页是否已放入内容（用于「当前页空则强制放入」判断）
+        // 消息下标 → 该页的 .novel-msg 容器（懒创建，复制源 className + data-*）
+        msgEls: new Map(),
       };
       pages.push(state.current);
     };
@@ -249,66 +274,115 @@ export function createFlipReader(deps) {
     // 记录当前页归属的消息下标（供 scrollToMessage / relayout 保持定位）
     const mark = (mi) => state.current.msgOffsets.add(mi);
 
-    /** 放置不可分割块 / 消息头 / 切换条：放不下换页（当前页空则强制放入截断） */
-    const placeFixed = (node, mi) => {
+    // 当前页内消息 mi 的 .novel-msg 容器（懒创建；首次放入时挂到 frag）
+    const getMsg = (mi, srcMsg) => {
+      let el = state.current.msgEls.get(mi);
+      if (!el) {
+        el = document.createElement("div");
+        // 复制源消息的 className（novel-msg / novel-msg-user / novel-msg-system）
+        // 与 data-*（mesId / swipeIdx / swipeTotal / swipeOrigin），
+        // 保证说话人配色、swipe 委托与覆盖记录在分页后仍可用
+        el.className = srcMsg.className;
+        for (const attr of srcMsg.attributes) {
+          if (attr.name.startsWith("data-")) {
+            el.setAttribute(attr.name, attr.value);
+          }
+        }
+        state.current.frag.appendChild(el);
+        state.current.msgEls.set(mi, el);
+        // 本页已放其他消息 → 预留两条消息间的间距（真实页面会占空间）。
+        // 仅在已使用页面发生（新页第一条消息不会触发），不破坏空页强放逻辑
+        if (state.current.msgEls.size > 1 && msgGap > 0) {
+          state.current.left -= msgGap;
+        }
+      }
+      return el;
+    };
+
+    // 当前页内消息 mi 的 .novel-msg-body（在该页的 .novel-msg 内懒创建）
+    const getBody = (mi, srcMsg) => {
+      const msgEl = getMsg(mi, srcMsg);
+      let body = msgEl.querySelector(".novel-msg-body");
+      if (!body) {
+        body = document.createElement("div");
+        body.className = "novel-msg-body";
+        msgEl.appendChild(body);
+      }
+      return body;
+    };
+
+    /** 放置不可分割块 / 消息头 / 切换条：放不下换页（当前页空则强制放入截断）
+     * @param {boolean} inBody true = 正文内容（放进 .novel-msg-body），
+     *                         false = 消息头/切换条（直接放进 .novel-msg） */
+    const placeFixed = (node, mi, srcMsg, inBody) => {
       const h = node.offsetHeight || 0;
+      const target = () => (inBody ? getBody(mi, srcMsg) : getMsg(mi, srcMsg));
       if (h <= state.current.left + 1) {
-        state.current.frag.appendChild(node.cloneNode(true));
+        target().appendChild(node.cloneNode(true));
         state.current.left -= h;
         mark(mi);
+        state.current.used = true;
         return;
       }
-      if (state.current.frag.childNodes.length === 0) {
-        state.current.frag.appendChild(node.cloneNode(true));
+      if (!state.current.used) {
+        target().appendChild(node.cloneNode(true));
         state.current.left = 0;
         mark(mi);
+        state.current.used = true;
         return;
       }
       newPage();
-      state.current.frag.appendChild(node.cloneNode(true));
+      target().appendChild(node.cloneNode(true));
       state.current.left = bodyHeight - h;
       mark(mi);
+      state.current.used = true;
     };
 
-    /** 放置可切分文本块：放不下行级二分，head 填当前页、tail 开新页循环 */
-    const placeSplittable = (node, mi) => {
+    /** 放置可切分文本块：放不下行级二分，head 填当前页、tail 开新页循环
+     * @param {HTMLElement} measureBody 测量容器中该消息的 .novel-msg-body
+     *   （tail 挂载到其下测高，保证 line-height/color 等继承上下文与真实页面一致） */
+    const placeSplittable = (node, mi, srcMsg, measureBody) => {
       let n = node;
       for (;;) {
         // tail（二分切分产生的新元素）尚未插入测量 DOM，先挂载才能测高
-        if (!n.isConnected) list.appendChild(n);
+        if (!n.isConnected) measureBody.appendChild(n);
         const h = n.offsetHeight || 0;
         if (h <= state.current.left + 1) {
-          state.current.frag.appendChild(n.cloneNode(true));
+          getBody(mi, srcMsg).appendChild(n.cloneNode(true));
           state.current.left -= h;
           mark(mi);
+          state.current.used = true;
           return;
         }
         // 当前页为空且整块超高：二分必能切出一部分（切不出则强制放入截断）
-        if (state.current.frag.childNodes.length === 0) {
-          const r = splitByHeight(n, bodyHeight, list);
+        if (!state.current.used) {
+          const r = splitByHeight(n, bodyHeight, measureBody);
           if (r) {
-            state.current.frag.appendChild(r.head);
+            getBody(mi, srcMsg).appendChild(r.head);
             state.current.left = 0;
             mark(mi);
+            state.current.used = true;
             newPage();
             n = r.tail;
             continue;
           }
-          state.current.frag.appendChild(n.cloneNode(true));
+          getBody(mi, srcMsg).appendChild(n.cloneNode(true));
           state.current.left = 0;
           mark(mi);
+          state.current.used = true;
           return;
         }
         // 当前页有内容但放不下：二分切分
-        const r = splitByHeight(n, state.current.left, list);
+        const r = splitByHeight(n, state.current.left, measureBody);
         if (!r) {
           // 切不出（行高大于当前余量）：换页重试
           newPage();
           continue;
         }
-        state.current.frag.appendChild(r.head);
+        getBody(mi, srcMsg).appendChild(r.head);
         state.current.left = 0;
         mark(mi);
+        state.current.used = true;
         newPage();
         n = r.tail;
       }
@@ -319,15 +393,15 @@ export function createFlipReader(deps) {
       const body = msg.querySelector(".novel-msg-body");
       const swipeBar = msg.querySelector(".novel-swipe-bar");
 
-      // 消息头：固定在该消息第一页
-      if (head) placeFixed(head, mi);
+      // 消息头：固定在该消息第一页（放进 .novel-msg）
+      if (head) placeFixed(head, mi, msg, false);
       // 版本切换条：紧跟消息头（跨页消息的切换入口在该消息第一页）
-      if (swipeBar) placeFixed(swipeBar, mi);
-      // 正文块逐个放置
+      if (swipeBar) placeFixed(swipeBar, mi, msg, false);
+      // 正文块逐个放置：包进该页的 .novel-msg-body（保持内联样式选择器生效）
       if (body) {
         Array.from(body.children).forEach((b) => {
-          if (b.matches(UNSPLITTABLE)) placeFixed(b, mi);
-          else placeSplittable(b, mi);
+          if (b.matches(UNSPLITTABLE)) placeFixed(b, mi, msg, true);
+          else placeSplittable(b, mi, msg, body);
         });
       }
     });
@@ -422,22 +496,38 @@ export function createFlipReader(deps) {
     // 挂载页面内容（clone：pages 里的 frag 供反复渲染同一页）
     list.appendChild(pageData.frag.cloneNode(true));
 
-    // 楼层版本切换：每页独立容器各自绑定（事件委托）
-    bindSwipeBarEvents(deps, list, swipeRefs);
-    // 切换版本后正文长度变化 → 整章重新分页（保持所在消息）
+    // 楼层版本切换（翻页模式自绑定，不调用 render.js 的 bindSwipeBarEvents——
+    // 其 switchMessageSwipe 就地替换 .novel-msg-body 会导致页内溢出，
+    // 翻页模式必须走「记录 override + 整章重排」路径保持一致高度）
     list.addEventListener("click", (e) => {
-      const target = e.target.closest(
-        "[data-swipe-prev], [data-swipe-next], [data-swipe-reset], [data-swipe-jump]",
+      const btn = e.target.closest(
+        "[data-swipe-prev], [data-swipe-next], [data-swipe-reset]",
       );
-      if (!target) return;
-      // 记录覆盖版本（重排时保持用户选择的版本）
-      const msgEl = target.closest(".novel-msg");
-      if (msgEl) {
+      if (btn) {
+        const msgEl = btn.closest(".novel-msg");
+        if (!msgEl) return;
         const key = msgEl.dataset.mesId || "";
-        const idx = Number(msgEl.dataset.swipeIdx || 0);
-        if (key) swipeOverrides.set(key, idx);
+        const total = Number(msgEl.dataset.swipeTotal || 0);
+        if (!key || total < 2) return;
+        let idx = Number(msgEl.dataset.swipeIdx || 0);
+        const origin = Number(msgEl.dataset.swipeOrigin || 0);
+        if (btn.hasAttribute("data-swipe-prev")) {
+          idx = (idx - 1 + total) % total;
+        } else if (btn.hasAttribute("data-swipe-next")) {
+          idx = (idx + 1) % total;
+        } else {
+          idx = origin; // ↺ 回到酒馆最初选中版本
+        }
+        // 记录覆盖版本（重排时测量/显示都用用户选择的版本）
+        swipeOverrides.set(key, idx);
+        scheduleRelayout({ keepMsg: firstMsgOf(currentPage) });
+        return;
       }
-      scheduleRelayout({ keepMsg: firstMsgOf(currentPage) });
+      // 手动输入跳转：点击计数「1/N」→ 数字输入框（复用 render.js 同款交互）
+      const jump = e.target.closest("[data-swipe-jump]");
+      if (jump && !jump.dataset.swipeInput) {
+        startSwipeJump(jump);
+      }
     });
 
     // HTML 应用水合（绑定消息监听 + 触发高度同步）
@@ -454,6 +544,66 @@ export function createFlipReader(deps) {
 
     scrollEl.appendChild(pageEl);
     onPageChange?.(chapterIndex, currentPage, pages.length);
+  }
+
+  /**
+   * 把计数「1/N」就地切换为数字输入框（保持 .novel-swipe-count 类名，便于样式复用）。
+   * 输入范围 1~N，Enter/失焦确认跳转（记录 override + 整章重排），Escape 取消。
+   */
+  function startSwipeJump(countEl) {
+    if (countEl.dataset.swipeInput === "1") return; // 已处于输入态
+    const msgEl = countEl.closest(".novel-msg");
+    if (!msgEl) return;
+    const total = Number(msgEl.dataset.swipeTotal || 0);
+    if (total < 2) return;
+    const current = Number(msgEl.dataset.swipeIdx || 0) + 1;
+    countEl.dataset.swipeInput = "1";
+    countEl.textContent = "";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(total);
+    input.step = "1";
+    input.value = String(current);
+    input.className = "novel-swipe-input";
+    input.setAttribute("aria-label", "跳转到指定版本");
+    countEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    /** 结束输入态并恢复计数显示 */
+    const finish = () => {
+      countEl.dataset.swipeInput = "";
+      countEl.textContent = `${Number(countEl.closest(".novel-msg")?.dataset.swipeIdx || 0) + 1}/${total}`;
+    };
+    /** 读取输入并跳转（越界自动夹取到 1~N） */
+    const commit = () => {
+      const raw = Number(input.value);
+      const target =
+        Number.isFinite(raw) && raw >= 1 ? Math.min(Math.round(raw), total) : 0;
+      if (target) {
+        const key = msgEl.dataset.mesId || "";
+        if (key) {
+          swipeOverrides.set(key, target - 1);
+          scheduleRelayout({ keepMsg: firstMsgOf(currentPage) });
+        }
+      }
+    };
+    input.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        input.blur(); // 交由 blur 统一收尾（commit + finish），避免与失焦重复触发
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        input.value = "";
+        input.blur(); // 取消：清空输入再失焦，blur 里 commit 因空值不跳转，仅恢复计数
+      }
+    });
+    input.addEventListener("blur", () => {
+      commit();
+      finish();
+    });
   }
 
   /** 获取某页归属的首个消息下标 */

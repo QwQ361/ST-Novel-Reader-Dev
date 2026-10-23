@@ -4958,6 +4958,12 @@ body.novel-theme-ocean {
   margin-bottom: 12px;
 }
 
+/* 翻页模式：关闭消息淡入动画（每次翻页整页重挂载，动画会导致闪烁；
+   且动画期间布局未稳定，会干扰分页高度测量的一致性） */
+.novel-flip-page-body .novel-msg {
+  animation: none;
+}
+
 /* 底部栏翻页按钮（← →）：窄版，位于 上一章 / 下一章 之间 */
 .novel-bottombar .novel-btn.novel-page-btn {
   padding: 8px 10px;
