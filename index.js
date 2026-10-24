@@ -825,10 +825,35 @@ jQuery(async () => {
 
   // ============ 关闭位置记忆（重新打开恢复原页面） ============
 
-  /** 保存当前浏览位置到 extension_settings */
-  function saveLastView() {
-    const g = getGlobalSettings();
-    g.lastView = {
+  // 卸载时同步缓存 key：页面刷新/关闭瞬间 localStorage 同步写入，
+  // 绕过 saveSettingsDebounced（1000ms 防抖）在页面卸载时定时器不执行的缺陷，
+  // 保证「在阅读界面直接刷新酒馆」也能恢复当前浏览位置（详见 pagehide 监听）。
+  const LAST_VIEW_CACHE_KEY = "ST-Novel-Reader:lastView";
+
+  /** 同步写入最近浏览位置缓存（localStorage 写入同步完成，卸载前 100% 可靠） */
+  function writeLastViewCache(view) {
+    try {
+      localStorage.setItem(LAST_VIEW_CACHE_KEY, JSON.stringify(view));
+    } catch (err) {
+      console.warn("[NovelReader] 写入 lastView 缓存失败:", err);
+    }
+  }
+
+  /** 读取最近浏览位置缓存（无/损坏返回 null） */
+  function readLastViewCache() {
+    try {
+      const raw = localStorage.getItem(LAST_VIEW_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.page ? parsed : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /** 构造当前浏览位置对象（供 saveLastView / pagehide 共用） */
+  function buildLastView() {
+    return {
       page: state.page,
       charIdx: state.currentCharIdx ?? null,
       charAvatar: state.currentChar?.avatar ?? null,
@@ -837,6 +862,14 @@ jQuery(async () => {
       chapter: state.currentChapter || null,
       tocPage: state.tocPage ?? 0,
     };
+  }
+
+  /** 保存当前浏览位置到 extension_settings（并同步写卸载缓存） */
+  function saveLastView() {
+    const g = getGlobalSettings();
+    const view = buildLastView();
+    g.lastView = view;
+    writeLastViewCache(view); // 同步缓存：即使防抖保存未落盘，刷新后仍能恢复
     deps.saveSettings();
   }
 
@@ -853,7 +886,11 @@ jQuery(async () => {
     // 会话内已打开过 → 之后一律恢复上次位置（该标记同时防止
     // startPage="last" 时重复触发；置 true 仅用于记录，无副作用）
     sessionOpenedOnce = true;
-    const last = g.lastView;
+    // 优先读取同步缓存：缓存由 pagehide（刷新/关闭瞬间同步写入）维护，
+    // 反映「最后一次浏览/关闭时的页面」。extension_settings 中的 lastView
+    // 仅在 onClose 时写入，直接刷新酒馆不会更新它（旧 Bug：恢复上上次页面），
+    // 故以缓存为准；缓存缺失时回退到 extension_settings。
+    const last = readLastViewCache() || g.lastView;
     if (!last || !last.page) {
       showBookshelf();
       return;
@@ -3892,6 +3929,16 @@ jQuery(async () => {
 
   initButton();
   subscribeEvents();
+
+  // 页面卸载前同步记忆当前浏览位置：
+  // 直接刷新酒馆（不经过阅读器关闭按钮）时 dlg.onClose 不触发，
+  // saveLastView 不会执行 → extension_settings.lastView 仍是旧值（恢复上上次页面）。
+  // 此处用 pagehide（覆盖刷新/关闭/移动端切后台）同步写 localStorage 缓存兜底，
+  // 同步写入 100% 在卸载前完成，不依赖 saveSettingsDebounced（防抖在卸载后不执行）。
+  window.addEventListener("pagehide", () => {
+    if (!dialogRef) return; // 阅读器未打开：无需记忆（关闭时已由 onClose 写入）
+    writeLastViewCache(buildLastView());
+  });
 
   // 新楼层生成结束通知：常驻订阅（幂等）。
   // 弹窗未打开时后台累计未读计数（genNotifyUi 为 null，onNotify 无副作用）；
