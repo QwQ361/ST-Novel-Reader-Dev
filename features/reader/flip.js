@@ -19,6 +19,10 @@
 //   getFontSize       () => string 当前用户字号（如 "16px"；测量容器与真实页面统一应用，
 //                     保证「按用户字号分页 → 按用户字号显示」一致）
 //   onPageChange      (chapterIndex, page, total) => void 翻页/换章回调（更新底部栏 + 保存进度）
+//   onRenderedPage    (pageEl) => void 每页渲染完成回调（注入聊天操作按钮等）
+//   injectHeadActions (headEl) => void 向页头副标题注入聊天操作按钮占位
+//                     （测量容器 head 与显示页 head 必须一致，否则 headTotal 低估、
+//                     bodyHeight 高估、正文溢出到页底 dock 被遮挡）
 
 import { hydrateHtmlApps } from "./iframe.js";
 import { renderMessagesForMeasure } from "./render.js";
@@ -79,6 +83,17 @@ export function createFlipReader(deps) {
     const { titleEl, subtitleEl } = reader.buildChapterHeader(chapter, {});
     head.appendChild(titleEl);
     head.appendChild(subtitleEl);
+    // 测量容器 head 与显示页 head 必须一致：显示页在 renderPage 后由
+    // onRenderedPage 注入聊天操作按钮，测量容器若不注入则 headTotal 低估、
+    // bodyHeight 高估、正文溢出到页底 dock 被遮挡。此处注入同样的占位
+    // （由 index.js 提供，内部受 showReaderChatActions 开关控制）
+    if (typeof deps.injectHeadActions === "function") {
+      try {
+        deps.injectHeadActions(head);
+      } catch (err) {
+        console.warn("[NovelReader] 测量页头 actions 注入失败:", err);
+      }
+    }
     const body = document.createElement("div");
     body.className = "novel-flip-page-body";
     const inner = document.createElement("div");
@@ -264,11 +279,15 @@ export function createFlipReader(deps) {
     // 页底 swipe dock 高度：有多个版本的消息所在页需在底部预留 dock 空间
     // （正文永不填满到 dock 区域，切换条落在「文字与底部栏之间的空挡」，
     // 不遮挡文字）。取条高 + 容器上下 padding + 呼吸空间。
+    // 注意：预留必须大于 dock 容器实际占高（条高 + padding 4px + border），
+    // 且 bodyHeight 略高估（pageHeight - padding - headTotal 与真实几何有
+    // 亚像素差），否则切换条会紧贴正文最后一行、视觉上仍像遮挡。
+    // 12px 呼吸空间让切换条明确悬浮在文字下方的空隙中。
     let dockHeight = 0;
     for (const msgEl of list.children) {
       const bar = msgEl.querySelector(".novel-swipe-bar");
       if (bar) {
-        dockHeight = (bar.offsetHeight || 0) + 6;
+        dockHeight = (bar.offsetHeight || 0) + 6 + 12;
         break;
       }
     }
@@ -297,6 +316,7 @@ export function createFlipReader(deps) {
 
     // 页底 swipe dock：消息含多个版本时，把它归属页的切换条收集到该页 dock。
     // 跨页消息的每一页都会带上切换条（用户在任何页都能切换版本）。
+
     const ensureDockForMsg = (mi, srcMsg) => {
       if (!srcMsg.querySelector(".novel-swipe-bar")) return; // 无多版本
       if (state.current.dockBarMsgs.has(mi)) return; // 本页已加入
@@ -332,9 +352,11 @@ export function createFlipReader(deps) {
         }
         state.current.frag.appendChild(el);
         state.current.msgEls.set(mi, el);
-        // 本页已放其他消息 → 预留两条消息间的间距（真实页面会占空间）。
-        // 仅在已使用页面发生（新页第一条消息不会触发），不破坏空页强放逻辑
-        if (state.current.msgEls.size > 1 && msgGap > 0) {
+        // 预留本条消息的 margin-bottom（.novel-flip-page-body .novel-msg 的
+        // margin-bottom: 12px 真实占位）。每条消息都扣（含跨页续页的第一条、
+        // 页内最后一条），否则显示时 margin 会把内容底推到贴近 dock 顶部。
+        // 强制放入分支（空页截断）在 target() 之后把 left 归零，此处扣减无影响。
+        if (msgGap > 0) {
           state.current.left -= msgGap;
         }
       }

@@ -283,6 +283,13 @@ jQuery(async () => {
       onRenderedPage: (pageEl) => {
         injectReaderChatActions(pageEl);
       },
+      // 测量容器页头也注入同样的操作按钮（翻页核心据此精确测量页头高度）：
+      // 若测量 head 与显示 head 不一致，headTotal 低估 → bodyHeight 高估 →
+      // 正文溢出到页底 swipe dock 被遮挡。复用同一注入逻辑（受开关控制），
+      // 测量容器随后会被移除，按钮事件不会触发。
+      injectHeadActions: (headEl) => {
+        injectReaderChatActions(headEl);
+      },
     });
     return flipReader;
   }
