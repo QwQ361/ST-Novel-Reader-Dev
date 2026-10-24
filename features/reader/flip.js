@@ -149,7 +149,12 @@ export function createFlipReader(deps) {
     const measureAt = (offset) => {
       holder.innerHTML = "";
       holder.appendChild(clonePrefix(block, textNodes, offset));
-      return holder.offsetHeight;
+      // 加上块自身 margin-bottom：真实页面段落末行的 margin 也占位，
+      // 否则测量偏小、按此切分会导致页底溢出、被 dock 遮挡
+      return (
+        holder.offsetHeight +
+        (parseFloat(getComputedStyle(block).marginBottom) || 0)
+      );
     };
 
     let lo = 1;
@@ -256,6 +261,18 @@ export function createFlipReader(deps) {
       msgGap = parseFloat(getComputedStyle(firstMsgEl).marginBottom) || 0;
     }
 
+    // 页底 swipe dock 高度：有多个版本的消息所在页需在底部预留 dock 空间
+    // （正文永不填满到 dock 区域，切换条落在「文字与底部栏之间的空挡」，
+    // 不遮挡文字）。取条高 + 容器上下 padding + 呼吸空间。
+    let dockHeight = 0;
+    for (const msgEl of list.children) {
+      const bar = msgEl.querySelector(".novel-swipe-bar");
+      if (bar) {
+        dockHeight = (bar.offsetHeight || 0) + 6;
+        break;
+      }
+    }
+
     const pages = [];
     const state = { current: null };
     const newPage = () => {
@@ -266,6 +283,10 @@ export function createFlipReader(deps) {
         used: false, // 该页是否已放入内容（用于「当前页空则强制放入」判断）
         // 消息下标 → 该页的 .novel-msg 容器（懒创建，复制源 className + data-*）
         msgEls: new Map(),
+        // 页底 swipe dock：本页含多个版本的消息时预留 dock 高度并收集切换条
+        dockReserved: false, // 本页是否已预留 dock 高度
+        dockBars: [], // 本页 dock 要显示的切换条（克隆，带版本状态 data-*）
+        dockBarMsgs: new Set(), // 已加入本页 dock 的消息下标（同页去重）
       };
       pages.push(state.current);
     };
@@ -274,8 +295,29 @@ export function createFlipReader(deps) {
     // 记录当前页归属的消息下标（供 scrollToMessage / relayout 保持定位）
     const mark = (mi) => state.current.msgOffsets.add(mi);
 
+    // 页底 swipe dock：消息含多个版本时，把它归属页的切换条收集到该页 dock。
+    // 跨页消息的每一页都会带上切换条（用户在任何页都能切换版本）。
+    const ensureDockForMsg = (mi, srcMsg) => {
+      if (!srcMsg.querySelector(".novel-swipe-bar")) return; // 无多版本
+      if (state.current.dockBarMsgs.has(mi)) return; // 本页已加入
+      state.current.dockBarMsgs.add(mi);
+      if (!state.current.dockReserved) {
+        state.current.dockReserved = true;
+        state.current.left -= dockHeight; // 预留页底 dock 空间
+      }
+      const bar = srcMsg.querySelector(".novel-swipe-bar").cloneNode(true);
+      // dock 内条不在 .novel-msg 内：把版本状态复制到条自身，事件委托从条读取
+      bar.dataset.mesId = srcMsg.dataset.mesId || "";
+      bar.dataset.swipeTotal = srcMsg.dataset.swipeTotal || "1";
+      bar.dataset.swipeIdx = srcMsg.dataset.swipeIdx || "0";
+      bar.dataset.swipeOrigin = srcMsg.dataset.swipeOrigin || "0";
+      state.current.dockBars.push(bar);
+    };
+
     // 当前页内消息 mi 的 .novel-msg 容器（懒创建；首次放入时挂到 frag）
     const getMsg = (mi, srcMsg) => {
+      // 消息有多个版本：预留本页 dock 高度并收集切换条
+      ensureDockForMsg(mi, srcMsg);
       let el = state.current.msgEls.get(mi);
       if (!el) {
         el = document.createElement("div");
@@ -315,8 +357,15 @@ export function createFlipReader(deps) {
      * @param {boolean} inBody true = 正文内容（放进 .novel-msg-body），
      *                         false = 消息头/切换条（直接放进 .novel-msg） */
     const placeFixed = (node, mi, srcMsg, inBody) => {
-      const h = node.offsetHeight || 0;
+      // 块在文档流中的实际占高 = offsetHeight + marginBottom（真实页面块间有
+      // margin 会额外占空间，只扣 offsetHeight 会让内容溢出页底、被 dock 遮挡）
+      const cs = getComputedStyle(node);
+      const h = (node.offsetHeight || 0) + (parseFloat(cs.marginBottom) || 0);
       const target = () => (inBody ? getBody(mi, srcMsg) : getMsg(mi, srcMsg));
+      // 先预留本页 dock 高度（ensureDockForMsg 内部按消息去重，重复调用安全），
+      // 使下方「放得下」判断基于扣完 dock 的余量——否则 getBody/getMsg 内扣 dock
+      // 发生在判断之后，会高估可用高度，把本应换页的块多放进来，正文溢出被 dock 遮挡
+      ensureDockForMsg(mi, srcMsg);
       if (h <= state.current.left + 1) {
         target().appendChild(node.cloneNode(true));
         state.current.left -= h;
@@ -333,7 +382,9 @@ export function createFlipReader(deps) {
       }
       newPage();
       target().appendChild(node.cloneNode(true));
-      state.current.left = bodyHeight - h;
+      // 换页后 left 在 target()（getMsg）里已被 dock 预留扣减，
+      // 这里累减块高即可保留 dock 预留（不能用 = bodyHeight - h 覆盖）
+      state.current.left -= h;
       mark(mi);
       state.current.used = true;
     };
@@ -346,7 +397,12 @@ export function createFlipReader(deps) {
       for (;;) {
         // tail（二分切分产生的新元素）尚未插入测量 DOM，先挂载才能测高
         if (!n.isConnected) measureBody.appendChild(n);
-        const h = n.offsetHeight || 0;
+        // 同上：占高含 margin-bottom，避免溢出
+        const cs = getComputedStyle(n);
+        const h = (n.offsetHeight || 0) + (parseFloat(cs.marginBottom) || 0);
+        // 同 placeFixed：先预留本页 dock 高度，再判断放不放得下
+        // （getBody → getMsg → ensureDockForMsg 的扣减发生在判断之后）
+        ensureDockForMsg(mi, srcMsg);
         if (h <= state.current.left + 1) {
           getBody(mi, srcMsg).appendChild(n.cloneNode(true));
           state.current.left -= h;
@@ -354,11 +410,14 @@ export function createFlipReader(deps) {
           state.current.used = true;
           return;
         }
-        // 当前页为空且整块超高：二分必能切出一部分（切不出则强制放入截断）
+        // 当前页为空且整块超高：二分必能切出一部分（切不出则强制放入截断）。
+        // maxHeight 用已扣 dock 预留的 left（不能用 bodyHeight，否则头部会
+        // 溢出到 dock 区域；此时 left 可能因 dock 高度过小而切不出 → 下方截断）
         if (!state.current.used) {
-          const r = splitByHeight(n, bodyHeight, measureBody);
+          const r = splitByHeight(n, state.current.left, measureBody);
           if (r) {
             getBody(mi, srcMsg).appendChild(r.head);
+            // 本页已满（含 dock 预留区）：left 归零即可（内容为超高块头部）
             state.current.left = 0;
             mark(mi);
             state.current.used = true;
@@ -391,12 +450,11 @@ export function createFlipReader(deps) {
     Array.from(list.children).forEach((msg, mi) => {
       const head = msg.querySelector(".novel-msg-head");
       const body = msg.querySelector(".novel-msg-body");
-      const swipeBar = msg.querySelector(".novel-swipe-bar");
 
       // 消息头：固定在该消息第一页（放进 .novel-msg）
       if (head) placeFixed(head, mi, msg, false);
-      // 版本切换条：紧跟消息头（跨页消息的切换入口在该消息第一页）
-      if (swipeBar) placeFixed(swipeBar, mi, msg, false);
+      // 版本切换条：不放入文档流——由 ensureDockForMsg 收集到该消息所属
+      // 各页的页底 dock（跨页消息每一页都有切换入口，随时可切换版本）
       // 正文块逐个放置：包进该页的 .novel-msg-body（保持内联样式选择器生效）
       if (body) {
         Array.from(body.children).forEach((b) => {
@@ -496,25 +554,15 @@ export function createFlipReader(deps) {
     // 挂载页面内容（clone：pages 里的 frag 供反复渲染同一页）
     list.appendChild(pageData.frag.cloneNode(true));
 
-    // 页底 swipe dock：本页所有版本切换条统一下沉居中显示。
-    // 分页时切换条仍按消息内文档流占位（bodyHeight 已扣减），
-    // 移入 dock 后空出的高度正好容纳 dock，不遮挡正文。
-    // 同时把版本状态（mesId / idx / total / origin）复制到条上——
-    // dock 内的条不在 .novel-msg 内，事件委托改从条自身读取。
-    const dockBars = list.querySelectorAll(".novel-swipe-bar");
+    // 页底 swipe dock：分页时已把本页各多版本消息的切换条克隆进
+    // pageData.dockBars（含版本状态 data-*），渲染时逐一挂到 dock 容器。
+    // dock absolute 定位在页体底部，正文分页时已预留 dock 高度（不填满到底），
+    // 故切换条落在「文字与底部栏之间的空挡」，不遮挡文字。
+    const dockBars = pageData.dockBars || [];
     if (dockBars.length) {
       const swipeDock = document.createElement("div");
       swipeDock.className = "novel-flip-page-swipe";
-      dockBars.forEach((bar) => {
-        const msgEl = bar.closest(".novel-msg");
-        if (msgEl) {
-          bar.dataset.mesId = msgEl.dataset.mesId || "";
-          bar.dataset.swipeTotal = msgEl.dataset.swipeTotal || "1";
-          bar.dataset.swipeIdx = msgEl.dataset.swipeIdx || "0";
-          bar.dataset.swipeOrigin = msgEl.dataset.swipeOrigin || "0";
-        }
-        swipeDock.appendChild(bar);
-      });
+      dockBars.forEach((bar) => swipeDock.appendChild(bar.cloneNode(true)));
       body.appendChild(swipeDock);
     }
 
