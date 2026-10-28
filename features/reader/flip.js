@@ -504,7 +504,9 @@ export function createFlipReader(deps) {
   async function paginate(ci) {
     const seq = ++renderSeq;
     const chapter = reader.getChapter(ci);
-    if (!chapter || !scrollEl) return;
+    // 容器已脱离文档（被清空/移除）时不再分页：尺寸归 0 会导致分页算法
+    // 产出大量页面，且对已移除 DOM 的同步测量白白阻塞主线程
+    if (!chapter || !scrollEl || !scrollEl.isConnected) return;
 
     // 构建测量容器并渲染整章（复用 renderMessage 安全管线，不绑定事件）
     const list = buildMeasureContainer(chapter);
@@ -729,7 +731,8 @@ export function createFlipReader(deps) {
    * @param {number} [options.keepPage] 重排后固定的页码（默认保持当前页码）
    */
   async function relayout(options = {}) {
-    if (!scrollEl || !chapterIndex) return;
+    // 容器脱离文档时跳过（被清空/移除后 observer 残留回调的兜底）
+    if (!scrollEl || !scrollEl.isConnected || !chapterIndex) return;
     const { keepMsg = null, keepPage = null } = options;
 
     await paginate(chapterIndex);

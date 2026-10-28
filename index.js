@@ -1911,6 +1911,12 @@ jQuery(async () => {
    * @param {number} [msgOffset] 章内消息偏移（存在则滚动定位并高亮）
    */
   async function openChapterAtMessage(chapterIndex, msgOffset) {
+    // 切换阅读方式 / 重开章节前，先销毁旧阅读模式实例：
+    // 翻页模式的 ResizeObserver 观察着旧正文容器，容器被清空（尺寸归 0）时会触发
+    // 防抖重排，对已脱离文档的容器执行昂贵同步整章分页 → 主线程长时间阻塞
+    // （翻页 → 滚动/分页 切换卡顿根因，移动端尤甚）。销毁后观察器断开不再触发。
+    scrollReader?.destroy();
+    flipReader?.destroy();
     state.currentChapter = chapterIndex;
     setPage("reader");
     if (msgOffset != null) state.pendingHighlightOffset = msgOffset;
@@ -1963,6 +1969,12 @@ jQuery(async () => {
   }
 
   async function openChapter(chapterIndex) {
+    // 切换阅读方式 / 重开章节前，先销毁旧阅读模式实例：
+    // 翻页模式的 ResizeObserver 观察着旧正文容器，容器被清空（尺寸归 0）时会触发
+    // 防抖重排，对已脱离文档的容器执行昂贵同步整章分页 → 主线程长时间阻塞
+    // （翻页 → 滚动/分页 切换卡顿根因，移动端尤甚）。销毁后观察器断开不再触发。
+    scrollReader?.destroy();
+    flipReader?.destroy();
     state.currentChapter = chapterIndex;
     setPage("reader");
 
