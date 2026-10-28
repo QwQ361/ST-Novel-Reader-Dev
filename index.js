@@ -693,8 +693,10 @@ jQuery(async () => {
       <button class="novel-btn" data-action="home" title="回到书架">首页</button>
       <button class="novel-btn" data-action="toc">目录</button>
       <button class="novel-btn" data-action="prev">上一章</button>
-      <button class="novel-btn novel-page-btn" data-action="prev-page" title="上一页" disabled>←</button>
-      <button class="novel-btn novel-page-btn" data-action="next-page" title="下一页" disabled>→</button>
+      <!-- 翻页 ←→ 箭头：默认隐藏，仅翻页模式由 updateBottomButtons 显示。
+           移动端加载慢，底部栏先渲染、章节后加载，若不默认隐藏会短暂露出箭头 -->
+      <button class="novel-btn novel-page-btn" data-action="prev-page" title="上一页" disabled style="display:none">←</button>
+      <button class="novel-btn novel-page-btn" data-action="next-page" title="下一页" disabled style="display:none">→</button>
       <button class="novel-btn" data-action="next">下一章</button>
       <button class="novel-btn" data-action="bookmark" title="收藏当前章节">书签</button>
       <button class="novel-btn" data-action="reader-settings">界面</button>`;
@@ -1919,6 +1921,9 @@ jQuery(async () => {
     flipReader?.destroy();
     state.currentChapter = chapterIndex;
     setPage("reader");
+    // 立即同步更新底部栏（不等异步渲染完成）：翻页 ←→ 箭头仅翻页模式显示，
+    // 其余模式立刻隐藏，避免异步加载窗口期残留旧模式的箭头（移动端加载慢更明显）
+    updateBottomButtons();
     if (msgOffset != null) state.pendingHighlightOffset = msgOffset;
 
     const scroll = createReaderScrollPage();
@@ -1977,6 +1982,9 @@ jQuery(async () => {
     flipReader?.destroy();
     state.currentChapter = chapterIndex;
     setPage("reader");
+    // 立即同步更新底部栏（不等异步渲染完成）：翻页 ←→ 箭头仅翻页模式显示，
+    // 其余模式立刻隐藏，避免异步加载窗口期残留旧模式的箭头（移动端加载慢更明显）
+    updateBottomButtons();
 
     const scroll = createReaderScrollPage();
 
