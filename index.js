@@ -2553,19 +2553,19 @@ jQuery(async () => {
           <span class="novel-switch-track"></span>
           <span class="novel-switch-thumb"></span>
         </label>
-        <div class="novel-settings-hint">从每章正文中提取标题文字，作为该章的标题附加在目录中。不勾选则保持现状（第N章）。</div>
-        <div class="novel-chapter-title-wrap-note">填写章节标题「前面」和「后面」的固定标记，插件会提取两者之间的文字作为章节名。留空表示该侧无标记（此时取到行尾 / 从正文开头取）。</div>
+        <div class="novel-settings-hint">从每章正文中提取标题文字，作为该章的标题附加在目录中。不勾选则保持现状（第N章）。当前章节识别结果可在下方“提取预览”中实时查看。</div>
+        <div class="novel-chapter-title-wrap-note">填写章节标题“前面”和“后面”的固定标记，插件会提取两者之间的文字作为章节名。留空表示该侧无标记（此时取到行尾 / 从正文开头取）。例如正文为“[Title|章节名]”时，前包裹填“[Title|”，后包裹填“]”。</div>
         <div class="novel-chapter-title-wrap-row">
           <span class="novel-settings-label">前包裹</span>
           <input type="text" class="novel-chapter-title-prefix" value="${escapeHtml(
             g.chapterTitlePrefix || "",
-          )}" placeholder="[Title|" spellcheck="false" />
+          )}" spellcheck="false" autocomplete="off" />
         </div>
         <div class="novel-chapter-title-wrap-row">
           <span class="novel-settings-label">后包裹</span>
           <input type="text" class="novel-chapter-title-suffix" value="${escapeHtml(
             g.chapterTitleSuffix || "",
-          )}" placeholder="]" spellcheck="false" />
+          )}" spellcheck="false" autocomplete="off" />
         </div>
         <div class="novel-chapter-title-preview" aria-live="polite"></div>
         <div class="novel-chapter-title-tag-row">
@@ -2573,7 +2573,7 @@ jQuery(async () => {
           <input type="text" class="novel-chapter-title-tag" value="${escapeHtml(
             g.chapterTitleTag || "zj",
           )}" placeholder="zj / title" spellcheck="false" />
-          <span class="novel-settings-hint">成对标签用法（如 <zj>标题</zj>）。当前后包裹已填写时忽略此项。</span>
+          <span class="novel-settings-hint">成对标签用法（如 “<zj>标题</zj>”）。当前后包裹已填写时忽略此项。</span>
         </div>
         <div class="novel-chapter-title-strip-row">
           <span class="novel-settings-label">剥离章号前缀</span>
@@ -2584,14 +2584,14 @@ jQuery(async () => {
             <span class="novel-switch-track"></span>
             <span class="novel-switch-thumb"></span>
           </label>
-          <span class="novel-settings-hint">自动去掉标题开头的「第一章：」等前缀，避免与目录自带「第N章」重复（支持汉字/阿拉伯/全角数字）。</span>
+          <span class="novel-settings-hint">自动去掉标题开头的“第一章：”等前缀，避免与目录自带“第N章”重复（支持汉字/阿拉伯/全角数字）。</span>
         </div>
         <div class="novel-chapter-title-filter-row">
           <span class="novel-settings-label">过滤文字</span>
           <textarea class="novel-chapter-title-filter" rows="2" spellcheck="false" placeholder="每行一条，将从识别标题中移除。&#10;其中大写 N 代表任意数字。&#10;例如：&#10;第零章&#10;Chapter N">${escapeHtml(
             (g.chapterTitleFilters || []).join("\n"),
           )}</textarea>
-          <span class="novel-settings-hint">逐条移除标题中的指定文字（可多条）。填「Chapter N」可匹配 Chapter 1 / Chapter 100 等任意数字；不含 N 的条目按字面删除。配合「剥离章号前缀」使用。</span>
+          <span class="novel-settings-hint">逐条移除标题中的指定文字（可多条）。填“Chapter N”可匹配 Chapter 1 / Chapter 100 等任意数字；不含 N 的条目按字面删除。配合“剥离章号前缀”使用。</span>
         </div>
       </div>
 
@@ -2915,7 +2915,7 @@ jQuery(async () => {
       };
       const enabled = Boolean(rule.tag || rule.prefix || rule.suffix);
       if (!enabled) {
-        previewEl.textContent = "未配置识别规则（保持「第N章」）";
+        previewEl.textContent = "未配置识别规则（保持“第N章”）";
         previewEl.classList.remove("novel-title-preview-ok");
         return;
       }
@@ -2939,11 +2939,11 @@ jQuery(async () => {
       const hits = samples.filter(Boolean);
       if (!hits.length) {
         previewEl.textContent =
-          "预览：未在前 2 章中匹配到标题，请检查前后包裹是否与正文完全一致";
+          "预览：未在前 2 章中匹配到标题，请检查“前包裹 / 后包裹”是否与正文完全一致";
         previewEl.classList.remove("novel-title-preview-ok");
       } else {
-        previewEl.textContent = `预览：第1章 →「${hits[0]}」${
-          hits[1] ? `　第2章 →「${hits[1]}」` : ""
+        previewEl.textContent = `预览：第1章 →“${hits[0]}”${
+          hits[1] ? `　第2章 →“${hits[1]}”` : ""
         }`;
         previewEl.classList.add("novel-title-preview-ok");
       }
