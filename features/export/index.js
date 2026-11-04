@@ -10,7 +10,7 @@
 //   getChatMessages(avatar, fileName)  读完整消息数组（由 bookshelf 提供）
 //   regexFilter(text, avatar)          应用已勾选正则（由 regex core 提供）
 //   userName                           用户显示名兜底（标签）
-//   getChapterTitleTag()               自动识别标题标签（空 = 关闭）
+//   getChapterTitleRule()              自动识别标题规则 {tag,prefix,suffix}（全空 = 关闭）
 //   getChapterTitleFilters()           标题过滤文字列表
 //   getStripChapterPrefix()            是否剥离章号前缀（如「第一章：」）
 //
@@ -107,7 +107,13 @@ export function createExportCore(deps) {
    * @returns {{title: string, titleSource: string, displayIndex: number}}
    */
   function computeChapterMeta(ch, displayIndex) {
-    const titleTag = deps.getChapterTitleTag ? deps.getChapterTitleTag() : "";
+    const rule = deps.getChapterTitleRule
+      ? deps.getChapterTitleRule() || {}
+      : {};
+    const tag = String(rule.tag || "").trim();
+    const prefix = String(rule.prefix || "");
+    const suffix = String(rule.suffix || "");
+    const titleEnabled = Boolean(tag || prefix.length || suffix.length);
     const titleFilters = deps.getChapterTitleFilters
       ? deps.getChapterTitleFilters()
       : [];
@@ -117,19 +123,24 @@ export function createExportCore(deps) {
 
     let titleSource = "speaker";
     let title = "";
-    if (titleTag) {
+    if (titleEnabled) {
       const extracted = getChapterTitle(ch, {
         userName: deps.userName,
-        tag: titleTag,
+        tag,
+        prefix,
+        suffix,
       });
       const speaker = getChapterTitle(ch, { userName: deps.userName });
-      title = extracted;
-      if (extracted && extracted !== speaker) titleSource = "tag";
-      else title = speaker;
+      if (extracted && extracted !== speaker) {
+        title = extracted;
+        titleSource = "tag";
+      } else {
+        title = speaker;
+      }
     } else {
       title = getChapterTitle(ch, { userName: deps.userName });
     }
-    // 标签标题二次处理：剥离章号前缀 + 移除指定过滤文字（与阅读器一致）
+    // 提取标题二次处理：剥离章号前缀 + 移除指定过滤文字（与阅读器一致）
     if (titleSource === "tag") {
       if (stripPrefix) title = stripChapterNumberPrefix(title);
       title = filterTitleText(title, titleFilters);

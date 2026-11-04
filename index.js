@@ -18,6 +18,7 @@ import { createChatlogsCore } from "./features/chatlogs/index.js";
 import { createExportCore } from "./features/export/index.js";
 import { createGenNotifyCore } from "./features/gen-notify/index.js";
 import { createProgressCore } from "./features/progress/index.js";
+import { getChapterTitle } from "./features/reader/chapters.js";
 import { createFlipReader } from "./features/reader/flip.js";
 import { refreshHtmlAppThemes } from "./features/reader/iframe.js";
 import { createReaderCore } from "./features/reader/index.js";
@@ -153,10 +154,21 @@ jQuery(async () => {
     getHtmlAppEnabled: () => getGlobalSettings().htmlAppEnabled !== false,
     // HTML 应用读取主题变量的根元素（阅读器弹窗 .novel-dialog，未打开时返回 null）
     getHtmlAppRootEl: () => dialogRef?.dialog ?? null,
-    // 自动识别标题：返回识别标签（空 = 关闭；非空 = 启用，如 "zj"）
-    getChapterTitleTag: () => {
+    // 自动识别标题：返回识别规则（全部为空 = 关闭）
+    //   tag    —— 成对标签名（如 "zj"、"title"）
+    //   prefix —— 标题前包裹标记（如 "[Title|"、"<title>"）
+    //   suffix —— 标题后包裹标记（如 "]"）
+    // prefix/suffix 优先于 tag；两者都没填时才按 tag 识别。
+    getChapterTitleRule: () => {
       const g = getGlobalSettings();
-      return g.autoChapterTitle ? g.chapterTitleTag || "" : "";
+      if (!g.autoChapterTitle) return { tag: "", prefix: "", suffix: "" };
+      return {
+        tag: String(g.chapterTitleTag || "")
+          .trim()
+          .replace(/[<>\/]/g, ""),
+        prefix: String(g.chapterTitlePrefix || ""),
+        suffix: String(g.chapterTitleSuffix || ""),
+      };
     },
     // 标题过滤文字列表（识别标题的二次清理：剥离章号前缀 + 移除指定文字）
     getChapterTitleFilters: () => {
@@ -342,9 +354,13 @@ jQuery(async () => {
     if (g.showUserReplies === undefined) g.showUserReplies = true; // 是否显示 user 回复（默认显示）
     // 打开阅读器时显示哪个页面："last" = 上次关闭的页面（默认），"home" = 首页（书架）
     if (!g.startPage) g.startPage = "last";
-    // 自动识别标题：从章节正文提取自定义标签内的文字作为目录标题（默认关闭）
+    // 自动识别标题：从章节正文提取标题文字作为目录标题（默认关闭）
     if (g.autoChapterTitle === undefined) g.autoChapterTitle = false;
-    // 识别标签名（不含尖括号；仅在 autoChapterTitle 开启时生效；旧默认值为 "bt"，统一迁移为 "zj"）
+    // 识别规则：前后包裹（推荐，适配 <title>/[Title|...] 等任意写法）
+    if (typeof g.chapterTitlePrefix !== "string") g.chapterTitlePrefix = "";
+    if (typeof g.chapterTitleSuffix !== "string") g.chapterTitleSuffix = "";
+    // 识别标签名（不含尖括号；仅在 autoChapterTitle 开启且未填前后包裹时生效）
+    // 旧默认值为 "bt"，统一迁移为 "zj"
     if (!g.chapterTitleTag) g.chapterTitleTag = "zj";
     else if (g.chapterTitleTag === "bt") g.chapterTitleTag = "zj";
     // 标题过滤文字：从识别出的标题中移除指定文字（多行，每行一条）
@@ -2537,13 +2553,27 @@ jQuery(async () => {
           <span class="novel-switch-track"></span>
           <span class="novel-switch-thumb"></span>
         </label>
-        <div class="novel-settings-hint">从每章正文中提取自定义标签内的文字，作为该章的标题附加在目录中。不勾选则保持现状（第N章）。</div>
+        <div class="novel-settings-hint">从每章正文中提取标题文字，作为该章的标题附加在目录中。不勾选则保持现状（第N章）。</div>
+        <div class="novel-chapter-title-wrap-note">填写章节标题「前面」和「后面」的固定标记，插件会提取两者之间的文字作为章节名。留空表示该侧无标记（此时取到行尾 / 从正文开头取）。</div>
+        <div class="novel-chapter-title-wrap-row">
+          <span class="novel-settings-label">前包裹</span>
+          <input type="text" class="novel-chapter-title-prefix" value="${escapeHtml(
+            g.chapterTitlePrefix || "",
+          )}" placeholder="[Title|" spellcheck="false" />
+        </div>
+        <div class="novel-chapter-title-wrap-row">
+          <span class="novel-settings-label">后包裹</span>
+          <input type="text" class="novel-chapter-title-suffix" value="${escapeHtml(
+            g.chapterTitleSuffix || "",
+          )}" placeholder="]" spellcheck="false" />
+        </div>
+        <div class="novel-chapter-title-preview" aria-live="polite"></div>
         <div class="novel-chapter-title-tag-row">
           <span class="novel-settings-label">识别标签</span>
           <input type="text" class="novel-chapter-title-tag" value="${escapeHtml(
             g.chapterTitleTag || "zj",
-          )}" placeholder="zj" spellcheck="false" />
-          <span class="novel-settings-hint">仅当「自动识别标题」开启时生效，修改后需重新打开聊天。</span>
+          )}" placeholder="zj / title" spellcheck="false" />
+          <span class="novel-settings-hint">成对标签用法（如 <zj>标题</zj>）。当前后包裹已填写时忽略此项。</span>
         </div>
         <div class="novel-chapter-title-strip-row">
           <span class="novel-settings-label">剥离章号前缀</span>
@@ -2861,23 +2891,77 @@ jQuery(async () => {
       }
     });
 
-    // ---- 自动识别标题：开关 + 标签名 + 剥离章号前缀 + 过滤文字（保存后若在目录/正文页则重新加载当前聊天） ----
+    // ---- 自动识别标题：开关 + 前后包裹 + 标签名 + 剥离章号前缀 + 过滤文字
+    //      （保存后若在目录/正文页则重新加载当前聊天以应用新标题） ----
     const autoTitleInput = content.querySelector(".novel-auto-chapter-title");
     const tagInput = content.querySelector(".novel-chapter-title-tag");
+    const prefixInput = content.querySelector(".novel-chapter-title-prefix");
+    const suffixInput = content.querySelector(".novel-chapter-title-suffix");
+    const previewEl = content.querySelector(".novel-chapter-title-preview");
     const stripInput = content.querySelector(".novel-chapter-title-strip");
     const filterInput = content.querySelector(".novel-chapter-title-filter");
     let titleTagTimer = null;
 
+    /**
+     * 刷新「提取效果预览」：用当前聊天已加载的章节做样本，
+     * 显示前 2 章用当前规则提取到的标题（空则提示未匹配）。
+     */
+    function refreshTitlePreview() {
+      if (!previewEl) return;
+      const rule = {
+        tag: (tagInput?.value || "").trim(),
+        prefix: prefixInput?.value || "",
+        suffix: suffixInput?.value || "",
+      };
+      const enabled = Boolean(rule.tag || rule.prefix || rule.suffix);
+      if (!enabled) {
+        previewEl.textContent = "未配置识别规则（保持「第N章」）";
+        previewEl.classList.remove("novel-title-preview-ok");
+        return;
+      }
+      const chapters = reader.getChapters?.() || [];
+      if (!chapters.length) {
+        previewEl.textContent =
+          "预览：当前未打开聊天，打开目录后即可看到实际提取效果";
+        previewEl.classList.remove("novel-title-preview-ok");
+        return;
+      }
+      const samples = chapters.slice(0, 2).map((ch) => {
+        const title = getChapterTitle(ch, {
+          userName: deps.userName,
+          tag: rule.tag,
+          prefix: rule.prefix,
+          suffix: rule.suffix,
+        });
+        const same = title === getChapterTitle(ch, { userName: deps.userName });
+        return title && !same ? title : "";
+      });
+      const hits = samples.filter(Boolean);
+      if (!hits.length) {
+        previewEl.textContent =
+          "预览：未在前 2 章中匹配到标题，请检查前后包裹是否与正文完全一致";
+        previewEl.classList.remove("novel-title-preview-ok");
+      } else {
+        previewEl.textContent = `预览：第1章 →「${hits[0]}」${
+          hits[1] ? `　第2章 →「${hits[1]}」` : ""
+        }`;
+        previewEl.classList.add("novel-title-preview-ok");
+      }
+    }
+
     /** 保存当前标题识别配置 + 重新加载当前聊天以应用新标题 */
     async function applyChapterTitleConfig() {
       g.autoChapterTitle = autoTitleInput.checked;
-      g.chapterTitleTag = (tagInput.value || "zj").trim() || "zj";
+      g.chapterTitleTag = (tagInput?.value || "").trim();
+      g.chapterTitlePrefix = prefixInput?.value || "";
+      g.chapterTitleSuffix = suffixInput?.value || "";
       g.stripChapterPrefix = stripInput ? stripInput.checked : true;
       g.chapterTitleFilters = (filterInput?.value || "")
         .split("\n")
         .map((s) => s.trim())
         .filter(Boolean);
       deps.saveSettings();
+      refreshTitlePreview();
       if (state.page === "toc" || state.page === "reader") {
         const char = state.currentChar;
         const chat = state.currentChat;
@@ -2905,12 +2989,15 @@ jQuery(async () => {
     autoTitleInput?.addEventListener("change", () => {
       applyChapterTitleConfig();
     });
-    tagInput?.addEventListener("input", () => {
-      // 防抖：停止输入 400ms 后保存（避免频繁重载聊天）
-      clearTimeout(titleTagTimer);
-      titleTagTimer = setTimeout(() => {
-        applyChapterTitleConfig();
-      }, 400);
+    // 前/后包裹与标签名：输入时先即时刷新预览，停止输入 400ms 后再保存并重载
+    [tagInput, prefixInput, suffixInput].forEach((input) => {
+      input?.addEventListener("input", () => {
+        refreshTitlePreview();
+        clearTimeout(titleTagTimer);
+        titleTagTimer = setTimeout(() => {
+          applyChapterTitleConfig();
+        }, 400);
+      });
     });
     stripInput?.addEventListener("change", () => {
       applyChapterTitleConfig();
@@ -2922,6 +3009,8 @@ jQuery(async () => {
         applyChapterTitleConfig();
       }, 400);
     });
+    // 打开设置页时先按已保存配置渲染一次预览
+    refreshTitlePreview();
 
     // ---- 自定义顶栏图标：下拉选择 / 手动输入 / 清除 ----
     const iconSection = content.querySelector(".novel-icon-config-section");

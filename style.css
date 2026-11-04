@@ -1653,12 +1653,99 @@ body.novel-theme-ocean {
   cursor: pointer;
 }
 
+/* 自动识别标题：前后包裹说明 */
+.novel-chapter-title-wrap-note {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  opacity: 0.55;
+  line-height: 1.5;
+}
+
+/* 自动识别标题：前包裹 / 后包裹输入行 */
+.novel-chapter-title-wrap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.novel-chapter-title-wrap-row .novel-settings-label {
+  flex: none;
+  width: 4.5em;
+  font-size: 0.78rem;
+  opacity: 0.6;
+  font-weight: 500;
+}
+
+.novel-chapter-title-prefix,
+.novel-chapter-title-suffix {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 20%,
+      transparent
+    );
+  background: color-mix(
+    in srgb,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 5%,
+    var(--novel-bg, var(--SmartThemeBlurTintColor, #232323))
+  );
+  color: var(--novel-fg, var(--SmartThemeBodyColor, #ddd));
+  font-size: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.novel-chapter-title-prefix:focus,
+.novel-chapter-title-suffix:focus {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 60%,
+    transparent
+  );
+}
+
+/* 自动识别标题：提取效果预览 */
+.novel-chapter-title-preview {
+  margin-top: 8px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  opacity: 0.7;
+  border: 1px dashed
+    color-mix(
+      in srgb,
+      var(--novel-fg, var(--SmartThemeBodyColor, #ddd)) 22%,
+      transparent
+    );
+  word-break: break-all;
+}
+
+.novel-chapter-title-preview.novel-title-preview-ok {
+  opacity: 0.9;
+  border-color: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 55%,
+    transparent
+  );
+  color: color-mix(
+    in srgb,
+    var(--novel-accent, var(--SmartThemeMainColor, #4f8cff)) 75%,
+    var(--novel-fg, var(--SmartThemeBodyColor, #ddd))
+  );
+}
+
 /* 自动识别标题：识别标签输入行 */
 .novel-chapter-title-tag-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 2px;
+  margin-top: 6px;
 }
 
 .novel-chapter-title-tag-row .novel-settings-label {

@@ -48,8 +48,15 @@ export function createReaderCore(deps) {
     const showUserReplies = deps.getShowUserReplies
       ? deps.getShowUserReplies()
       : true;
-    // 自动识别标题：设置页「自动识别标题」开关 + 标签名（空 = 关闭）
-    const titleTag = deps.getChapterTitleTag ? deps.getChapterTitleTag() : "";
+    // 自动识别标题：设置页「自动识别标题」开关 + 识别规则（前后包裹 / 标签名）
+    const titleRule = deps.getChapterTitleRule
+      ? deps.getChapterTitleRule()
+      : { tag: "", prefix: "", suffix: "" };
+    const titleEnabled = Boolean(
+      titleRule.tag ||
+      String(titleRule.prefix || "").length ||
+      String(titleRule.suffix || "").length,
+    );
     // 标题过滤文字（多行，每行一条）+ 是否剥离章号前缀（如「第一章：」）
     const titleFilters = deps.getChapterTitleFilters
       ? deps.getChapterTitleFilters()
@@ -67,23 +74,28 @@ export function createReaderCore(deps) {
       // 番外也计入编号：目录/正文统一显示「第N章」，番外不再特殊显示
       displayIndex += 1;
       const chapterDisplayIndex = displayIndex;
-      // 标签识别开启时，若章节标题来自标签（而非说话人），标记 titleSource="tag"
+      // 标签识别开启时，若章节标题来自正文提取（而非说话人），标记 titleSource="tag"
       let titleSource = "speaker";
       let title = "";
-      if (titleTag) {
+      if (titleEnabled) {
         const extracted = getChapterTitle(ch, {
           userName: deps.userName,
-          tag: titleTag,
+          tag: titleRule.tag,
+          prefix: titleRule.prefix,
+          suffix: titleRule.suffix,
         });
-        // 仅当提取结果非空且与说话人兜底不同，才视为标签标题
+        // 仅当提取结果非空且与说话人兜底不同，才视为提取标题
         const speaker = getChapterTitle(ch, { userName: deps.userName });
-        title = extracted;
-        if (extracted && extracted !== speaker) titleSource = "tag";
-        else title = speaker;
+        if (extracted && extracted !== speaker) {
+          title = extracted;
+          titleSource = "tag";
+        } else {
+          title = speaker;
+        }
       } else {
         title = getChapterTitle(ch, { userName: deps.userName });
       }
-      // 标签标题二次处理：剥离章号前缀（「第一章：」）+ 移除用户指定的过滤文字
+      // 提取标题二次处理：剥离章号前缀（「第一章：」）+ 移除用户指定的过滤文字
       if (titleSource === "tag") {
         if (stripPrefix) title = stripChapterNumberPrefix(title);
         title = filterTitleText(title, titleFilters);
@@ -272,6 +284,11 @@ export function createReaderCore(deps) {
     return results;
   }
 
+  /** 获取当前已加载的章节列表（供设置页「提取预览」取样；无聊天返回空数组） */
+  function getChapters() {
+    return chatCache?.chapters ?? [];
+  }
+
   /** 获取当前聊天信息（章节数/标题等） */
   function getChatInfo() {
     if (!chatCache) return null;
@@ -307,6 +324,7 @@ export function createReaderCore(deps) {
     renderChapterBlock,
     buildChapterHeader,
     getChatInfo,
+    getChapters,
     getChapter,
     searchMessages,
     renderMessage,
