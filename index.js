@@ -246,6 +246,8 @@ jQuery(async () => {
     if (scrollReader) return scrollReader;
     scrollReader = createScrollReader({
       reader,
+      // 连续滚动按目录「都看 / 主线 / 番外」筛选后的章节序列加载相邻章
+      getVisibleChapterIndices: () => getVisibleChapterIndices(),
       onCurrentChapterChange: (chapterIndex) => {
         state.currentChapter = chapterIndex;
         updateBottomButtons();
@@ -879,6 +881,9 @@ jQuery(async () => {
       chatFileName: state.currentChat?.file_name ?? null,
       chapter: state.currentChapter || null,
       tocPage: state.tocPage ?? 0,
+      // 目录番外筛选（"all" / "main" / "side"）：重启后恢复同一筛选，
+      // 保证阅读页「上一章 / 下一章」与目录筛选一致
+      tocFilter: state.tocFilter,
     };
   }
 
@@ -980,11 +985,19 @@ jQuery(async () => {
 
     await openToc(char, chat);
     state.tocPage = last.tocPage ?? 0;
+    // 恢复目录番外筛选（openToc 内部会重置为「都看」，此处按记忆值还原）
+    if (
+      last.tocFilter === "all" ||
+      last.tocFilter === "main" ||
+      last.tocFilter === "side"
+    ) {
+      state.tocFilter = last.tocFilter;
+    }
     if (last.page === "reader" && last.chapter) {
       // 正文页：直接进入上次章节（滚动位置由 progress 自动恢复）
       await openChapter(last.chapter);
-    } else if ((last.tocPage ?? 0) > 0) {
-      // 目录页：重渲染当前页以应用记忆的页码
+    } else {
+      // 目录页：重渲染以应用记忆的页码与番外筛选
       const container = bodyEl.querySelector(".novel-page");
       if (container) renderTocPage(container);
     }
@@ -1663,6 +1676,9 @@ jQuery(async () => {
     const sideTotal = allChapters.filter((c) => c.isSideStory).length;
     const total = filtered.length;
     const totalPages = Math.max(1, Math.ceil(total / perPage));
+    // 页码钳制：筛选切换/每页章数变化/恢复上次位置后页数可能变少，避免空白页
+    if (state.tocPage > totalPages - 1) state.tocPage = totalPages - 1;
+    if (state.tocPage < 0) state.tocPage = 0;
     const start = state.tocPage * perPage;
     const pageChapters = filtered.slice(start, start + perPage);
 
@@ -1874,6 +1890,49 @@ jQuery(async () => {
     return getGlobalSettings().readerSettings?.readMode === "flip";
   }
 
+  /**
+   * 目录当前筛选下可见的章节索引序列（与目录页「都看 / 主线 / 番外」筛选保持一致）。
+   * 番外功能未开启或筛选为「都看」时返回全部章节索引。
+   * @returns {number[]} 章节索引（1 起，升序）
+   */
+  function getVisibleChapterIndices() {
+    const info = reader.getChatInfo();
+    const all = info?.chapters || [];
+    const sideEnabled = getGlobalSettings().sideStoryEnabled === true;
+    const filtered =
+      sideEnabled && state.tocFilter !== "all"
+        ? all.filter((ch) => {
+            if (state.tocFilter === "main") return !ch.isSideStory;
+            if (state.tocFilter === "side") return ch.isSideStory;
+            return true;
+          })
+        : all;
+    return filtered.map((ch) => ch.index);
+  }
+
+  /**
+   * 按目录当前筛选求相邻章节（阅读页「上一章 / 下一章」使用）。
+   * @param {number} delta -1 上一章 / 1 下一章
+   * @returns {number|null} 目标章节索引；到达筛选边界返回 null
+   */
+  function getAdjacentChapter(delta, visibleList) {
+    const visible = visibleList || getVisibleChapterIndices();
+    if (!visible.length) return null;
+    const cur = state.currentChapter;
+    const pos = visible.indexOf(cur);
+    if (pos === -1) {
+      // 当前章不在筛选结果内（书签跳转或筛选后打开的其它章）：按章节号就近取
+      if (delta > 0) return visible.find((i) => i > cur) ?? null;
+      for (let i = visible.length - 1; i >= 0; i -= 1) {
+        if (visible[i] < cur) return visible[i];
+      }
+      return null;
+    }
+    const nextPos = pos + delta;
+    if (nextPos < 0 || nextPos >= visible.length) return null;
+    return visible[nextPos];
+  }
+
   /** 滚动保存阅读进度（分页模式当前章固定；滚动模式当前章随滚动动态变化） */
   function bindScrollProgressSaving(scroll, chapterIndex) {
     scroll.addEventListener("scroll", () => {
@@ -2066,14 +2125,14 @@ jQuery(async () => {
   /** 更新底部栏按钮可用态 */
   function updateBottomButtons() {
     if (!bottombarEl) return;
-    const info = reader.getChatInfo();
-    // 番外也计入章节数：底部翻页按全部章节顺序走（主线+番外都可通过 prev/next 翻阅）
-    const total = info?.chapters?.length || 0;
+    // 底部翻章按「目录当前筛选后的章节序列」走：
+    // 与目录页「都看 / 主线 / 番外」筛选保持一致，避免「只看主线」时下一章跳到番外。
     const cur = state.currentChapter;
+    const visible = getVisibleChapterIndices(); // 只取一次，避免重复过滤全部章节
     const prev = bottombarEl.querySelector('[data-action="prev"]');
     const next = bottombarEl.querySelector('[data-action="next"]');
-    if (prev) prev.disabled = cur <= 1;
-    if (next) next.disabled = cur >= total;
+    if (prev) prev.disabled = !getAdjacentChapter(-1, visible);
+    if (next) next.disabled = !getAdjacentChapter(1, visible);
     // 翻页按钮（仅翻页阅读模式显示；首/末页禁用对应方向，单页双禁用）
     const pagePrev = bottombarEl.querySelector('[data-action="prev-page"]');
     const pageNext = bottombarEl.querySelector('[data-action="next-page"]');
@@ -2193,15 +2252,18 @@ jQuery(async () => {
     renderItems();
   }
 
-  /** 上一章 / 下一章（按全部章节顺序，含番外） */
+  /** 上一章 / 下一章（按目录当前筛选后的章节序列，与「都看 / 主线 / 番外」一致） */
   async function goChapter(delta) {
-    const nextChapter = state.currentChapter + delta;
     const info = reader.getChatInfo();
     if (!info) return;
-    if (nextChapter < 1 || nextChapter > (info.chapters?.length || 0)) return;
+    const nextChapter = getAdjacentChapter(delta);
+    // 到达筛选序列边界（如「只看番外」的第一篇/最后一篇）则不跳转
+    if (!nextChapter) return;
     if (isScrollReadMode()) {
-      // 滚动阅读模式：不重建容器，直接滚动到目标章顶部（缺失章节按需补齐）
+      // 滚动阅读模式：不重建容器，直接滚动到目标章顶部
       await getScrollReader().scrollToChapter(nextChapter);
+      state.currentChapter = nextChapter;
+      updateBottomButtons();
       return;
     }
     await openChapter(nextChapter);

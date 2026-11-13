@@ -17,6 +17,8 @@
  * @param {object} deps.reader   reader core（需暴露 renderChapterBlock / getChapter / getChatInfo）
  * @param {Function} deps.onCurrentChapterChange  (chapterIndex) => void 当前章变化回调（更新底部栏/书签态）
  * @param {Function} deps.onRenderedChapter       (chapterIndex) => void 单章渲染完成回调（应用样式/注入操作按钮）
+ * @param {Function} [deps.getVisibleChapterIndices] () => number[] 目录当前筛选下可见的章节索引序列
+ *   （与目录页「都看 / 主线 / 番外」一致；未提供或返回空数组时按全部章节连续加载）
  * @returns {object} scroll reader API
  */
 export function createScrollReader(deps) {
@@ -27,6 +29,40 @@ export function createScrollReader(deps) {
   let onScroll = null; // 滚动监听函数（供 destroy 移除）
   let lastCurrent = 0; // 最近一次判定的当前章索引
   const loading = new Set(); // 正在渲染的章节索引集合（并发去重）
+  let visible = []; // 目录当前筛选下可见的章节索引序列（升序，用于连续加载的邻章计算）
+
+  /** 读取当前筛选下可见的章节索引序列；无自定义筛选时返回全部章节索引 */
+  function buildVisibleIndices() {
+    const custom = deps.getVisibleChapterIndices?.();
+    if (Array.isArray(custom)) return custom.slice();
+    const info = reader.getChatInfo();
+    return (info?.chapters || []).map((ch) => ch.index);
+  }
+
+  /**
+   * 按可见章节序列求相邻章节（与阅读页「上一章 / 下一章」逻辑一致）。
+   * 目标章节不在序列内（如书签跳转到被筛掉的章）时，按章节号就近取。
+   * @param {number} idx 参照章节索引
+   * @param {number} dir 1 向后 / -1 向前
+   * @returns {number|null}
+   */
+  function findNeighbor(idx, dir) {
+    if (!visible.length) return null;
+    const pos = visible.indexOf(idx);
+    if (pos === -1) {
+      if (dir > 0) {
+        const found = visible.find((i) => i > idx);
+        return found ?? null;
+      }
+      for (let i = visible.length - 1; i >= 0; i -= 1) {
+        if (visible[i] < idx) return visible[i];
+      }
+      return null;
+    }
+    const nextPos = pos + dir;
+    if (nextPos < 0 || nextPos >= visible.length) return null;
+    return visible[nextPos];
+  }
 
   /** 计算章节块在滚动容器内容中的顶部位置（与 offsetParent 无关，最稳妥） */
   function blockTop(block) {
@@ -45,6 +81,8 @@ export function createScrollReader(deps) {
     scrollEl = container;
     const info = reader.getChatInfo();
     totalChapters = info?.chapters?.length || 0;
+    // 目录筛选后可见的章节序列（「都看 / 主线 / 番外」），连续滚动按此序列加载邻章
+    visible = buildVisibleIndices();
 
     // 渲染起始章节块
     await renderChapterBlock(startChapter);
@@ -68,26 +106,29 @@ export function createScrollReader(deps) {
     });
   }
 
-  /** 按需加载：接近底部追加下一章，接近顶部插入上一章 */
+  /** 按需加载：接近底部追加下一章，接近顶部插入上一章（按三大目录筛选序列） */
   async function maybeLoadAround() {
     if (!scrollEl) return;
     const el = scrollEl;
     const threshold = Math.max(400, el.clientHeight * 0.8);
 
-    // 接近底部 → 追加下一章（到最后一章为止）
+    // 接近底部 → 追加下一章（沿筛选序列向后；到序列末尾为止）
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
       const last = getLastLoadedChapter();
-      if (last < totalChapters) {
-        await renderChapterBlock(last + 1);
+      const next = findNeighbor(last, 1);
+      if (next) {
+        await renderChapterBlock(next);
       }
     }
 
-    // 接近顶部 → 插入上一章（到第一章为止）；插入后补偿滚动位置
+    // 接近顶部 → 插入上一章（沿筛选序列向前；到序列开头为止），插入后补偿滚动位置
     if (el.scrollTop <= threshold) {
       const first = getFirstLoadedChapter();
-      if (first > 1) {
+      // 无已渲染块时 first = totalChapters+1，此时不存在「上一章」，跳过
+      const prev = first <= totalChapters ? findNeighbor(first, -1) : null;
+      if (prev) {
         const prevHeight = el.scrollHeight; // 记录插入前的总高度
-        await renderChapterBlock(first - 1, { prepend: true });
+        await renderChapterBlock(prev, { prepend: true });
         // 视口锚点：插入后保持用户正在看的内容不跳动
         el.scrollTop += el.scrollHeight - prevHeight;
       }
@@ -186,27 +227,58 @@ export function createScrollReader(deps) {
     }
   }
 
-  /** 滚到指定章节（目录点击 / 书签跳转）：渲染缺失章节并滚到其顶部 */
+  /**
+   * 确保目标章节块已渲染，并按章节索引顺序插入到正确位置。
+   * 只渲染目标章本身（中间章节交给滚动时的按需加载），避免目录跳远章时
+   * 一次性渲染大量章节；目标章被筛选掉（书签/搜索跳转）时同样可用。
+   * @param {number} idx 目标章节索引
+   */
+  async function ensureBlock(idx) {
+    if (!scrollEl) return;
+    if (idx < 1 || idx > totalChapters) return;
+    const existing = scrollEl.querySelector(
+      `.novel-chapter-block[data-chapter-index="${idx}"]`,
+    );
+    if (existing) return;
+    if (loading.has(idx)) return;
+
+    // 找到第一个章节索引大于目标块的已有块，插到它之前（保持升序）
+    const blocks = scrollEl.querySelectorAll(".novel-chapter-block");
+    let refBlock = null;
+    for (const b of blocks) {
+      const bi = Number(b.dataset.chapterIndex);
+      if (!Number.isNaN(bi) && bi > idx) {
+        refBlock = b;
+        break;
+      }
+    }
+
+    loading.add(idx);
+    try {
+      const tmp = document.createElement("div");
+      const block = await reader.renderChapterBlock(tmp, idx);
+      if (!block || !scrollEl) return;
+      if (refBlock && refBlock.isConnected) {
+        scrollEl.insertBefore(block, refBlock);
+      } else {
+        scrollEl.appendChild(block);
+      }
+      onRenderedChapter?.(idx, block);
+    } catch (err) {
+      console.warn("[NovelReader] 滚动阅读渲染章节失败:", err);
+    } finally {
+      loading.delete(idx);
+    }
+  }
+
+  /** 滚到指定章节（目录点击 / 书签跳转 / 阅读页上一章下一章）：渲染目标章并滚到其顶部 */
   async function scrollToChapter(chapterIndex) {
     if (!scrollEl) return;
     const idx = Number(chapterIndex);
     if (idx < 1 || idx > totalChapters) return;
 
-    const first = getFirstLoadedChapter();
-    const last = getLastLoadedChapter();
-    // 目标在已渲染范围之前 → 从大到小 prepend（保证 DOM 顺序正确）
-    if (idx < first) {
-      for (let i = first - 1; i >= idx; i -= 1) {
-        await renderChapterBlock(i, { prepend: true });
-      }
-    }
-    // 目标在已渲染范围之后 → 从小到大 append
-    else if (idx > last) {
-      for (let i = last + 1; i <= idx; i += 1) {
-        await renderChapterBlock(i);
-      }
-    }
-
+    await ensureBlock(idx);
+    if (!scrollEl) return; // 渲染期间被销毁
     const target = scrollEl.querySelector(
       `.novel-chapter-block[data-chapter-index="${idx}"]`,
     );
@@ -250,6 +322,7 @@ export function createScrollReader(deps) {
     totalChapters = 0;
     loading.clear();
     lastCurrent = 0;
+    visible = [];
     onScroll = null;
   }
 
